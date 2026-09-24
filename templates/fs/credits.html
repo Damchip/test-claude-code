@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Crédits &amp; factures</h1>
-    <p>1 crédit ≈ 1 unité de prestation. Les crédits n'expirent pas.</p>
+    <p>1 crédit = {{ '%.2f'|format(prix_credit)|replace('.', ',') }} €. Les crédits n'expirent pas ; les packs les plus gros donnent des crédits offerts.</p>
   </div>
   <div class="card kpi hero" style="min-width: 240px">
     <div class="kpi-label">{{ icon('coins', 'icon-sm') }} Solde disponible</div>
@@ -15,13 +15,14 @@
 <h2 style="margin-bottom: 18px">Recharger</h2>
 <div class="packs">
   {% for p in packs %}
-  <div class="card pack {{ 'featured' if p.featured }}">
-    {% if p.featured %}<span class="ribbon">LE PLUS CHOISI</span>{% endif %}
+  <div class="card pack {{ 'featured' if p.vedette }}">
+    {% if p.vedette %}<span class="ribbon">LE PLUS CHOISI</span>{% endif %}
     <span class="muted small">Pack</span>
-    <span class="qty">{{ p.qty }} <small>crédits</small></span>
-    <span class="price">{{ p.price }} € HT</span>
-    <span class="unit">{{ '%.2f'|format(p.price / p.qty)|replace('.', ',') }} € / crédit{% if p.qty > 10 %} · −{{ ((1 - (p.price / p.qty) / 12) * 100)|round|int }} %{% endif %}</span>
-    <a class="btn {{ 'btn-primary' if p.featured }} btn-block" href="#">Acheter</a>
+    <span class="qty">{{ p.credits }} <small>crédits</small></span>
+    {% if p.bonus %}<span class="amount-plus small">+ {{ p.bonus }} offerts · {{ ((p.bonus / p.credits) * 100)|round|int }} % de bonus</span>{% else %}<span class="muted small">&nbsp;</span>{% endif %}
+    <span class="price">{{ '{:,}'.format(p.prix_eur).replace(',', ' ') }} €</span>
+    <span class="unit">soit {{ '%.2f'|format(p.prix_eur / (p.credits + p.bonus))|replace('.', ',') }} € / crédit reçu</span>
+    <a class="btn {{ 'btn-primary' if p.vedette }} btn-block" href="#">Acheter</a>
   </div>
   {% endfor %}
 </div>
@@ -47,10 +48,10 @@
 
   <section class="card">
     <div class="card-head"><div><h2>Factures</h2><p class="sub">PDF, TVA détaillée</p></div></div>
-    {% for inv in [('FA-2026-0412', '23/09/2026', '525,00 €'), ('FA-2026-0371', '02/09/2026', '280,00 €'), ('FA-2026-0318', '11/08/2026', '525,00 €')] %}
+    {% for inv in [('FA-2026-0412', '23/09/2026', '1 000,00 €'), ('FA-2026-0371', '02/09/2026', '500,00 €'), ('FA-2026-0318', '11/08/2026', '1 000,00 €')] %}
     <div class="file-row">
       <span class="file-ic">{{ icon('receipt') }}</span>
-      <div class="grow"><div class="name mono">{{ inv[0] }}</div><div class="muted small">{{ inv[1] }} · {{ inv[2] }} HT</div></div>
+      <div class="grow"><div class="name mono">{{ inv[0] }}</div><div class="muted small">{{ inv[1] }} · {{ inv[2] }}</div></div>
       <a class="icon-btn" href="#" aria-label="Télécharger {{ inv[0] }}">{{ icon('download', 'icon-sm') }}</a>
     </div>
     {% endfor %}

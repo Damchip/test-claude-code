@@ -14,6 +14,11 @@ Fileservice : thème et espace client (maquette).
   police Inter hébergée localement (aucun appel à Google), responsive mobile.
 - **Identité E85-FRANCE** : badge du logo dans la barre latérale et en favicon, logo complet sur
   la page de connexion, palette reprise du logo (vert des feuilles, bleu de l'anneau).
+- **Catalogue réel** (`catalogue.py`) repris de la boutique : Véhicule léger, Agricole / PL,
+  Moto / Quad, services (clonage, injecteurs), Garantie Sérénité 1 et 2 ans, retour du boîtier
+  Colissimo / Chronopost. Prix au siège pour l'E85. Packs de crédits à 2,50 €/crédit avec bonus.
+- **Tarif pack automatique** : le serveur (`/espace/tarif`) choisit la combinaison la moins chère
+  de packs et de prestations seules ; le récapitulatif affiche l'économie réalisée.
 - ⚠ Maquette : toutes les pages tournent sur des données de démonstration (`fileservice.py`),
   rien n'est encore enregistré.
 

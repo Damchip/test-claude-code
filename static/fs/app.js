@@ -75,32 +75,63 @@
 
     const summary = $('#summary');
     const balance = parseInt(summary.dataset.balance, 10) || 0;
-    const urgentCost = parseInt(summary.dataset.urgent, 10) || 0;
     const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    let seq = 0;
 
-    function update() {
-      const picked = $$('input[name="prestas"]:checked', form);
-      const urgent = $('#urgent').checked;
-      let total = 0;
-      let html = '';
-      picked.forEach(p => {
-        const c = parseInt(p.dataset.credits, 10) || 0;
-        total += c;
-        html += `<div class="summary-line"><span>${esc(p.dataset.name)}</span><span class="num">${c} cr.</span></div>`;
+    // N'affiche que les prestations du type de véhicule choisi (les services restent visibles)
+    function showCategory() {
+      const cat = ($('input[name="categorie"]:checked', form) || {}).value;
+      $$('.option[data-cat]', form).forEach(o => {
+        const on = o.dataset.cat === cat;
+        o.hidden = !on;
+        if (!on) $('input', o).checked = false;
       });
-      if (urgent && picked.length) {
-        total += urgentCost;
-        html += `<div class="summary-line"><span>Prioritaire</span><span class="num">${urgentCost} cr.</span></div>`;
+    }
+
+    // Le prix est calculé par le serveur (/espace/tarif) : une seule source de vérité
+    async function update() {
+      const cat = ($('input[name="categorie"]:checked', form) || {}).value;
+      const codes = $$('input[name="prestas"]:checked', form).map(i => i.value);
+      const body = {
+        categorie: cat, prestations: codes,
+        siege: $('#siege').checked,
+        garantie: ($('input[name="garantie"]:checked', form) || {}).value || null,
+      };
+      const mine = ++seq;
+      let d;
+      try {
+        const r = await fetch(summary.dataset.url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        d = await r.json();
+      } catch (e) {
+        d = { lignes: [], total: 0, economie: 0, siege_possible: false, erreur: 'Tarif indisponible, réessayez.' };
       }
-      $('#sumLines').innerHTML = html || '<p class="summary-empty">Aucune prestation sélectionnée.</p>';
-      $('#sumTotal').textContent = total + ' cr.';
-      const after = balance - total;
+      if (mine !== seq) return;   // une réponse plus récente est déjà arrivée
+
+      $('#siegeBox').hidden = !d.siege_possible;
+      $('#retourBox').hidden = !(d.siege_possible && $('#siege').checked);
+      $('#sumLines').innerHTML = d.lignes.length
+        ? d.lignes.map(l => `<div class="summary-line"><span>${esc(l.nom)}</span><span class="num">${l.credits} cr.</span></div>`).join('')
+        : '<p class="summary-empty">Aucune prestation sélectionnée.</p>';
+      const saving = $('#sumSaving');
+      saving.hidden = !(d.economie > 0);
+      saving.textContent = `Tarif pack appliqué : ${d.economie} crédits économisés`;
+      const err = $('#sumError');
+      err.hidden = !d.erreur;
+      err.textContent = d.erreur || '';
+      $('#sumTotal').textContent = d.total + ' cr.';
+      const after = balance - d.total;
       const afterEl = $('#sumAfter');
       afterEl.textContent = after + ' cr.';
       afterEl.style.color = after < 0 ? 'var(--danger)' : '';
-      $('#submitBtn').disabled = !picked.length || after < 0 || !input.files.length;
+      $('#submitBtn').disabled = !codes.length || after < 0 || !!d.erreur || !input.files.length;
     }
-    form.addEventListener('change', update);
+    form.addEventListener('change', e => {
+      if (e.target.name === 'categorie') showCategory();
+      update();
+    });
+    showCategory();
     update();
   }
 })();
