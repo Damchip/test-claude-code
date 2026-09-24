@@ -26,6 +26,7 @@ from flask import Flask, jsonify, redirect, render_template, request, session, u
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from matcher import db, engine
+import fileservice
 
 APP_VERSION = "1.51.0"
 
@@ -125,6 +126,7 @@ def get_secret_key():
 
 
 app.secret_key = get_secret_key()
+app.register_blueprint(fileservice.bp)
 
 
 def _safe_next(raw, fallback):

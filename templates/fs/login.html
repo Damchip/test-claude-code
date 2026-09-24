@@ -1,0 +1,70 @@
+{% extends "fs/base.html" %}
+{% block title %}{{ 'Créer un compte' if mode == 'register' else 'Connexion' }}{% endblock %}
+{% block body %}
+<div class="auth">
+  <section class="auth-brand">
+    <div class="brand">
+      <span class="brand-mark">{{ shop.initials }}</span>
+      <span><span class="brand-name">{{ shop.name }}</span><span class="brand-sub">File service</span></span>
+    </div>
+
+    <div class="auth-pitch">
+      <h1>Vos fichiers moteur,<br><em>préparés par des spécialistes.</em></h1>
+      <p>Déposez votre lecture, choisissez vos prestations, récupérez un fichier testé et prêt à écrire.</p>
+      <div class="auth-points">
+        <div class="auth-point">
+          <span class="ic">{{ icon('zap-fast') }}</span>
+          <div><strong>Livraison rapide</strong><span>La plupart des fichiers sont prêts en moins de 30 minutes.</span></div>
+        </div>
+        <div class="auth-point">
+          <span class="ic">{{ icon('shield') }}</span>
+          <div><strong>Checksums corrigés</strong><span>Chaque fichier est vérifié avant de vous être livré.</span></div>
+        </div>
+        <div class="auth-point">
+          <span class="ic">{{ icon('message') }}</span>
+          <div><strong>Un technicien dédié</strong><span>Une question sur un fichier ? Réponse directe dans la demande.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="auth-foot">© {{ shop.name }} · Accès réservé aux professionnels</p>
+  </section>
+
+  <section class="auth-form">
+    <div class="auth-card">
+      {% if mode == 'register' %}
+      <h2>Créer un compte pro</h2>
+      <p class="lead">Votre compte est validé par l'atelier sous 24 h ouvrées.</p>
+      <form method="post" class="stack">
+        <div class="form-grid">
+          <div class="field full"><label for="societe">Société</label><input class="input" id="societe" name="societe" required></div>
+          <div class="field"><label for="siret">SIRET</label><input class="input" id="siret" name="siret" inputmode="numeric" required></div>
+          <div class="field"><label for="tva">N° TVA</label><input class="input" id="tva" name="tva" placeholder="FR…"></div>
+          <div class="field full"><label for="email">E-mail professionnel</label><input class="input" type="email" id="email" name="email" required></div>
+          <div class="field full"><label for="pw">Mot de passe</label><input class="input" type="password" id="pw" name="password" minlength="10" required><span class="hint">10 caractères minimum.</span></div>
+        </div>
+        <label class="checkbox"><input type="checkbox" required> J'accepte les conditions générales de vente</label>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">Demander l'ouverture du compte</button>
+      </form>
+      <p class="auth-alt">Déjà client ? <a class="link" href="{{ url_for('fs.login') }}">Se connecter</a></p>
+      {% else %}
+      <h2>Bon retour</h2>
+      <p class="lead">Connectez-vous à votre espace client.</p>
+      <form method="post" class="stack">
+        <div class="field">
+          <label for="email">E-mail</label>
+          <div class="input-icon">{{ icon('mail') }}<input class="input" type="email" id="email" name="email" autocomplete="username" required></div>
+        </div>
+        <div class="field">
+          <div class="row-between"><label for="pw">Mot de passe</label><a class="link small" href="#">Oublié ?</a></div>
+          <div class="input-icon">{{ icon('lock') }}<input class="input" type="password" id="pw" name="password" autocomplete="current-password" required></div>
+        </div>
+        <label class="checkbox"><input type="checkbox" name="remember"> Rester connecté sur cet appareil</label>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">Se connecter</button>
+      </form>
+      <p class="auth-alt">Pas encore de compte ? <a class="link" href="{{ url_for('fs.login', mode='register') }}">Créer un compte pro</a></p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

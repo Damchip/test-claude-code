@@ -1,0 +1,99 @@
+{% extends "fs/base.html" %}
+{% block title %}Nouveau fichier{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Envoyer un fichier</h1>
+    <p>Renseignez le véhicule et la lecture, choisissez vos prestations. Les crédits sont débités à l'envoi et remboursés si le fichier ne peut pas être traité.</p>
+  </div>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="split" id="newForm">
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><div class="step-head"><span class="step-num">1</span><h2>Véhicule</h2></div></div>
+      <div class="card-body form-grid">
+        <div class="field"><label for="marque">Marque</label><input class="input" id="marque" name="marque" placeholder="Volkswagen" required></div>
+        <div class="field"><label for="modele">Modèle</label><input class="input" id="modele" name="modele" placeholder="Golf VII" required></div>
+        <div class="field"><label for="moteur">Motorisation</label><input class="input" id="moteur" name="moteur" placeholder="2.0 TDI 150 ch" required></div>
+        <div class="field"><label for="annee">Année</label><input class="input" id="annee" name="annee" inputmode="numeric" placeholder="2016"></div>
+        <div class="field"><label for="boite">Boîte</label>
+          <select class="select" id="boite" name="boite"><option>Manuelle</option><option>Automatique</option><option>Double embrayage</option></select></div>
+        <div class="field"><label for="km">Kilométrage</label><input class="input" id="km" name="km" inputmode="numeric" placeholder="128 400"></div>
+        <div class="field"><label for="vin">VIN</label><input class="input mono" id="vin" name="vin" maxlength="17" placeholder="17 caractères" autocomplete="off"></div>
+        <div class="field"><label for="immat">Immatriculation</label><input class="input mono" id="immat" name="immat" maxlength="12" placeholder="AB-123-CD" autocomplete="off"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div class="step-head"><span class="step-num">2</span><h2>Lecture</h2></div></div>
+      <div class="card-body stack" style="gap: 18px">
+        <div class="form-grid">
+          <div class="field"><label for="outil">Outil de lecture</label>
+            <select class="select" id="outil" name="outil">{% for t in tools %}<option>{{ t }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="ecu">Calculateur</label><input class="input" id="ecu" name="ecu" placeholder="Détecté automatiquement si vide"></div>
+        </div>
+        <div class="field">
+          <span class="label">Méthode</span>
+          <div class="chips" role="radiogroup">
+            {% for m in ['OBD', 'Banc', 'Boot'] %}
+            <label class="chip"><input type="radio" name="methode" value="{{ m }}" {{ 'checked' if loop.first }}><span>{{ m }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+        <label class="drop" id="drop">
+          <input type="file" name="file" id="fileInput" hidden>
+          <span class="drop-empty">
+            <span class="drop-icon">{{ icon('upload', 'icon-lg') }}</span>
+            <span class="drop-title">Déposez la lecture d'origine</span>
+            <span class="muted small">ou cliquez pour parcourir · .bin, .ori, .slave… · 64 Mo max</span>
+          </span>
+          <span class="drop-file">
+            <span class="file-ic mod">{{ icon('file-bin') }}</span>
+            <span class="grow"><span class="name" id="fileName"></span><span class="muted small" id="fileSize"></span></span>
+            <span class="btn btn-sm btn-ghost">Changer</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div class="step-head"><span class="step-num">3</span><h2>Prestations</h2></div></div>
+      <div class="card-body stack" style="gap: 18px">
+        <div class="options">
+          {% for p in prestations %}
+          <label class="option">
+            <input type="checkbox" name="prestas" value="{{ p.code }}" data-name="{{ p.nom }}" data-credits="{{ p.credits }}">
+            <span class="box">
+              <span class="check">{{ icon('check') }}</span>
+              <span><span class="title">{{ p.nom }}</span><span class="desc" style="display:block">{{ p.desc }}</span></span>
+              <span class="cost">{{ p.credits }} <small>cr.</small></span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="field">
+          <label for="comment">Commentaire pour l'atelier</label>
+          <textarea class="textarea" id="comment" name="comment" placeholder="Modifications mécaniques, codes défaut à traiter, carburant utilisé…"></textarea>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <aside class="card card-pad sticky" id="summary" data-balance="{{ user.credits }}" data-urgent="{{ urgent }}">
+    <h2>Récapitulatif</h2>
+    <div style="margin-top: 14px" id="sumLines"><p class="summary-empty">Aucune prestation sélectionnée.</p></div>
+    <div style="margin: 14px 0; padding: 14px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft)">
+      <label class="switch">
+        <span><strong>Traitement prioritaire</strong><span class="muted small" style="display:block">Passe en tête de file · +{{ urgent }} crédits</span></span>
+        <input type="checkbox" name="urgent" id="urgent"><span class="track"></span>
+      </label>
+    </div>
+    <div class="summary-line"><span>Solde actuel</span><span class="num">{{ user.credits }} cr.</span></div>
+    <div class="summary-total"><span>Total</span><span class="num" id="sumTotal">0 cr.</span></div>
+    <div class="summary-line"><span>Solde après envoi</span><span class="num" id="sumAfter">{{ user.credits }} cr.</span></div>
+    <button class="btn btn-primary btn-lg btn-block" type="submit" id="submitBtn" style="margin-top: 18px" disabled>{{ icon('send') }} Envoyer la demande</button>
+    <div class="note" style="margin-top: 14px">{{ icon('shield', 'icon-sm') }}<span>Crédits remboursés automatiquement si le fichier est refusé.</span></div>
+  </aside>
+</form>
+{% endblock %}

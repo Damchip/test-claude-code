@@ -1,0 +1,82 @@
+{% extends "fs/base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Bonjour {{ user.contact.split(' ')[0] }}</h1>
+    <p>{{ user.company }} · compte {{ user.level }}</p>
+  </div>
+  <a class="btn btn-primary btn-lg" href="{{ url_for('fs.new_file') }}">{{ icon('upload') }} Envoyer un fichier</a>
+</div>
+
+<div class="grid grid-4">
+  <div class="card kpi hero">
+    <div class="kpi-label">{{ icon('coins', 'icon-sm') }} Solde</div>
+    <div class="kpi-value">{{ user.credits }}<small>crédits</small></div>
+    <div class="kpi-foot"><a class="link" href="{{ url_for('fs.credits') }}">Recharger</a></div>
+  </div>
+  <div class="card kpi">
+    <div class="kpi-label">{{ icon('clock', 'icon-sm') }} En cours</div>
+    <div class="kpi-value">{{ counts.recu + counts.en_cours }}</div>
+    <div class="kpi-foot">{{ counts.attente }} en attente de votre réponse</div>
+  </div>
+  <div class="card kpi">
+    <div class="kpi-label">{{ icon('zap-fast', 'icon-sm') }} Délai moyen</div>
+    <div class="kpi-value">24<small>min</small></div>
+    <div class="kpi-foot"><span class="up">−6 min</span> sur 30 jours</div>
+  </div>
+  <div class="card kpi">
+    <div class="kpi-label">{{ icon('check', 'icon-sm') }} Livrés ce mois</div>
+    <div class="kpi-value">37</div>
+    <div class="kpi-foot"><span class="up">+12 %</span> vs août</div>
+  </div>
+</div>
+
+<div class="split" style="margin-top: 20px">
+  <section class="card">
+    <div class="card-head">
+      <div><h2>Fichiers récents</h2><p class="sub">Vos 6 dernières demandes</p></div>
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('fs.files') }}">Tout voir {{ icon('chevron-right', 'icon-sm') }}</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Véhicule</th><th class="hide-sm">Prestations</th><th>Statut</th><th class="right hide-sm">Date</th></tr></thead>
+        <tbody>
+        {% for f in files %}
+          <tr class="row-link" data-href="{{ url_for('fs.file_detail', file_id=f.id) }}">
+            <td>
+              <a class="strong" href="{{ url_for('fs.file_detail', file_id=f.id) }}">{{ f.vehicule }}</a>
+              <div class="sub"><span class="mono">{{ f.id }}</span> · {{ f.ecu }}</div>
+            </td>
+            <td class="hide-sm">{% for p in f.prestas %}<span class="tag">{{ p }}</span>{% endfor %}</td>
+            <td><span class="badge {{ f.status }}">{{ statuses[f.status] }}</span></td>
+            <td class="right muted num hide-sm">{{ f.date }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <section class="card card-pad">
+      <div class="row-between">
+        <h3>Horaires du service</h3>
+        <span class="badge {{ 'pret' if service.open else 'refuse' }}">{{ 'Ouvert' if service.open else 'Fermé' }}</span>
+      </div>
+      <div class="hours" style="margin-top: 14px">
+        {% for h in hours %}
+        <span class="{{ 'today' if h.today }}">{{ h.jour }}</span><span class="{{ 'today' if h.today }}">{{ h.plage }}</span>
+        {% endfor %}
+      </div>
+    </section>
+
+    {% if counts.attente %}
+    <section class="card card-pad">
+      <div class="note warn">{{ icon('info') }}<div><strong>{{ counts.attente }} demande attend votre réponse.</strong><br>L'atelier a besoin d'une précision pour terminer.</div></div>
+      <a class="btn btn-block" style="margin-top: 14px" href="{{ url_for('fs.file_detail', file_id='F-24806') }}">Répondre</a>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

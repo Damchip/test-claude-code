@@ -1,0 +1,48 @@
+{% extends "fs/base.html" %}
+{% block title %}Mes fichiers{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Mes fichiers</h1>
+    <p>Toutes vos demandes, leur statut et les fichiers livrés.</p>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('fs.new_file') }}">{{ icon('upload') }} Nouveau fichier</a>
+</div>
+
+<section class="card" data-filter-root>
+  <div class="toolbar">
+    <div class="tabs" role="tablist">
+      <button type="button" class="active" data-filter="all">Tous<span class="n">{{ files|length }}</span></button>
+      <button type="button" data-filter="en_cours recu">En cours<span class="n">{{ counts.en_cours + counts.recu }}</span></button>
+      <button type="button" data-filter="attente">Info requise<span class="n">{{ counts.attente }}</span></button>
+      <button type="button" data-filter="pret">Prêts<span class="n">{{ counts.pret }}</span></button>
+      <button type="button" data-filter="refuse">Refusés<span class="n">{{ counts.refuse }}</span></button>
+    </div>
+    <div class="input-icon" style="width: 280px; max-width: 100%">
+      {{ icon('search') }}<input class="input" type="search" placeholder="Véhicule, calculateur, n°…" data-search aria-label="Rechercher">
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>N°</th><th>Véhicule</th><th class="hide-sm">Calculateur</th><th class="hide-sm">Prestations</th><th class="right hide-sm">Crédits</th><th>Statut</th><th class="right hide-sm">Date</th></tr>
+      </thead>
+      <tbody>
+      {% for f in files %}
+        <tr class="row-link" data-status="{{ f.status }}" data-href="{{ url_for('fs.file_detail', file_id=f.id) }}"
+            data-text="{{ (f.id ~ ' ' ~ f.vehicule ~ ' ' ~ f.moteur ~ ' ' ~ f.ecu ~ ' ' ~ f.prestas|join(' '))|lower }}">
+          <td class="mono muted">{{ f.id }}</td>
+          <td><a class="strong" href="{{ url_for('fs.file_detail', file_id=f.id) }}">{{ f.vehicule }}</a><div class="sub">{{ f.moteur }} · {{ f.annee }}</div></td>
+          <td class="hide-sm">{{ f.ecu }}<div class="sub">{{ f.outil }} · {{ f.methode }}</div></td>
+          <td class="hide-sm">{% for p in f.prestas %}<span class="tag">{{ p }}</span>{% endfor %}</td>
+          <td class="right num hide-sm">{{ f.credits }}</td>
+          <td><span class="badge {{ f.status }}">{{ statuses[f.status] }}</span></td>
+          <td class="right muted num hide-sm">{{ f.date }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="empty" data-empty hidden>Aucun fichier ne correspond.</p>
+  </div>
+</section>
+{% endblock %}

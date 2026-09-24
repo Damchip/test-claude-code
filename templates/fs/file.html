@@ -1,0 +1,91 @@
+{% extends "fs/base.html" %}
+{% block title %}{{ f.id }} · {{ f.vehicule }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{{ url_for('fs.files') }}">Mes fichiers</a>{{ icon('chevron-right', 'icon-sm') }}<span class="mono">{{ f.id }}</span></div>
+    <h1>{{ f.vehicule }} <span class="muted" style="font-weight: 500">{{ f.moteur }}</span></h1>
+    <p>{{ f.ecu }} · {{ f.outil }} ({{ f.methode }}) · déposé le {{ f.date }}</p>
+  </div>
+  <span class="badge {{ f.status }}" style="font-size: .85rem; padding: 6px 14px 6px 12px">{{ statuses[f.status] }}</span>
+</div>
+
+<section class="card card-pad" style="margin-bottom: 20px">
+  {% set steps = [('Reçu', f.date), ('En traitement', '+6 min'), ('Prêt', '+24 min'), ('Téléchargé', '')] %}
+  <div class="progress">
+    {% for label, t in steps %}
+    <div class="p-step {{ 'done' if loop.index0 < reached or (f.status == 'pret' and loop.index0 == reached) }} {{ 'current' if loop.index0 == reached and f.status != 'pret' }}">
+      <span class="p-dot"></span>{{ label }}{% if loop.index0 <= reached and t %}<span class="p-time">{{ t }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if f.status == 'attente' %}
+  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>L'atelier attend une précision de votre part.</strong> Répondez dans la conversation ci-dessous, le traitement reprend aussitôt.</div></div>
+  {% elif f.status == 'refuse' %}
+  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>Fichier refusé : {{ f.motif }}</strong> Vos {{ f.credits }} crédits ont été remboursés.</div></div>
+  {% endif %}
+</section>
+
+<div class="split">
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><div><h2>Fichiers</h2><p class="sub">Original et versions livrées</p></div></div>
+      {% if f.status == 'pret' %}
+      <div class="file-row">
+        <span class="file-ic mod">{{ icon('file-bin') }}</span>
+        <div class="grow"><div class="name">{{ f.id }}_{{ f.prestas|join('_')|replace(' ', '')|replace('/', '-') }}_v1.bin</div><div class="muted small">Modifié · checksum corrigé · 2 Mo</div></div>
+        <a class="btn btn-primary btn-sm" href="#">{{ icon('download', 'icon-sm') }} Télécharger</a>
+      </div>
+      {% endif %}
+      <div class="file-row">
+        <span class="file-ic">{{ icon('file-bin') }}</span>
+        <div class="grow"><div class="name">{{ f.id }}_original.bin</div><div class="muted small">Lecture d'origine · 2 Mo</div></div>
+        <a class="btn btn-sm" href="#">{{ icon('download', 'icon-sm') }}<span class="hide-sm">Télécharger</span></a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Conversation</h2><p class="sub">Échanges avec l'atelier sur cette demande</p></div></div>
+      {% if thread %}
+      <div class="thread">
+        {% for m in thread %}
+        <div class="msg {{ 'me' if m.me }}">
+          <span class="avatar">{{ m.initials }}</span>
+          <div><div class="meta">{{ m.who }} · {{ m.time }}</div><div class="bubble">{{ m.text }}</div></div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="empty">Pas encore de message. L'atelier vous écrira ici si besoin.</p>
+      {% endif %}
+      <form class="composer" onsubmit="return false">
+        <input class="input" placeholder="Écrire à l'atelier…" aria-label="Message">
+        <button class="btn btn-primary" type="submit">{{ icon('send', 'icon-sm') }}<span class="hide-sm">Envoyer</span></button>
+      </form>
+    </section>
+  </div>
+
+  <aside class="stack">
+    <section class="card card-pad">
+      <h3>Véhicule</h3>
+      <dl class="dl" style="margin-top: 14px">
+        <dt>Modèle</dt><dd>{{ f.vehicule }}</dd>
+        <dt>Moteur</dt><dd>{{ f.moteur }}</dd>
+        <dt>Année</dt><dd class="num">{{ f.annee }}</dd>
+        <dt>Kilométrage</dt><dd class="num">{{ '{:,}'.format(f.km).replace(',', ' ') }} km</dd>
+        <dt>VIN</dt><dd class="mono">{{ f.vin }}</dd>
+        <dt>Calculateur</dt><dd>{{ f.ecu }}</dd>
+      </dl>
+    </section>
+    <section class="card card-pad">
+      <h3>Prestations</h3>
+      <div style="margin-top: 10px">{% for p in f.prestas %}<span class="tag">{{ p }}</span>{% endfor %}</div>
+      <div class="summary-total"><span>Débité</span><span class="num">{{ f.credits }} cr.</span></div>
+      {% if f.status == 'pret' %}
+      <a class="btn btn-block" href="#" style="margin-top: 16px">{{ icon('refresh', 'icon-sm') }} Demander une révision</a>
+      <p class="muted small" style="margin-top: 8px; text-align: center">Révision gratuite pendant 30 jours</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

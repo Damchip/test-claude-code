@@ -3,6 +3,18 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.53.0 (en cours)
+Fileservice : thème et espace client (maquette).
+
+- Nouvel **espace client** sous `/espace` sur le portail (port 5001) : connexion / création de
+  compte pro, tableau de bord, envoi d'un fichier (véhicule, lecture, prestations, calcul des
+  crédits), liste des fichiers avec filtres, suivi d'une demande (étapes, fichiers, conversation),
+  crédits & factures.
+- **Thème** unique `static/fs/theme.css` : sombre par défaut + mode clair (bouton dans l'en-tête),
+  police Inter hébergée localement (aucun appel à Google), responsive mobile.
+- ⚠ Maquette : toutes les pages tournent sur des données de démonstration (`fileservice.py`),
+  rien n'est encore enregistré.
+
 ## v1.52.0
 File inbox, livré, cartes multi-SOL.
 
