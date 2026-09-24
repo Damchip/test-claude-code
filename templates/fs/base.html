@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Espace client{% endblock %} · {{ shop.name }}</title>
   <script>try { var t = localStorage.getItem('fs-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon.png') }}">
   <link rel="preload" href="{{ url_for('static', filename='fonts/inter-400.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='fs/theme.css') }}?v={{ version }}">
 </head>
@@ -14,7 +15,7 @@
 <div class="shell">
   <aside class="side" id="side">
     <a class="brand" href="{{ url_for('fs.dashboard') }}">
-      <span class="brand-mark">{{ shop.initials }}</span>
+      <img class="brand-mark" src="{{ url_for('static', filename='brand/badge.png') }}" alt="" width="38" height="38">
       <span><span class="brand-name">{{ shop.name }}</span><span class="brand-sub">File service</span></span>
     </a>
 

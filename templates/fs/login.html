@@ -3,10 +3,7 @@
 {% block body %}
 <div class="auth">
   <section class="auth-brand">
-    <div class="brand">
-      <span class="brand-mark">{{ shop.initials }}</span>
-      <span><span class="brand-name">{{ shop.name }}</span><span class="brand-sub">File service</span></span>
-    </div>
+    <img class="auth-logo" src="{{ url_for('static', filename='brand/logo-sombre.webp') }}" alt="{{ shop.name }} — Superéthanol E85" width="1000" height="320">
 
     <div class="auth-pitch">
       <h1>Vos fichiers moteur,<br><em>préparés par des spécialistes.</em></h1>

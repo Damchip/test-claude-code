@@ -16,7 +16,7 @@ bp = Blueprint("fs", __name__, url_prefix="/espace")
 
 TZ = ZoneInfo("Europe/Paris")
 
-SHOP = {"name": "E85FRANCE", "initials": "E85"}
+SHOP = {"name": "E85-FRANCE"}
 
 # Horaires d'ouverture : (jour 0 = lundi) -> (ouverture, fermeture) en heures
 HOURS = {0: (8, 19), 1: (8, 19), 2: (8, 19), 3: (8, 19), 4: (8, 19), 5: (9, 13)}

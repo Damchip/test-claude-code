@@ -12,6 +12,8 @@ Fileservice : thème et espace client (maquette).
   crédits & factures.
 - **Thème** unique `static/fs/theme.css` : sombre par défaut + mode clair (bouton dans l'en-tête),
   police Inter hébergée localement (aucun appel à Google), responsive mobile.
+- **Identité E85-FRANCE** : badge du logo dans la barre latérale et en favicon, logo complet sur
+  la page de connexion, palette reprise du logo (vert des feuilles, bleu de l'anneau).
 - ⚠ Maquette : toutes les pages tournent sur des données de démonstration (`fileservice.py`),
   rien n'est encore enregistré.
 
