@@ -233,7 +233,7 @@ function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;"
 
 function showView(v) {
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x.dataset.view === v));
-  ["search", "solutions", "import", "viz", "patch", "batch", "dash", "jobs", "inbox", "clients", "inspect"].forEach(name => {
+  ["search", "solutions", "import", "viz", "patch", "batch", "dash", "jobs", "inbox", "fs", "clients", "inspect"].forEach(name => {
     const el = document.getElementById("view-" + name);
     if (el) el.classList.toggle("hidden", name !== v);
   });
@@ -244,6 +244,7 @@ function showView(v) {
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
   if (v === "clients") { loadClients(); loadSmtp(); }
+  if (v === "fs") { loadFs(); loadFsReglages(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -3161,7 +3162,9 @@ async function refreshClientsCount(rows) {
 async function loadClients() {
   const box = $("#clientsList");
   box.innerHTML = `<div class="empty"><span class="spin"></span> Chargement…</div>`;
-  const rows = (await (await fetch("/clients")).json()).clients || [];
+  const cd = await (await fetch("/clients")).json();
+  const rows = cd.clients || [];
+  FS_PACKS = cd.packs || [];
   refreshClientsCount(rows);
   if (!rows.length) {
     box.innerHTML = `<div class="empty">Aucun client pour l'instant. Les inscriptions faites sur
@@ -3190,6 +3193,18 @@ async function loadClients() {
             ${["Standard", "Partenaire", "VIP"].map(n => `<option ${n === c.niveau ? "selected" : ""}>${n}</option>`).join("")}
           </select>
         </div>
+        <details class="job-sub" style="margin-top:6px">
+          <summary class="muted small">Paiement reçu hors ligne (virement, chèque…) : créditer + facturer</summary>
+          <div class="patch-row" style="margin-top:6px">
+            <select class="c-pack">${FS_PACKS.map((p, i) => `<option value="${i}">${p.label}</option>`).join("")}<option value="">Autre montant…</option></select>
+            <label>Crédits <input type="text" class="c-fcred" value="${FS_PACKS[0] ? FS_PACKS[0].credits : ""}" style="width:80px"></label>
+            <label>Montant HT (€) <input type="text" class="c-fht" value="${FS_PACKS[0] ? FS_PACKS[0].ht : ""}" style="width:90px"></label>
+            <label>Règlement <select class="c-fpay"><option>Virement</option><option>Chèque</option><option>Espèces</option><option>Carte bancaire sur place</option></select></label>
+            <label>Référence <input type="text" class="c-fref" placeholder="ex : VIR 24/09 n°123" style="width:150px"></label>
+            <button class="patchbtn sm" data-cfac="${c.id}">Créditer et facturer</button>
+          </div>
+          <div class="c-facs muted small" data-cfacs="${c.id}"></div>
+        </details>
         <div class="c-out muted small"></div>
       </div>
       <div class="inbox-actions">${actions}</div>
@@ -3197,11 +3212,40 @@ async function loadClients() {
   }).join("");
 }
 
+// Packs de crédits (catalogue.py), fournis par /clients
+let FS_PACKS = [];
+
+async function loadClientFactures(cid) {
+  const box = document.querySelector(`[data-cfacs="${cid}"]`);
+  if (!box) return;
+  const d = await (await fetch(`/clients/${cid}/factures`)).json();
+  box.innerHTML = d.factures.length ? "Factures : " + d.factures.map(f =>
+    `<a class="btn-link" href="/fs/factures/${encodeURIComponent(f.numero)}" target="_blank">${esc(f.numero)}</a> (${f.ttc.toFixed(2)} € TTC)`).join(" · ") : "Aucune facture.";
+}
+
+$("#clientsList").addEventListener("toggle", e => {
+  if (e.target.tagName === "DETAILS" && e.target.open) {
+    const b = e.target.querySelector("[data-cfac]");
+    if (b) loadClientFactures(b.dataset.cfac);
+  }
+}, true);
+
 $("#clientsList").addEventListener("click", async e => {
   const row = e.target.closest(".job-row");
   if (!row) return;
   const out = row.querySelector(".c-out");
   try {
+    if (e.target.dataset.cfac) {
+      const cid = e.target.dataset.cfac, i = row.querySelector(".c-pack").value;
+      const body = { id: +cid, credits: row.querySelector(".c-fcred").value, ht: row.querySelector(".c-fht").value,
+        paiement: row.querySelector(".c-fpay").value, reference: row.querySelector(".c-fref").value,
+        designation: i !== "" ? FS_PACKS[+i].designation : "Crédits fileservice" };
+      if (!confirm(`Créditer ${body.credits} crédits et émettre une facture de ${body.ht} € HT ?`)) return;
+      const d = await postJSON("/clients/facture", body);
+      alert(d.nouvelle ? `Facture ${d.numero} émise, crédits ajoutés.` : `Déjà facturé (${d.numero}) : rien n'a été ajouté.`);
+      await loadClients();
+      return;
+    }
     if (e.target.dataset.cstat) {
       const d = await postJSON("/clients/statut", { id: +e.target.dataset.id, statut: e.target.dataset.cstat });
       await loadClients();
@@ -3218,6 +3262,11 @@ $("#clientsList").addEventListener("click", async e => {
 });
 
 $("#clientsList").addEventListener("change", async e => {
+  if (e.target.classList.contains("c-pack")) {
+    const row = e.target.closest(".job-row"), p = FS_PACKS[+e.target.value];
+    if (e.target.value !== "" && p) { row.querySelector(".c-fcred").value = p.credits; row.querySelector(".c-fht").value = p.ht; }
+    return;
+  }
   if (!e.target.dataset.cniv) return;
   try { await postJSON("/clients/niveau", { id: +e.target.dataset.cniv, niveau: e.target.value }); }
   catch (err) { e.target.closest(".job-row").querySelector(".c-out").textContent = err.message; }
@@ -3246,3 +3295,244 @@ $("#smtpTest").onclick = async () => {
 };
 
 refreshClientsCount();
+
+/* ===== Fileservice : demandes des clients ===== */
+const FS_STATUT = { recu: ["", "reçu"], en_cours: ["en_cours", "en traitement"], attente: ["warn", "info requise"],
+                    pret: ["ok", "prêt"], refuse: ["danger", "refusé"] };
+const FS_VERDICT = { compatible: ["ok", "solution en base"], a_verifier: ["warn", "à vérifier"], non_trouve: ["", "pas en base"] };
+let fsFiltre = "ouverts", fsRows = [], fsSel = null;
+
+function fsDate(s) { return s ? `${s.slice(8, 10)}/${s.slice(5, 7)} ${s.slice(11, 16)}` : ""; }
+function fsVeh(d) { const v = d.vehicule || {}; return [v.marque, v.modele].filter(Boolean).join(" ") || "Véhicule ?"; }
+function fsEcu(d) { return (d.lecture || {}).ecu || (d.detection || {}).plateforme || "calculateur ?"; }
+function fsAuteur() { return $("#fsAuteur").value.trim(); }
+try { $("#fsAuteur").value = localStorage.getItem("fs_auteur") || ""; } catch (e) { /* stockage indisponible */ }
+$("#fsAuteur").addEventListener("change", () => { try { localStorage.setItem("fs_auteur", fsAuteur()); } catch (e) {} });
+
+async function refreshFsCount() {
+  try {
+    const d = await (await fetch("/fs/demandes")).json();
+    const n = d.stats.counts.recu + d.stats.counts.en_cours
+      + d.demandes.filter(x => x.non_lus && x.statut !== "refuse").filter(x => !["recu", "en_cours"].includes(x.statut)).length;
+    const el = $("#fsCount");
+    el.textContent = n;
+    el.classList.toggle("hidden", !n);
+    return d;
+  } catch (e) { return null; }
+}
+
+async function loadFs() {
+  const box = $("#fsList");
+  box.innerHTML = `<div class="empty"><span class="spin"></span> Chargement…</div>`;
+  const d = await refreshFsCount();
+  if (!d) { box.innerHTML = `<div class="empty">Erreur de chargement.</div>`; return; }
+  const st = d.stats;
+  $("#fsStats").textContent = `${st.counts.recu} reçu(s) · ${st.counts.en_cours} en traitement · ${st.counts.attente} en attente client`
+    + (st.delai_moyen != null ? ` · délai moyen ${st.delai_moyen} min (30 j)` : "") + ` · ${st.livres_mois} livré(s) ce mois`;
+  fsRows = d.demandes;
+  renderFsList();
+}
+
+function renderFsList() {
+  const q = $("#fsSearch").value.trim().toLowerCase();
+  const rows = fsRows.filter(d => {
+    const okF = fsFiltre === "ouverts" ? ["recu", "en_cours"].includes(d.statut) || (d.non_lus && d.statut !== "refuse")
+      : !fsFiltre || d.statut === fsFiltre;
+    const txt = [d.numero, d.societe, fsVeh(d), fsEcu(d), (d.vehicule || {}).immat, (d.vehicule || {}).vin].join(" ").toLowerCase();
+    return okF && (!q || txt.includes(q));
+  });
+  // à traiter : les plus anciennes d'abord
+  if (fsFiltre === "ouverts") rows.sort((a, b) => a.id - b.id);
+  const box = $("#fsList");
+  if (!rows.length) { box.innerHTML = `<div class="empty">Aucune demande ici.</div>`; return; }
+  box.innerHTML = rows.map(d => {
+    const [cls, lbl] = FS_STATUT[d.statut] || ["", d.statut];
+    return `<div class="job-row fs-row ${fsSel === d.id ? "sel" : ""}" data-fsid="${d.id}">
+      <div class="job-main">
+        <div class="job-top"><b>${esc(d.numero)}</b> <span class="badge ${cls}">${esc(lbl)}</span>
+          ${d.non_lus ? `<span class="badge warn">${d.non_lus} msg</span>` : ""}</div>
+        <div class="job-sub"><b>${esc(fsVeh(d))}</b> · ${esc(fsEcu(d))}</div>
+        <div class="job-sub muted">${esc(d.societe)} · ${esc(d.lignes.map(l => l.nom).join(" + "))} · ${d.total} cr. · ${esc(fsDate(d.cree_le))}</div>
+      </div></div>`;
+  }).join("");
+}
+
+$("#fsFilters").addEventListener("click", e => {
+  const b = e.target.closest("[data-fsf]");
+  if (!b) return;
+  fsFiltre = b.dataset.fsf;
+  $("#fsFilters").querySelectorAll("[data-fsf]").forEach(x => x.classList.toggle("active", x === b));
+  renderFsList();
+});
+$("#fsSearch").addEventListener("input", renderFsList);
+$("#fsList").addEventListener("click", e => {
+  const r = e.target.closest("[data-fsid]");
+  if (r) openFs(+r.dataset.fsid);
+});
+
+async function openFs(id) {
+  fsSel = id;
+  renderFsList();
+  const box = $("#fsDetail");
+  box.innerHTML = `<div class="empty"><span class="spin"></span></div>`;
+  const r = await fetch(`/fs/demandes/${id}`);
+  const x = await r.json();
+  if (x.error) { box.innerHTML = `<div class="empty">${esc(x.error)}</div>`; return; }
+  const d = x.demande, v = d.vehicule || {}, l = d.lecture || {}, det = d.detection || {};
+  const [cls, lbl] = FS_STATUT[d.statut] || ["", d.statut];
+  const [vcls, vlbl] = FS_VERDICT[det.verdict] || ["", det.verdict || "—"];
+  const kv = (k, val) => val ? `<dt>${k}</dt><dd>${esc(val)}</dd>` : "";
+  const ferme = d.statut === "refuse";
+  box.innerHTML = `
+    <div class="fs-actions" style="justify-content:space-between">
+      <div><h3>${esc(d.numero)} · ${esc(fsVeh(d))} <span class="badge ${cls}">${esc(lbl)}</span></h3>
+        <div class="muted small">${esc(d.societe)} · ${esc(d.email)}${d.tel ? " · " + esc(d.tel) : ""} · reçu le ${esc(fsDate(d.cree_le))}</div></div>
+    </div>
+    <div class="fs-sec" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <dl class="fs-kv">${kv("Moteur", v.moteur)}${kv("Année", v.annee)}${kv("Boîte", v.boite)}${kv("Km", v.km)}${kv("VIN", v.vin)}${kv("Immat.", v.immat)}</dl>
+      <dl class="fs-kv">${kv("Outil", l.outil)}${kv("Méthode", l.methode)}${kv("ECU saisi", l.ecu)}${kv("ECU détecté", [det.plateforme, det.fabricant].filter(Boolean).join(" / "))}
+        <dt>Bibliothèque</dt><dd><span class="badge ${vcls}">${esc(vlbl)}</span></dd></dl>
+    </div>
+    <div class="fs-sec">
+      <b>${esc(d.lignes.map(z => z.nom).join(" + "))}</b> — ${d.total} crédits${d.siege ? " · <b>ouverture au siège</b>" + (d.retour ? " (retour " + esc(d.retour) + ")" : "") : ""}${d.garantie ? " · garantie " + esc(d.garantie === "g2" ? "2 ans" : "1 an") : ""}
+      ${d.commentaire ? `<div class="muted" style="white-space:pre-wrap;margin-top:4px">« ${esc(d.commentaire)} »</div>` : ""}
+      ${ferme ? `<div class="muted" style="margin-top:4px">Refusé : ${esc(d.motif_refus)}${d.rembourse ? " · remboursé" : ""}</div>` : ""}
+    </div>
+    <div class="fs-sec fs-actions">
+      <a class="ghost sm btn-link" href="/fs/demandes/${d.id}/original">Télécharger l'original</a>
+      <button class="ghost sm" data-fsact="analyser">Analyser</button>
+      <button class="patchbtn sm" data-fsact="autopatch">Auto-patch</button>
+      ${!ferme && d.statut !== "en_cours" ? `<button class="ghost sm" data-fsstat="en_cours">Passer en traitement</button>` : ""}
+    </div>
+    <div class="fs-ana muted small"></div>
+    ${ferme ? "" : `
+    <div class="fs-sec">
+      <b>Livrer le fichier modifié</b>
+      <div class="fs-actions" style="margin-top:6px"><input type="file" id="fsLivFile">
+        <input type="text" id="fsLivNote" placeholder="note visible par le client (optionnel)" style="flex:1">
+        <button class="patchbtn sm" data-fsact="livrer">Livrer ${x.livrables.length ? "une nouvelle version" : ""}</button></div>
+    </div>`}
+    ${x.livrables.length ? `<div class="fs-sec"><b>Versions livrées</b><br>${x.livrables.map(z =>
+      `<a class="fs-link" href="/fs/demandes/${d.id}/livre/${z.version}">v${z.version} · ${esc(z.nom)}</a>
+       <span class="muted small">${esc(fsDate(z.cree_le))}${z.note ? " · " + esc(z.note) : ""}</span>`).join("<br>")}
+       ${d.telecharge_le ? `<div class="muted small">Téléchargé par le client le ${esc(fsDate(d.telecharge_le))}</div>` : ""}</div>` : ""}
+    <div class="fs-sec">
+      <b>Conversation</b>
+      <div class="fs-thread">${x.messages.length ? x.messages.map(m => `<div class="fs-msg ${m.auteur}">`
+        + `<div class="fs-meta">${m.auteur === "atelier" ? "Atelier" + (m.auteur_nom ? " · " + esc(m.auteur_nom) : "") : esc(m.auteur_nom || "Client")} · ${esc(fsDate(m.cree_le))}</div>`
+        + `<div class="fs-txt">${esc(m.texte)}</div>`
+        + (m.pj_fichier ? `<a class="fs-link" href="/fs/demandes/${d.id}/pj/${m.id}">📎 ${esc(m.pj_nom)}</a>` : "") + `</div>`).join("")
+        : `<span class="muted small">Aucun message.</span>`}</div>
+      ${ferme ? "" : `<textarea id="fsMsg" placeholder="Écrire au client…"></textarea>
+      <div class="fs-actions" style="margin-top:6px"><input type="file" id="fsMsgPj">
+        <label class="muted small"><input type="checkbox" id="fsMsgAttente"> demander une info (passe en « info requise »)</label>
+        <button class="patchbtn sm" data-fsact="message">Envoyer</button></div>`}
+    </div>
+    ${ferme || d.livre_le ? "" : `
+    <div class="fs-sec fs-actions">
+      <input type="text" id="fsMotif" placeholder="motif du refus (affiché au client)" style="flex:1">
+      <button class="ghost sm" data-fsact="refuser">Refuser et rembourser ${d.total} cr.</button>
+    </div>`}
+    <div class="fs-out muted small" style="margin-top:8px"></div>`;
+}
+
+async function fsPostForm(url, fd) {
+  const r = await fetch(url, { method: "POST", body: fd });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || "Erreur " + r.status);
+  return d;
+}
+
+$("#fsDetail").addEventListener("click", async e => {
+  const b = e.target.closest("[data-fsact],[data-fsstat]");
+  if (!b || !fsSel) return;
+  const out = $("#fsDetail .fs-out");
+  const id = fsSel;
+  try {
+    if (b.dataset.fsstat) {
+      await postJSON(`/fs/demandes/${id}/statut`, { statut: b.dataset.fsstat });
+    } else if (b.dataset.fsact === "analyser") {
+      const ana = $("#fsDetail .fs-ana");
+      ana.innerHTML = `<span class="spin"></span> analyse…`;
+      const d = await postJSON(`/fs/demandes/${id}/analyser`, {});
+      const m = d.matches || [];
+      ana.innerHTML = m.length ? m.slice(0, 5).map(x =>
+        `→ <b>${esc(x.vehicle_label || "#" + x.id)}</b> (${esc(x.solution_type || "?")}) — score ${(x.score * 100).toFixed(0)} %${x.exact ? " · exact" : ""}${x.same_stock ? " · même stock" : ""}`
+      ).join("<br>") : "Aucune solution connue en base pour ce fichier.";
+      return;
+    } else if (b.dataset.fsact === "autopatch") {
+      const row = fsRows.find(r => r.id === id) || {};
+      const blob = await (await fetch(`/fs/demandes/${id}/original`)).blob();
+      window.lastClientFile = new File([blob], row.fichier_nom || "original.bin", { type: "application/octet-stream" });
+      const d = await postJSON(`/fs/demandes/${id}/analyser`, {});
+      const ids = (d.matches || []).filter(x => x.exact || x.same_stock || x.calibration_exact).map(x => x.id);
+      if (!ids.length) { out.textContent = "Pas de fiche même stock en base : traitement manuel."; return; }
+      await autoPatchFromMatch(ids.join(","));
+      return;
+    } else if (b.dataset.fsact === "livrer") {
+      const f = $("#fsLivFile").files[0];
+      if (!f) { out.textContent = "Choisis le fichier modifié."; return; }
+      if (!confirm(`Livrer ${f.name} au client ? Il sera prévenu par e-mail.`)) return;
+      const fd = new FormData();
+      fd.append("file", f); fd.append("note", $("#fsLivNote").value);
+      const d = await fsPostForm(`/fs/demandes/${id}/livrer`, fd);
+      alert(`Version ${d.version} livrée. ${d.mail || ""}`);
+    } else if (b.dataset.fsact === "message") {
+      const fd = new FormData();
+      fd.append("texte", $("#fsMsg").value); fd.append("auteur", fsAuteur());
+      if ($("#fsMsgPj").files[0]) fd.append("pj", $("#fsMsgPj").files[0]);
+      if ($("#fsMsgAttente").checked) fd.append("attente", "1");
+      const d = await fsPostForm(`/fs/demandes/${id}/message`, fd);
+      out.textContent = d.mail || "";
+    } else if (b.dataset.fsact === "refuser") {
+      const motif = $("#fsMotif").value.trim();
+      if (!motif) { out.textContent = "Indique le motif du refus."; return; }
+      if (!confirm("Refuser la demande et rembourser le client ?")) return;
+      const d = await postJSON(`/fs/demandes/${id}/refuser`, { motif });
+      alert(d.mail || "Demande refusée.");
+    }
+    await loadFs();
+    await openFs(id);
+  } catch (err) { out.textContent = err.message; }
+});
+
+/* Réglages du fileservice */
+const FS_SOCIETE = [["raison_sociale", "Raison sociale"], ["forme", "Forme (SAS, SARL…)"], ["capital", "Capital"],
+  ["adresse", "Adresse"], ["code_postal", "Code postal"], ["ville", "Ville"], ["siret", "SIRET"], ["rcs", "RCS (ex : RCS Lyon 123 456 789)"],
+  ["tva", "N° TVA"], ["email", "E-mail de contact"], ["tel", "Téléphone"]];
+const FS_JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
+async function loadFsReglages() {
+  const d = await (await fetch("/fs/reglages")).json();
+  $("#fsSociete").innerHTML = FS_SOCIETE.map(([k, lbl]) =>
+    `<label>${lbl} <input type="text" data-soc="${k}" value="${esc(d.societe[k] || "")}"></label>`).join("");
+  $("#fsHoraires").innerHTML = FS_JOURS.map((j, i) => {
+    const h = d.horaires[String(i)];
+    return `<label>${j} <span><input type="number" min="0" max="24" data-hj="${i}" data-hk="0" value="${h ? h[0] : ""}" style="width:64px"> –
+      <input type="number" min="0" max="24" data-hj="${i}" data-hk="1" value="${h ? h[1] : ""}" style="width:64px"> h</span></label>`;
+  }).join("");
+  const st = d.stripe;
+  $("#fsStripeKey").value = ""; $("#fsStripeWh").value = "";
+  $("#fsStripeKey").placeholder = st.secret_key_set ? "enregistrée (vide = inchangée)" : "sk_live_… ou sk_test_…";
+  $("#fsStripeWh").placeholder = st.webhook_secret_set ? "enregistré (vide = inchangé)" : "whsec_…";
+  $("#fsStripeEtat").textContent = st.secret_key_set ? `Paiement en ligne actif (${st.mode === "test" ? "mode test" : "mode réel"})${st.webhook_secret_set ? "" : " · webhook non configuré"}` : "Paiement en ligne désactivé";
+  $("#fsWebhookUrl").textContent = (d.public_url || "https://portail.ton-domaine.fr") + "/espace/stripe/webhook";
+}
+
+$("#fsSaveReglages").onclick = async () => {
+  const societe = {};
+  document.querySelectorAll("[data-soc]").forEach(i => { societe[i.dataset.soc] = i.value; });
+  const horaires = {};
+  for (let j = 0; j < 7; j++) {
+    const o = document.querySelector(`[data-hj="${j}"][data-hk="0"]`).value, f = document.querySelector(`[data-hj="${j}"][data-hk="1"]`).value;
+    horaires[j] = o !== "" && f !== "" ? [+o, +f] : null;
+  }
+  try {
+    await postJSON("/fs/reglages", { societe, horaires, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
+    $("#fsReglagesOut").textContent = "Réglages enregistrés.";
+    loadFsReglages();
+  } catch (err) { $("#fsReglagesOut").textContent = err.message; }
+};
+
+refreshFsCount();
+

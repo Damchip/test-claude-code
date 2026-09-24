@@ -3,34 +3,37 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
-## v1.53.0 (en cours)
-Fileservice : thème et espace client (maquette).
+## v1.53.0
+Fileservice complet : espace client, traitement atelier, paiement et factures.
 
-- Nouvel **espace client** sous `/espace` sur le portail (port 5001) : connexion / création de
-  compte pro, tableau de bord, envoi d'un fichier (véhicule, lecture, prestations, calcul des
-  crédits), liste des fichiers avec filtres, suivi d'une demande (étapes, fichiers, conversation),
-  crédits & factures.
-- **Thème** unique `static/fs/theme.css` : sombre par défaut + mode clair (bouton dans l'en-tête),
-  police Inter hébergée localement (aucun appel à Google), responsive mobile.
-- **Identité E85-FRANCE** : badge du logo dans la barre latérale et en favicon, logo complet sur
-  la page de connexion, palette reprise du logo (vert des feuilles, bleu de l'anneau).
-- **Catalogue réel** (`catalogue.py`) repris de la boutique : Véhicule léger, Agricole / PL,
-  Moto / Quad, services (clonage, injecteurs), Garantie Sérénité 1 et 2 ans, retour du boîtier
-  Colissimo / Chronopost. Prix au siège pour l'E85. Packs de crédits à 2,50 €/crédit avec bonus.
-- **Tarif pack automatique** : le serveur (`/espace/tarif`) choisit la combinaison la moins chère
-  de packs et de prestations seules ; le récapitulatif affiche l'économie réalisée.
-- **Comptes clients réels** (`comptes.py`, base séparée `data/fileservice.db`) : inscription pro
-  (SIRET vérifié, TVA), compte **en attente** jusqu'à validation par l'atelier, connexion,
-  « rester connecté » 30 jours, mot de passe oublié par e-mail (lien 1 h, usage unique),
-  déconnexion. Protection CSRF, blocage après 5 échecs en 15 min, pas d'énumération des comptes.
-- **Onglet Clients** dans l'outil interne : valider / refuser / bloquer, niveau, ajout ou retrait
-  de crédits journalisé, réglages **SMTP O2switch** avec bouton de test.
-- **E-mails** (`mailer.py`) : accusé d'inscription, notification atelier, activation du compte,
-  réinitialisation. Sans SMTP configuré, écrits dans `data/mails_non_envoyes.log`.
-- Crédits affichés **HT et TTC** (TVA 20 %) ; mouvements de crédits réels sur la page Crédits.
-- Correctif outil interne : la vue Recherche restait affichée sous les autres onglets.
-- ⚠ Maquette (reste) : toutes les pages tournent sur des données de démonstration (`fileservice.py`),
-  les fichiers / demandes et les factures sont encore des données de démonstration.
+**Espace client** (`/espace` sur le portail, port 5001), aux couleurs E85-FRANCE (thème sombre / clair, mobile) :
+- **Comptes pro** : inscription (SIRET vérifié, TVA, adresse), validation par l'atelier, connexion,
+  « rester connecté », mot de passe oublié par e-mail, paramètres (coordonnées, mot de passe).
+- **Envoi de fichier** : type de véhicule, véhicule, lecture, prestations du catalogue avec **tarif pack
+  automatique**, ouverture au siège + retour du boîtier, Garantie Sérénité. Le prix est recalculé par le
+  serveur ; crédits débités à l'envoi, dans la même transaction que la demande.
+- **Suivi** : statuts (reçu, en traitement, info requise, prêt, refusé), étapes datées, versions livrées,
+  **conversation avec pièces jointes**, révision gratuite 30 jours, remboursement automatique en cas de refus.
+- **Crédits** : packs à 2,50 € HT/crédit avec bonus, prix **HT et TTC**, historique des mouvements.
+- **Paiement en ligne Stripe** (optionnel) : Checkout, webhook signé, crédit idempotent, montant vérifié.
+- **Factures** numérotées FA-AAAA-NNNN, identité vendeur/client figée, TVA 20 % ou **autoliquidation UE**,
+  mentions légales, imprimables en PDF.
+- **Support** : FAQ, contact, horaires d'ouverture et état ouvert / fermé.
+
+**Outil interne** :
+- Onglet **Fileservice** : file des demandes, détail, calculateur détecté et verdict bibliothèque,
+  **Analyser**, **Auto-patch** direct, messages (avec « info requise »), **livraison** du fichier modifié,
+  refus avec remboursement ; réglages (identité légale, horaires, clés Stripe).
+- Onglet **Clients** : validation, blocage, niveau, crédits, **facture pour paiement hors ligne**
+  (virement, chèque…), réglages SMTP O2switch avec test.
+- E-mails automatiques : inscription, activation, info requise, fichier prêt, refus, facture ;
+  notifications atelier (nouvelle inscription, nouveau fichier, message client, révision).
+- Correctifs : la vue Recherche restait affichée sous les autres onglets ; la barre d'onglets passe
+  à la ligne au lieu de déborder.
+
+Sécurité : CSRF sur tous les formulaires, blocage après 5 échecs de connexion, aucun client ne peut
+voir les fichiers d'un autre, fichiers rangés hors de la racine web avec contrôle des chemins, clés
+(SMTP, Stripe) jamais renvoyées au navigateur.
 
 ## v1.52.0
 File inbox, livré, cartes multi-SOL.

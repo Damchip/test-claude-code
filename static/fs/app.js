@@ -17,6 +17,14 @@
   $$('[data-close-nav]').forEach(b => b.addEventListener('click', () => document.body.classList.remove('nav-open')));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') document.body.classList.remove('nav-open'); });
 
+  // Pièce jointe d'un message : affiche le nom du fichier choisi
+  $$('[data-pj]').forEach(inp => inp.addEventListener('change', () => {
+    const out = $('[data-pj-name]');
+    if (!out) return;
+    out.hidden = !inp.files.length;
+    out.textContent = inp.files.length ? 'Pièce jointe : ' + inp.files[0].name : '';
+  }));
+
   // Lignes de tableau cliquables
   $$('tr[data-href]').forEach(tr => tr.addEventListener('click', e => {
     if (e.target.closest('a, button, input')) return;

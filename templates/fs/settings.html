@@ -1,0 +1,46 @@
+{% extends "fs/base.html" %}
+{% block title %}Paramètres{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Paramètres</h1>
+    <p>Coordonnées de facturation et sécurité du compte.</p>
+  </div>
+</div>
+
+<div class="split">
+  <section class="card">
+    <div class="card-head"><div><h2>Société</h2><p class="sub">Ces informations figurent sur vos factures</p></div></div>
+    <form method="post" class="card-body stack">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="profil">
+      <div class="form-grid">
+        <div class="field"><label>Société</label><input class="input" value="{{ c.societe }}" disabled></div>
+        <div class="field"><label>SIRET</label><input class="input mono" value="{{ c.siret }}" disabled></div>
+        <div class="field"><label>E-mail de connexion</label><input class="input" value="{{ c.email }}" disabled></div>
+        <div class="field"><label for="tva">N° TVA</label><input class="input" id="tva" name="tva" value="{{ c.tva }}" placeholder="FR…"></div>
+        <div class="field"><label for="contact">Nom et prénom</label><input class="input" id="contact" name="contact" value="{{ c.contact }}"></div>
+        <div class="field"><label for="tel">Téléphone</label><input class="input" id="tel" name="tel" value="{{ c.tel }}"></div>
+        <div class="field full"><label for="adresse">Adresse</label><input class="input" id="adresse" name="adresse" value="{{ c.adresse }}"></div>
+        <div class="field"><label for="code_postal">Code postal</label><input class="input" id="code_postal" name="code_postal" value="{{ c.code_postal }}"></div>
+        <div class="field"><label for="ville">Ville</label><input class="input" id="ville" name="ville" value="{{ c.ville }}"></div>
+        <div class="field full"><label for="pays">Pays</label><input class="input" id="pays" name="pays" value="{{ c.pays }}"></div>
+      </div>
+      <p class="muted small">Pour changer la société, le SIRET ou l'e-mail de connexion, contactez l'atelier.</p>
+      <div><button class="btn btn-primary" type="submit">Enregistrer</button></div>
+    </form>
+  </section>
+
+  <aside class="card">
+    <div class="card-head"><div><h2>Mot de passe</h2></div></div>
+    <form method="post" class="card-body stack">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="mdp">
+      <div class="field"><label for="actuel">Mot de passe actuel</label><input class="input" type="password" id="actuel" name="actuel" autocomplete="current-password" required></div>
+      <div class="field"><label for="nouveau">Nouveau mot de passe</label><input class="input" type="password" id="nouveau" name="nouveau" minlength="10" autocomplete="new-password" required><span class="hint">10 caractères minimum.</span></div>
+      <div class="field"><label for="nouveau2">Confirmation</label><input class="input" type="password" id="nouveau2" name="nouveau2" minlength="10" autocomplete="new-password" required></div>
+      <button class="btn btn-block" type="submit">Changer le mot de passe</button>
+    </form>
+  </aside>
+</div>
+{% endblock %}

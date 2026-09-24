@@ -9,6 +9,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
 import comptes
+import demandes
+import factures
 
 SIRET_OK = "73282932000074"
 
@@ -94,10 +96,12 @@ class ParcoursPortailTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         app = self.portal.app
-        self.saved = {k: app.config[k] for k in ("FS_DB", "FS_DATA_DIR", "FS_CONFIG", "FS_PUBLIC_URL")}
+        self.saved = {k: app.config[k] for k in ("FS_DB", "FS_DATA_DIR", "FS_CONFIG", "FS_PUBLIC_URL", "FS_FILES")}
         app.config.update(FS_DB=os.path.join(self.tmp.name, "fs.db"), FS_DATA_DIR=self.tmp.name,
-                          FS_CONFIG=os.path.join(self.tmp.name, "absent.json"), FS_PUBLIC_URL="")
-        comptes.init_db(app.config["FS_DB"])
+                          FS_CONFIG=os.path.join(self.tmp.name, "absent.json"), FS_PUBLIC_URL="",
+                          FS_FILES=os.path.join(self.tmp.name, "fichiers"))
+        demandes.init_db(app.config["FS_DB"])
+        factures.init_db(app.config["FS_DB"])
         self.portal.fileservice.LIMITEUR._echecs.clear()
         self.c = app.test_client()
 

@@ -86,9 +86,22 @@ def connect(db_path=DEFAULT_DB):
         con.close()
 
 
+# Colonnes ajoutées après la première version (migration douce des bases existantes)
+COLONNES_AJOUTEES = [
+    ("adresse", "TEXT NOT NULL DEFAULT ''"),
+    ("code_postal", "TEXT NOT NULL DEFAULT ''"),
+    ("ville", "TEXT NOT NULL DEFAULT ''"),
+    ("pays", "TEXT NOT NULL DEFAULT 'France'"),
+]
+
+
 def init_db(db_path=DEFAULT_DB):
     with connect(db_path) as con:
         con.executescript(SCHEMA)
+        existantes = {r["name"] for r in con.execute("PRAGMA table_info(clients)")}
+        for nom, decl in COLONNES_AJOUTEES:
+            if nom not in existantes:
+                con.execute(f"ALTER TABLE clients ADD COLUMN {nom} {decl}")
 
 
 # --- Validation --------------------------------------------------------------
@@ -136,7 +149,14 @@ def _verifier_mdp(mdp):
 
 # --- Comptes -----------------------------------------------------------------
 
-def creer_client(db_path, *, societe, siret, tva, contact, email, tel, mdp):
+def _adresse(adresse="", code_postal="", ville="", pays=""):
+    return {"adresse": (adresse or "").strip()[:160], "code_postal": (code_postal or "").strip()[:12],
+            "ville": (ville or "").strip()[:80], "pays": (pays or "").strip()[:60] or "France"}
+
+
+def creer_client(db_path, *, societe, siret, tva, contact, email, tel, mdp,
+                 adresse="", code_postal="", ville="", pays=""):
+    adr = _adresse(adresse, code_postal, ville, pays)
     societe = (societe or "").strip()[:120]
     contact = (contact or "").strip()[:80]
     tel = (tel or "").strip()[:30]
@@ -155,9 +175,10 @@ def creer_client(db_path, *, societe, siret, tva, contact, email, tel, mdp):
     try:
         with connect(db_path) as con:
             cur = con.execute(
-                "INSERT INTO clients (societe, siret, tva, contact, email, tel, mdp_hash, cree_le)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (societe, siret, tva, contact, email, tel, generate_password_hash(mdp), _now()))
+                "INSERT INTO clients (societe, siret, tva, contact, email, tel, mdp_hash, cree_le,"
+                " adresse, code_postal, ville, pays) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (societe, siret, tva, contact, email, tel, generate_password_hash(mdp), _now(),
+                 adr["adresse"], adr["code_postal"], adr["ville"], adr["pays"]))
             return cur.lastrowid
     except sqlite3.IntegrityError:
         raise ErreurCompte("Un compte existe déjà avec cette adresse e-mail.")
@@ -192,11 +213,32 @@ def authentifier(db_path, email, mdp):
     return c
 
 
+def modifier_profil(db_path, client_id, *, contact, tel, tva, adresse, code_postal, ville, pays):
+    tva = normaliser_tva(tva)
+    if tva and not tva_valide(tva):
+        raise ErreurCompte("Numéro de TVA invalide (ex. FR12345678901).")
+    adr = _adresse(adresse, code_postal, ville, pays)
+    with connect(db_path) as con:
+        con.execute("UPDATE clients SET contact = ?, tel = ?, tva = ?, adresse = ?, code_postal = ?, ville = ?,"
+                    " pays = ? WHERE id = ?",
+                    ((contact or "").strip()[:80], (tel or "").strip()[:30], tva, adr["adresse"],
+                     adr["code_postal"], adr["ville"], adr["pays"], client_id))
+
+
+def changer_mdp(db_path, client_id, actuel, nouveau):
+    c = get_client(db_path, client_id)
+    if not c or not check_password_hash(c["mdp_hash"], actuel or ""):
+        raise ErreurCompte("Mot de passe actuel incorrect.")
+    _verifier_mdp(nouveau)
+    with connect(db_path) as con:
+        con.execute("UPDATE clients SET mdp_hash = ? WHERE id = ?", (generate_password_hash(nouveau), client_id))
+
+
 def lister_clients(db_path):
     with connect(db_path) as con:
         rows = con.execute(
             "SELECT id, societe, siret, tva, contact, email, tel, statut, niveau, credits, cree_le,"
-            " valide_le, derniere_connexion FROM clients"
+            " valide_le, derniere_connexion, adresse, code_postal, ville, pays FROM clients"
             " ORDER BY CASE statut WHEN 'en_attente' THEN 0 ELSE 1 END, cree_le DESC").fetchall()
     return [dict(r) for r in rows]
 

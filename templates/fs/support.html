@@ -1,0 +1,51 @@
+{% extends "fs/base.html" %}
+{% block title %}Support{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Support</h1>
+    <p>Une question sur un fichier ? Le plus rapide est d'écrire dans la conversation de la demande concernée.</p>
+  </div>
+  <a class="btn" href="{{ url_for('fs.files') }}">{{ icon('files') }} Mes fichiers</a>
+</div>
+
+<div class="split">
+  <section class="card">
+    <div class="card-head"><div><h2>Questions fréquentes</h2></div></div>
+    <div class="card-body stack" style="gap: 18px">
+      {% for q, r in [
+        ("Quel fichier dois-je envoyer ?", "La lecture d'origine complète du calculateur, telle que sortie de votre outil (KESS3, Autotuner, Flex…). En lecture banc ou boot, envoyez le fichier complet. Précisez dans le commentaire toute modification mécanique."),
+        ("Quand mes crédits sont-ils débités ?", "À l'envoi de la demande. Si l'atelier ne peut pas traiter le fichier, la demande est refusée avec son motif et les crédits sont remboursés automatiquement."),
+        ("Comment serai-je prévenu ?", "Par e-mail dès que le fichier est prêt, ou si l'atelier a besoin d'une précision. Tout reste visible dans « Mes fichiers »."),
+        ("Et si le fichier ne me convient pas ?", "Depuis la page de la demande, cliquez sur « Demander une révision » en décrivant le problème. La révision est gratuite pendant " ~ revision_jours ~ " jours après la livraison."),
+        ("Les checksums sont-ils corrigés ?", "Oui, chaque fichier livré est vérifié et ses checksums corrigés. Vérifiez tout de même avec votre outil avant d'écrire le calculateur."),
+        ("Comment obtenir une facture ?", "Chaque achat de crédits génère une facture, disponible dans « Crédits & factures ». Ouvrez-la puis « Imprimer / enregistrer en PDF »."),
+      ] %}
+      <div><h3>{{ q }}</h3><p class="muted" style="margin-top: 4px">{{ r }}</p></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <aside class="stack">
+    <section class="card card-pad">
+      <h3>Contacter l'atelier</h3>
+      <div class="stack" style="gap: 10px; margin-top: 14px">
+        {% if shop.email %}<a class="btn btn-block" href="mailto:{{ shop.email }}">{{ icon('mail', 'icon-sm') }} {{ shop.email }}</a>{% endif %}
+        {% if shop.tel %}<a class="btn btn-block" href="tel:{{ shop.tel|replace(' ', '') }}">{{ icon('message', 'icon-sm') }} {{ shop.tel }}</a>{% endif %}
+        {% if not shop.email and not shop.tel %}<p class="muted small">Écrivez-nous depuis la conversation d'une demande.</p>{% endif %}
+      </div>
+    </section>
+    <section class="card card-pad">
+      <div class="row-between">
+        <h3>Horaires</h3>
+        <span class="badge {{ 'pret' if service.open else 'refuse' }}">{{ 'Ouvert' if service.open else 'Fermé' }}</span>
+      </div>
+      <div class="hours" style="margin-top: 14px">
+        {% for h in hours %}
+        <span class="{{ 'today' if h.today }}">{{ h.jour }}</span><span class="{{ 'today' if h.today }}">{{ h.plage }}</span>
+        {% endfor %}
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

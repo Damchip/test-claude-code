@@ -23,6 +23,7 @@
       <button class="tab" data-view="dash">Tableau de bord</button>
       <button class="tab" data-view="jobs">Dossiers <span id="dosCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="inbox">Demandes <span id="inboxCount" class="tab-count hidden"></span></button>
+      <button class="tab" data-view="fs">Fileservice <span id="fsCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="clients">Clients <span id="clientsCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="inspect">Inspecteur</button>
     </nav>
@@ -253,6 +254,49 @@
           <b>Packer</b> enchaîne combo + ZIP + traité.</span>
       </div>
       <div id="inboxList" class="jobs-list"></div>
+    </div>
+  </main>
+
+  <!-- ===== Vue Fileservice : demandes des clients ===== -->
+  <main id="view-fs" class="hidden">
+    <div class="fs-wrap">
+      <div class="dash-head">
+        <h2>Fileservice</h2>
+        <span class="muted small" id="fsStats"></span>
+        <label class="muted small fs-sign">Signature <input type="text" id="fsAuteur" placeholder="ton prénom" maxlength="40"></label>
+      </div>
+      <div class="fs-filters" id="fsFilters">
+        <button class="ghost sm active" data-fsf="ouverts">À traiter</button>
+        <button class="ghost sm" data-fsf="attente">Info requise</button>
+        <button class="ghost sm" data-fsf="pret">Prêts</button>
+        <button class="ghost sm" data-fsf="refuse">Refusés</button>
+        <button class="ghost sm" data-fsf="">Tous</button>
+        <input type="search" id="fsSearch" placeholder="n°, client, véhicule, calculateur…">
+      </div>
+      <div class="fs-grid">
+        <div id="fsList" class="jobs-list"></div>
+        <div id="fsDetail" class="dash-card fs-detail"><div class="empty">Choisis une demande dans la liste.</div></div>
+      </div>
+
+      <div class="dash-card" style="margin-top:22px" id="fsReglages">
+        <h3 style="margin-top:0">Réglages du fileservice</h3>
+        <h4>Identité légale (affichée sur les factures et la page Support)</h4>
+        <div class="patch-row fs-form" id="fsSociete"></div>
+        <h4>Horaires d'ouverture <span class="muted small">(laisser vide = fermé)</span></h4>
+        <div class="patch-row fs-form" id="fsHoraires"></div>
+        <h4>Paiement en ligne (Stripe)</h4>
+        <p class="muted small">Tableau de bord Stripe → Développeurs → <b>Clés API</b> : copie la clé secrète.
+          Puis <b>Webhooks</b> → ajouter l'adresse <code id="fsWebhookUrl">…/espace/stripe/webhook</code>,
+          événements <code>checkout.session.completed</code> et <code>checkout.session.async_payment_succeeded</code>,
+          et copie son secret de signature. Commence avec une clé <code>sk_test_</code> pour essayer. Tape « - » pour effacer une clé.</p>
+        <div class="patch-row fs-form">
+          <label>Clé secrète <input type="password" id="fsStripeKey" autocomplete="new-password"></label>
+          <label>Secret du webhook <input type="password" id="fsStripeWh" autocomplete="new-password"></label>
+          <span class="muted small" id="fsStripeEtat"></span>
+        </div>
+        <div class="patch-row" style="margin-top:10px"><button id="fsSaveReglages" class="patchbtn sm">Enregistrer les réglages</button>
+          <span id="fsReglagesOut" class="muted small"></span></div>
+      </div>
     </div>
   </main>
 

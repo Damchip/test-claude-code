@@ -611,3 +611,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .drop-file .grow { display: flex; flex-direction: column; }
 .logout-form { display: flex; align-items: center; gap: 8px; margin: 0; }
 .auth-card .flash { margin-bottom: 18px; }
+.flash.flash-err { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.flash.flash-err .icon { color: var(--danger); }
+.auth-form { align-items: start; }
+.auth-card { margin: auto 0; }

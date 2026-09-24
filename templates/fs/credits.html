@@ -4,13 +4,20 @@
 <div class="page-head">
   <div>
     <h1>Crédits &amp; factures</h1>
-    <p>1 crédit = {{ '%.2f'|format(prix_credit)|replace('.', ',') }} € HT ({{ '%.2f'|format(prix_credit * (1 + tva))|replace('.', ',') }} € TTC). Les crédits n'expirent pas ; les packs les plus gros donnent des crédits offerts.</p>
+    <p>1 crédit = {{ '%.2f'|format(prix_credit)|replace('.', ',') }} € HT{% if not autoliquidation %} ({{ '%.2f'|format(prix_credit * (1 + tva))|replace('.', ',') }} € TTC){% endif %}. Les crédits n'expirent pas ; les packs les plus gros donnent des crédits offerts.</p>
   </div>
   <div class="card kpi hero" style="min-width: 240px">
     <div class="kpi-label">{{ icon('coins', 'icon-sm') }} Solde disponible</div>
     <div class="kpi-value">{{ user.credits }}<small>crédits</small></div>
   </div>
 </div>
+
+{% if autoliquidation %}
+<div class="note" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>Client professionnel UE hors France : facturation <strong>HT, TVA autoliquidée</strong>.</span></div>
+{% endif %}
+{% if not paiement_en_ligne %}
+<div class="note warn" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>Paiement en ligne bientôt disponible. En attendant, commandez votre pack auprès de l'atelier{% if shop.email or shop.tel %} ({{ [shop.email, shop.tel]|select|join(' · ') }}){% endif %} : les crédits et la facture sont ajoutés à réception du virement.</span></div>
+{% endif %}
 
 <h2 style="margin-bottom: 18px">Recharger</h2>
 <div class="packs">
@@ -21,9 +28,16 @@
     <span class="qty">{{ p.credits }} <small>crédits</small></span>
     {% if p.bonus %}<span class="amount-plus small">+ {{ p.bonus }} offerts · {{ ((p.bonus / p.credits) * 100)|round|int }} % de bonus</span>{% else %}<span class="muted small">&nbsp;</span>{% endif %}
     <span class="price">{{ p.prix_eur|euros }} HT</span>
-    <span class="muted small">{{ (p.prix_eur * (1 + tva))|euros }} TTC</span>
+    <span class="muted small">{% if autoliquidation %}TVA autoliquidée{% else %}{{ (p.prix_eur * (1 + tva))|euros }} TTC{% endif %}</span>
     <span class="unit">soit {{ '%.2f'|format(p.prix_eur / (p.credits + p.bonus))|replace('.', ',') }} € HT / crédit reçu</span>
-    <a class="btn {{ 'btn-primary' if p.vedette }} btn-block" href="#">Acheter</a>
+    {% if paiement_en_ligne %}
+    <form method="post" action="{{ url_for('fs.buy', index=loop.index0) }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button class="btn {{ 'btn-primary' if p.vedette }} btn-block" type="submit">Acheter</button>
+    </form>
+    {% else %}
+    <span class="btn btn-block" aria-disabled="true" style="opacity: .55; cursor: default">Par virement</span>
+    {% endif %}
   </div>
   {% endfor %}
 </div>
@@ -37,7 +51,7 @@
         <tbody>
         {% for t in transactions %}
           <tr>
-            <td class="muted num" style="white-space: nowrap">{{ t.date[8:10] }}/{{ t.date[5:7] }}/{{ t.date[:4] }}</td>
+            <td class="muted num" style="white-space: nowrap">{{ t.date|date_fr(false) }}</td>
             <td>{{ t.libelle }}</td>
             <td class="right num {{ 'amount-plus' if t.montant > 0 else 'amount-minus' }}">{{ t.montant|credits }}</td>
           </tr>
@@ -50,13 +64,15 @@
   </section>
 
   <section class="card">
-    <div class="card-head"><div><h2>Factures</h2><p class="sub">PDF, TVA détaillée</p></div></div>
-    {% for inv in [('FA-2026-0412', '23/09/2026', '1 000,00 €'), ('FA-2026-0371', '02/09/2026', '500,00 €'), ('FA-2026-0318', '11/08/2026', '1 000,00 €')] %}
+    <div class="card-head"><div><h2>Factures</h2><p class="sub">Ouvrez-les pour les imprimer ou les enregistrer en PDF</p></div></div>
+    {% for fa in factures %}
     <div class="file-row">
       <span class="file-ic">{{ icon('receipt') }}</span>
-      <div class="grow"><div class="name mono">{{ inv[0] }}</div><div class="muted small">{{ inv[1] }} · {{ inv[2] }} HT</div></div>
-      <a class="icon-btn" href="#" aria-label="Télécharger {{ inv[0] }}">{{ icon('download', 'icon-sm') }}</a>
+      <div class="grow"><div class="name mono">{{ fa.numero }}</div><div class="muted small">{{ fa.date|date_fr(false) }} · {{ fa.ht|euros }} HT · {{ fa.ttc|euros }} TTC</div></div>
+      <a class="icon-btn" href="{{ url_for('fs.invoice', numero=fa.numero) }}" target="_blank" rel="noopener" aria-label="Ouvrir {{ fa.numero }}">{{ icon('download', 'icon-sm') }}</a>
     </div>
+    {% else %}
+    <p class="empty">Aucune facture pour l'instant.</p>
     {% endfor %}
   </section>
 </div>

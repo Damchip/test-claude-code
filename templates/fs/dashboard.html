@@ -1,4 +1,5 @@
 {% extends "fs/base.html" %}
+{% from "fs/_macros.html" import vehicule, calculateur, prestas, badge %}
 {% block title %}Tableau de bord{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -17,45 +18,56 @@
   </div>
   <div class="card kpi">
     <div class="kpi-label">{{ icon('clock', 'icon-sm') }} En cours</div>
-    <div class="kpi-value">{{ counts.recu + counts.en_cours }}</div>
-    <div class="kpi-foot">{{ counts.attente }} en attente de votre réponse</div>
+    <div class="kpi-value">{{ stats.counts.recu + stats.counts.en_cours }}</div>
+    <div class="kpi-foot">{{ stats.counts.attente }} en attente de votre réponse</div>
   </div>
   <div class="card kpi">
     <div class="kpi-label">{{ icon('zap-fast', 'icon-sm') }} Délai moyen</div>
-    <div class="kpi-value">24<small>min</small></div>
-    <div class="kpi-foot"><span class="up">−6 min</span> sur 30 jours</div>
+    {% if stats.delai_moyen is not none %}
+      {% if stats.delai_moyen < 120 %}<div class="kpi-value">{{ stats.delai_moyen }}<small>min</small></div>
+      {% else %}<div class="kpi-value">{{ (stats.delai_moyen / 60)|round(1)|replace('.0', '')|replace('.', ',') }}<small>h</small></div>{% endif %}
+    {% else %}<div class="kpi-value">—</div>{% endif %}
+    <div class="kpi-foot">sur vos fichiers des 30 derniers jours</div>
   </div>
   <div class="card kpi">
     <div class="kpi-label">{{ icon('check', 'icon-sm') }} Livrés ce mois</div>
-    <div class="kpi-value">37</div>
-    <div class="kpi-foot"><span class="up">+12 %</span> vs août</div>
+    <div class="kpi-value">{{ stats.livres_mois }}</div>
+    <div class="kpi-foot">{{ stats.counts.pret }} au total</div>
   </div>
 </div>
 
 <div class="split" style="margin-top: 20px">
   <section class="card">
     <div class="card-head">
-      <div><h2>Fichiers récents</h2><p class="sub">Vos 6 dernières demandes</p></div>
-      <a class="btn btn-sm btn-ghost" href="{{ url_for('fs.files') }}">Tout voir {{ icon('chevron-right', 'icon-sm') }}</a>
+      <div><h2>Fichiers récents</h2><p class="sub">Vos dernières demandes</p></div>
+      {% if files %}<a class="btn btn-sm btn-ghost" href="{{ url_for('fs.files') }}">Tout voir {{ icon('chevron-right', 'icon-sm') }}</a>{% endif %}
     </div>
+    {% if files %}
     <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Véhicule</th><th class="hide-sm">Prestations</th><th>Statut</th><th class="right hide-sm">Date</th></tr></thead>
         <tbody>
         {% for f in files %}
-          <tr class="row-link" data-href="{{ url_for('fs.file_detail', file_id=f.id) }}">
+          <tr class="row-link" data-href="{{ url_for('fs.file_detail', numero=f.numero) }}">
             <td>
-              <a class="strong" href="{{ url_for('fs.file_detail', file_id=f.id) }}">{{ f.vehicule }}</a>
-              <div class="sub"><span class="mono">{{ f.id }}</span> · {{ f.ecu }}</div>
+              <a class="strong" href="{{ url_for('fs.file_detail', numero=f.numero) }}">{{ vehicule(f) }}</a>
+              <div class="sub"><span class="mono">{{ f.numero }}</span> · {{ calculateur(f) }}</div>
             </td>
-            <td class="hide-sm">{% for p in f.prestas %}<span class="tag">{{ p }}</span>{% endfor %}</td>
-            <td><span class="badge {{ f.status }}">{{ statuses[f.status] }}</span></td>
-            <td class="right muted num hide-sm">{{ f.date }}</td>
+            <td class="hide-sm">{{ prestas(f) }}</td>
+            <td>{{ badge(f) }}{% if f.non_lus %} <span class="badge attente">{{ f.non_lus }} message{{ 's' if f.non_lus > 1 }}</span>{% endif %}</td>
+            <td class="right muted num hide-sm">{{ f.cree_le|date_fr }}</td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
+    {% else %}
+    <div class="empty">
+      <p><strong>Aucun fichier pour l'instant.</strong></p>
+      <p style="margin: 6px 0 16px">Envoyez votre première lecture : l'atelier vous prévient par e-mail dès que le fichier est prêt.</p>
+      <a class="btn btn-primary" href="{{ url_for('fs.new_file') }}">{{ icon('upload') }} Envoyer un fichier</a>
+    </div>
+    {% endif %}
   </section>
 
   <aside class="stack">
@@ -71,10 +83,10 @@
       </div>
     </section>
 
-    {% if counts.attente %}
+    {% if attente %}
     <section class="card card-pad">
-      <div class="note warn">{{ icon('info') }}<div><strong>{{ counts.attente }} demande attend votre réponse.</strong><br>L'atelier a besoin d'une précision pour terminer.</div></div>
-      <a class="btn btn-block" style="margin-top: 14px" href="{{ url_for('fs.file_detail', file_id='F-24806') }}">Répondre</a>
+      <div class="note warn">{{ icon('info') }}<div><strong>{{ stats.counts.attente }} demande{{ 's' if stats.counts.attente > 1 }} attend{{ 'ent' if stats.counts.attente > 1 }} votre réponse.</strong><br>L'atelier a besoin d'une précision pour terminer.</div></div>
+      <a class="btn btn-block" style="margin-top: 14px" href="{{ url_for('fs.file_detail', numero=attente.numero) }}#conversation">Répondre</a>
     </section>
     {% endif %}
   </aside>

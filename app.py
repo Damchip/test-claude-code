@@ -22,11 +22,18 @@ from flask import Flask, Response, jsonify, redirect, render_template, request, 
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from matcher import ai, atelier, batch, db, dossiers as dos, engine, extract, importer, maps as mapsmod, pack as packmod, patch as pmod
+import catalogue
 import comptes
+import demandes
+import factures
 import mailer
+import stripe_api
 
 app = Flask(__name__)
-APP_VERSION = "1.52.0"
+# Filtres d'affichage partagés avec l'espace client (facture vue par l'atelier)
+import fileservice as _fs_vues  # noqa: E402
+app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits)
+APP_VERSION = "1.53.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -487,7 +494,8 @@ def portal_config_get():
     cfg["delays_text"] = "\n".join(dlines)
     cfg["has_password"] = bool(cfg.get("access_password_hash"))
     cfg.pop("access_password_hash", None)
-    cfg.pop("smtp", None)   # géré par /clients/smtp, jamais renvoyé avec son mot de passe
+    cfg.pop("smtp", None)     # géré par /clients/smtp, jamais renvoyé avec son mot de passe
+    cfg.pop("stripe", None)   # géré par /fs/reglages, clés jamais renvoyées
     return jsonify(cfg)
 
 
@@ -554,8 +562,11 @@ def _mail_client(to, sujet, texte):
 
 @app.route("/clients")
 def clients_list():
-    comptes.init_db(FS_DB)
-    return jsonify({"clients": comptes.lister_clients(FS_DB)})
+    _fs_init()
+    packs = [{"credits": p["credits"] + p["bonus"], "ht": p["prix_eur"],
+              "label": f"Pack {p['credits']}" + (f" + {p['bonus']} offerts" if p["bonus"] else "") + f" · {p['prix_eur']} € HT",
+              "designation": factures.designation_pack(p)} for p in catalogue.PACKS_CREDITS]
+    return jsonify({"clients": comptes.lister_clients(FS_DB), "packs": packs})
 
 
 @app.route("/clients/statut", methods=["POST"])
@@ -610,6 +621,98 @@ def clients_credits():
     return jsonify({"ok": True, "credits": solde})
 
 
+@app.route("/clients/facture", methods=["POST"])
+def clients_facture():
+    """Paiement reçu hors ligne : crédite le compte ET émet la facture correspondante."""
+    b = request.json or {}
+    _fs_init()
+    c = comptes.get_client(FS_DB, int(b.get("id") or 0))
+    if not c:
+        return jsonify({"error": "Client introuvable."}), 404
+    try:
+        credits = int(str(b.get("credits") or "0").replace(" ", ""))
+        ht = float(str(b.get("ht") or "0").replace(",", ".").replace(" ", ""))
+        fac = factures.enregistrer_manuel(FS_DB, c, credits=credits, ht=ht, designation=b.get("designation"),
+                                          paiement=b.get("paiement"), reference=b.get("reference"),
+                                          vendeur=load_portal_config().get("societe") or {})
+    except ValueError:
+        return jsonify({"error": "Crédits (entier) et montant HT (nombre) attendus."}), 400
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "numero": fac["numero"], "nouvelle": fac["nouvelle"]})
+
+
+@app.route("/clients/<int:cid>/factures")
+def clients_factures(cid):
+    _fs_init()
+    return jsonify({"factures": factures.lister(FS_DB, cid)})
+
+
+@app.route("/fs/factures/<numero>")
+def fs_facture(numero):
+    """Facture vue par l'atelier (même gabarit que le client)."""
+    _fs_init()
+    fac = factures.get(FS_DB, numero)
+    if not fac:
+        return "Facture introuvable", 404
+    return render_template("fs/facture.html", fac=fac, shop={"name": load_portal_config().get("shop_name") or "E85-FRANCE"})
+
+
+CHAMPS_SOCIETE = ("raison_sociale", "forme", "capital", "adresse", "code_postal", "ville", "siret", "rcs",
+                  "tva", "email", "tel")
+
+
+@app.route("/fs/reglages", methods=["GET"])
+def fs_reglages_get():
+    cfg = load_portal_config()
+    stripe = cfg.get("stripe") or {}
+    horaires = cfg.get("horaires") or {str(d): v for d, v in
+                                       {0: [8, 19], 1: [8, 19], 2: [8, 19], 3: [8, 19], 4: [8, 19], 5: [9, 13], 6: None}.items()}
+    return jsonify({"societe": {k: (cfg.get("societe") or {}).get(k, "") for k in CHAMPS_SOCIETE},
+                    "horaires": horaires,
+                    "stripe": {"secret_key_set": bool(stripe.get("secret_key")),
+                               "mode": "test" if str(stripe.get("secret_key", "")).startswith(("sk_test", "rk_test")) else
+                                       ("live" if stripe.get("secret_key") else ""),
+                               "webhook_secret_set": bool(stripe.get("webhook_secret"))},
+                    "public_url": cfg.get("public_url", "")})
+
+
+@app.route("/fs/reglages", methods=["POST"])
+def fs_reglages_set():
+    b = request.json or {}
+    cfg = load_portal_config()
+    if isinstance(b.get("societe"), dict):
+        cfg["societe"] = {k: str(b["societe"].get(k, "")).strip()[:160] for k in CHAMPS_SOCIETE}
+    if isinstance(b.get("horaires"), dict):
+        h = {}
+        for d in range(7):
+            v = b["horaires"].get(str(d))
+            if v in (None, "", [], False):
+                h[str(d)] = None
+                continue
+            try:
+                o, f = int(v[0]), int(v[1])
+            except (TypeError, ValueError, IndexError):
+                return jsonify({"error": "Horaires invalides."}), 400
+            if not (0 <= o < f <= 24):
+                return jsonify({"error": "Horaires invalides : ouverture avant fermeture, entre 0 et 24 h."}), 400
+            h[str(d)] = [o, f]
+        cfg["horaires"] = h
+    if isinstance(b.get("stripe"), dict):
+        stripe = dict(cfg.get("stripe") or {})
+        for key in ("secret_key", "webhook_secret"):
+            val = str(b["stripe"].get(key) or "").strip()
+            if val == "-":
+                stripe.pop(key, None)          # « - » efface la valeur enregistrée
+            elif val:
+                stripe[key] = val              # vide = on garde l'actuelle
+        if stripe.get("secret_key") and not stripe_api.configure(stripe):
+            return jsonify({"error": "Clé secrète Stripe invalide (elle commence par sk_live_ ou sk_test_)."}), 400
+        cfg["stripe"] = stripe
+    _save_portal_config(cfg)
+    return jsonify({"ok": True})
+
+
 @app.route("/clients/smtp", methods=["GET"])
 def clients_smtp_get():
     cfg = load_portal_config()
@@ -648,6 +751,158 @@ def clients_smtp_test():
         return jsonify({"error": "Indique une adresse de test."}), 400
     ok, err = _mail_client(to, "Test d'envoi — fileservice", "Si vous lisez ce message, l'envoi d'e-mails fonctionne.")
     return jsonify({"ok": ok, "error": err})
+
+
+# ---------------------------------------------------------------------------
+# Demandes du fileservice (fichiers envoyés depuis l'espace client)
+# ---------------------------------------------------------------------------
+FS_FILES = os.environ.get("CARTO_FS_FILES") or os.path.join(DATA_DIR, "fileservice_fichiers")
+
+
+def _fs_init():
+    demandes.init_db(FS_DB)
+    factures.init_db(FS_DB)
+
+
+def _fs_demande(did):
+    d = demandes.get(FS_DB, did)
+    if not d:
+        return None, (jsonify({"error": "Demande introuvable."}), 404)
+    return d, None
+
+
+def _fs_lien(numero):
+    base = (load_portal_config().get("public_url") or "").rstrip("/")
+    return f"\n{base}/espace/fichiers/{numero}" if base else ""
+
+
+def _fs_prevenir(d, sujet, texte):
+    """E-mail au client ; renvoie un message à afficher à l'atelier."""
+    nom = load_portal_config().get("shop_name") or "E85-FRANCE"
+    ok, err = _mail_client(d["email"], f"{nom} — {d['numero']} : {sujet}",
+                           f"Bonjour,\n\n{texte}{_fs_lien(d['numero'])}\n\n{nom}")
+    return "Client prévenu par e-mail." if ok else err
+
+
+@app.route("/fs/demandes")
+def fs_demandes():
+    _fs_init()
+    statut = request.args.get("statut") or None
+    rows = demandes.lister(FS_DB, statut=statut if statut in demandes.STATUTS else None)
+    return jsonify({"demandes": rows, "stats": demandes.stats(FS_DB)})
+
+
+@app.route("/fs/demandes/<int:did>")
+def fs_demande(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    return jsonify({"demande": d, "livrables": demandes.livrables(FS_DB, did),
+                    "messages": demandes.messages(FS_DB, did, marquer_lus_pour="atelier")})
+
+
+def _fs_send(did, fichier, nom):
+    p = demandes.chemin(FS_FILES, did, fichier)
+    if not p:
+        return jsonify({"error": "Fichier introuvable."}), 404
+    return send_file(p, as_attachment=True, download_name=nom, mimetype="application/octet-stream")
+
+
+@app.route("/fs/demandes/<int:did>/original")
+def fs_original(did):
+    d, err = _fs_demande(did)
+    return err or _fs_send(did, "original_" + d["fichier_nom"], f"{d['numero']}_{d['fichier_nom']}")
+
+
+@app.route("/fs/demandes/<int:did>/livre/<int:version>")
+def fs_livre(did, version):
+    liv = next((l for l in demandes.livrables(FS_DB, did) if l["version"] == version), None)
+    return _fs_send(did, liv["fichier"], liv["nom"]) if liv else (jsonify({"error": "Version introuvable."}), 404)
+
+
+@app.route("/fs/demandes/<int:did>/pj/<int:mid>")
+def fs_pj(did, mid):
+    m = next((m for m in demandes.messages(FS_DB, did) if m["id"] == mid and m["pj_fichier"]), None)
+    return _fs_send(did, m["pj_fichier"], m["pj_nom"]) if m else (jsonify({"error": "Pièce jointe introuvable."}), 404)
+
+
+@app.route("/fs/demandes/<int:did>/analyser", methods=["POST"])
+def fs_analyser(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    p = demandes.chemin(FS_FILES, did, "original_" + d["fichier_nom"])
+    if not p:
+        return jsonify({"error": "Fichier d'origine introuvable."}), 404
+    with open(p, "rb") as f:
+        data = f.read()
+    result = engine.match(data, DB_PATH, path=d["fichier_nom"])
+    return jsonify({k: v for k, v in result.items() if k != "minhash"})
+
+
+@app.route("/fs/demandes/<int:did>/statut", methods=["POST"])
+def fs_statut(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    try:
+        demandes.changer_statut(FS_DB, did, (request.json or {}).get("statut"))
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/fs/demandes/<int:did>/message", methods=["POST"])
+def fs_message(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    pj = request.files.get("pj")
+    texte = request.form.get("texte", "")
+    try:
+        demandes.ajouter_message(FS_DB, FS_FILES, did, "atelier", (request.form.get("auteur") or "").strip()[:40],
+                                 texte, pj_nom=pj.filename if pj else "", pj_contenu=(pj.read() or None) if pj else None)
+        if request.form.get("attente"):
+            demandes.changer_statut(FS_DB, did, "attente")
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    info = _fs_prevenir(d, "message de l'atelier" if not request.form.get("attente") else "information requise",
+                        f"L'atelier vous a écrit au sujet de votre fichier {d['numero']} :\n\n{texte}\n\n"
+                        "Répondez depuis votre espace client :")
+    return jsonify({"ok": True, "mail": info})
+
+
+@app.route("/fs/demandes/<int:did>/livrer", methods=["POST"])
+def fs_livrer(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "Choisis le fichier modifié à livrer."}), 400
+    try:
+        version = demandes.livrer(FS_DB, FS_FILES, did, f.filename, f.read(), request.form.get("note", ""))
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    txt = (f"Votre fichier {d['numero']} est prêt" + (f" (version {version})" if version > 1 else "") +
+           ". Téléchargez-le depuis votre espace client :")
+    return jsonify({"ok": True, "version": version, "mail": _fs_prevenir(d, "fichier prêt", txt)})
+
+
+@app.route("/fs/demandes/<int:did>/refuser", methods=["POST"])
+def fs_refuser(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    motif = (request.json or {}).get("motif", "")
+    try:
+        montant = demandes.refuser(FS_DB, did, motif)
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    info = _fs_prevenir(d, "fichier refusé",
+                        f"Nous ne pouvons pas traiter votre fichier {d['numero']} : {motif.strip()}\n"
+                        f"Vos {montant} crédits ont été remboursés sur votre compte. Détails :")
+    return jsonify({"ok": True, "mail": info})
 
 
 def _num(s):

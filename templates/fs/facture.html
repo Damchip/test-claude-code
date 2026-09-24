@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Facture {{ fac.numero }}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon.png') }}">
+  <style>
+    @font-face { font-family: "Inter"; font-weight: 400; src: url("{{ url_for('static', filename='fonts/inter-400.woff2') }}") format("woff2"); }
+    @font-face { font-family: "Inter"; font-weight: 600; src: url("{{ url_for('static', filename='fonts/inter-600.woff2') }}") format("woff2"); }
+    :root { --ink: #111418; --muted: #5d6673; --line: #dfe3e8; --accent: #3a7810; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eef0f3; color: var(--ink); font: 13px/1.5 "Inter", system-ui, sans-serif; }
+    .page { max-width: 820px; margin: 28px auto; background: #fff; padding: 48px 52px; box-shadow: 0 6px 28px rgba(0,0,0,.08); }
+    .bar { max-width: 820px; margin: 20px auto 0; display: flex; justify-content: flex-end; gap: 10px; padding: 0 16px; }
+    .bar button { font: 600 13px "Inter", sans-serif; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+    .bar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+    header img { height: 64px; }
+    h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+    .muted { color: var(--muted); }
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin: 34px 0 28px; }
+    .parties h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 2px solid var(--ink); padding: 8px 6px; }
+    td { padding: 12px 6px; border-bottom: 1px solid var(--line); }
+    .r { text-align: right; font-variant-numeric: tabular-nums; }
+    .totaux { margin: 18px 0 0 auto; width: 300px; }
+    .totaux td { border: none; padding: 5px 6px; }
+    .totaux tr.ttc td { border-top: 2px solid var(--ink); font-weight: 600; font-size: 15px; padding-top: 10px; }
+    .mentions { margin-top: 36px; font-size: 11px; color: var(--muted); }
+    .mentions p { margin: 0 0 6px; }
+    .alerte { background: #fff5e0; border: 1px solid #f1d38a; padding: 10px 14px; border-radius: 8px; margin-bottom: 20px; }
+    @media (max-width: 640px) { .page { padding: 24px 18px; margin: 12px; } .parties { grid-template-columns: 1fr; } .totaux { width: 100%; } }
+    @media print { body { background: #fff; } .bar, .alerte { display: none; } .page { box-shadow: none; margin: 0; max-width: none; padding: 0; } }
+  </style>
+</head>
+<body>
+  {% set v = fac.vendeur %}{% set c = fac.client %}
+  <div class="bar">
+    <button type="button" onclick="history.length > 1 ? history.back() : window.close()">Retour</button>
+    <button type="button" class="primary" onclick="window.print()">Imprimer / enregistrer en PDF</button>
+  </div>
+  <div class="page">
+    {% if not v.raison_sociale or not v.siret %}
+    <p class="alerte">Identité légale du vendeur incomplète : à renseigner dans l'outil interne (Fileservice → Réglages).</p>
+    {% endif %}
+    <header>
+      <div>
+        <img src="{{ url_for('static', filename='brand/badge.png') }}" alt="">
+      </div>
+      <div style="text-align: right">
+        <h1>Facture {{ fac.numero }}</h1>
+        <div class="muted">Date : {{ fac.date|date_fr(false) }}</div>
+        <div class="muted">Payée le {{ fac.date|date_fr(false) }} · {{ fac.paiement }}</div>
+      </div>
+    </header>
+
+    <div class="parties">
+      <div>
+        <h3>Vendeur</h3>
+        <strong>{{ v.raison_sociale or shop.name }}</strong>{% if v.forme %} · {{ v.forme }}{% endif %}{% if v.capital %} au capital de {{ v.capital }}{% endif %}<br>
+        {% if v.adresse %}{{ v.adresse }}<br>{% endif %}
+        {% if v.code_postal or v.ville %}{{ v.code_postal }} {{ v.ville }}<br>{% endif %}
+        {% if v.siret %}SIRET {{ v.siret }}<br>{% endif %}
+        {% if v.rcs %}{{ v.rcs }}<br>{% endif %}
+        {% if v.tva %}TVA intracommunautaire {{ v.tva }}<br>{% endif %}
+        {% if v.email or v.tel %}{{ [v.email, v.tel]|select|join(' · ') }}{% endif %}
+      </div>
+      <div>
+        <h3>Client</h3>
+        <strong>{{ c.societe }}</strong><br>
+        {% if c.contact %}{{ c.contact }}<br>{% endif %}
+        {% if c.adresse %}{{ c.adresse }}<br>{% endif %}
+        {% if c.code_postal or c.ville %}{{ c.code_postal }} {{ c.ville }}<br>{% endif %}
+        {% if c.pays and c.pays != 'France' %}{{ c.pays }}<br>{% endif %}
+        SIRET {{ c.siret }}<br>
+        {% if c.tva %}TVA intracommunautaire {{ c.tva }}{% endif %}
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Désignation</th><th class="r">Qté</th><th class="r">Prix unitaire HT</th><th class="r">Total HT</th></tr></thead>
+      <tbody>
+        <tr><td>{{ fac.designation }}<div class="muted">{{ fac.credits }} crédits ajoutés au compte</div></td><td class="r">1</td><td class="r">{{ fac.ht|euros }}</td><td class="r">{{ fac.ht|euros }}</td></tr>
+      </tbody>
+    </table>
+    <table class="totaux">
+      <tr><td>Total HT</td><td class="r">{{ fac.ht|euros }}</td></tr>
+      <tr><td>TVA {{ (fac.taux_tva * 100)|round|int }} %</td><td class="r">{{ fac.tva|euros }}</td></tr>
+      <tr class="ttc"><td>Total TTC</td><td class="r">{{ fac.ttc|euros }}</td></tr>
+    </table>
+
+    <div class="mentions">
+      {% if fac.mention %}<p><strong>{{ fac.mention }}</strong></p>{% endif %}
+      <p>Facture acquittée le {{ fac.date|date_fr(false) }} ({{ fac.paiement }}). En cas de retard de paiement : pénalités au taux de trois fois le taux d'intérêt légal et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -27,9 +27,11 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from matcher import db, engine
 import comptes
+import demandes
+import factures
 import fileservice
 
-APP_VERSION = "1.51.0"
+APP_VERSION = "1.53.0"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt
@@ -137,7 +139,21 @@ app.config["FS_CLIENT_IP"] = lambda: _client_ip()
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600   # « rester connecté » : 30 jours
 if os.environ.get("CARTO_PROD") == "1":
     app.config["SESSION_COOKIE_SECURE"] = True   # derrière HTTPS uniquement
-comptes.init_db(app.config["FS_DB"])
+app.config["FS_FILES"] = os.environ.get("CARTO_FS_FILES") or os.path.join(DATA_DIR, "fileservice_fichiers")
+
+
+def _detecter(data, filename):
+    """Calculateur détecté + verdict bibliothèque, pour l'atelier (jamais montré au client)."""
+    result = engine.match(data, DB_PATH, path=filename)
+    incoming = result.get("incoming", {})
+    verdict, _ = engine.portal_verdict(result)
+    return {"plateforme": incoming.get("platform"), "fabricant": incoming.get("manufacturer"),
+            "verdict": verdict}
+
+
+app.config["FS_DETECT"] = _detecter
+demandes.init_db(app.config["FS_DB"])
+factures.init_db(app.config["FS_DB"])
 app.register_blueprint(fileservice.bp)
 
 
@@ -157,7 +173,7 @@ def _maybe_require_login():
     cfg = load_config()
     if not cfg.get("access_password_hash"):
         return None
-    if request.endpoint in ("portal_login", "static"):
+    if request.endpoint in ("portal_login", "static", "fs.stripe_webhook"):
         return None
     if session.get("authed"):
         return None

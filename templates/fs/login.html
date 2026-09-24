@@ -29,7 +29,7 @@
 
   <section class="auth-form">
     <div class="auth-card">
-      {% for msg in get_flashed_messages() %}<div class="flash">{{ icon('check') }} {{ msg }}</div>{% endfor %}
+      {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="flash {{ 'flash-err' if cat == 'erreur' }}">{{ icon('info' if cat == 'erreur' else 'check') }} {{ msg }}</div>{% endfor %}
       {% if erreur %}<div class="note warn" style="margin-bottom: 18px">{{ icon('info') }}<span>{{ erreur }}</span></div>{% endif %}
 
       {% if mode == 'register' %}
@@ -43,6 +43,10 @@
           <div class="field"><label for="tva">N° TVA</label><input class="input" id="tva" name="tva" value="{{ form.tva }}" placeholder="FR…"></div>
           <div class="field"><label for="contact">Nom et prénom</label><input class="input" id="contact" name="contact" value="{{ form.contact }}" autocomplete="name"></div>
           <div class="field"><label for="tel">Téléphone</label><input class="input" type="tel" id="tel" name="tel" value="{{ form.tel }}" autocomplete="tel"></div>
+          <div class="field full"><label for="adresse">Adresse</label><input class="input" id="adresse" name="adresse" value="{{ form.adresse }}" autocomplete="street-address" required></div>
+          <div class="field"><label for="code_postal">Code postal</label><input class="input" id="code_postal" name="code_postal" value="{{ form.code_postal }}" autocomplete="postal-code" required></div>
+          <div class="field"><label for="ville">Ville</label><input class="input" id="ville" name="ville" value="{{ form.ville }}" autocomplete="address-level2" required></div>
+          <div class="field full"><label for="pays">Pays</label><input class="input" id="pays" name="pays" value="{{ form.pays or 'France' }}" autocomplete="country-name"></div>
           <div class="field full"><label for="email">E-mail professionnel</label><input class="input" type="email" id="email" name="email" value="{{ form.email }}" autocomplete="email" required></div>
           <div class="field full"><label for="pw">Mot de passe</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required><span class="hint">10 caractères minimum.</span></div>
         </div>

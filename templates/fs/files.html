@@ -1,4 +1,5 @@
 {% extends "fs/base.html" %}
+{% from "fs/_macros.html" import vehicule, sous_titre, calculateur, prestas, badge %}
 {% block title %}Mes fichiers{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -29,20 +30,20 @@
       </thead>
       <tbody>
       {% for f in files %}
-        <tr class="row-link" data-status="{{ f.status }}" data-href="{{ url_for('fs.file_detail', file_id=f.id) }}"
-            data-text="{{ (f.id ~ ' ' ~ f.vehicule ~ ' ' ~ f.moteur ~ ' ' ~ f.ecu ~ ' ' ~ f.prestas|join(' '))|lower }}">
-          <td class="mono muted">{{ f.id }}</td>
-          <td><a class="strong" href="{{ url_for('fs.file_detail', file_id=f.id) }}">{{ f.vehicule }}</a><div class="sub">{{ f.moteur }} · {{ f.annee }}</div></td>
-          <td class="hide-sm">{{ f.ecu }}<div class="sub">{{ f.outil }} · {{ f.methode }}</div></td>
-          <td class="hide-sm">{% for p in f.prestas %}<span class="tag">{{ p }}</span>{% endfor %}</td>
-          <td class="right num hide-sm">{{ f.credits }}</td>
-          <td><span class="badge {{ f.status }}">{{ statuses[f.status] }}</span></td>
-          <td class="right muted num hide-sm">{{ f.date }}</td>
+        <tr class="row-link" data-status="{{ f.statut }}" data-href="{{ url_for('fs.file_detail', numero=f.numero) }}"
+            data-text="{{ (f.numero ~ ' ' ~ vehicule(f) ~ ' ' ~ sous_titre(f) ~ ' ' ~ calculateur(f) ~ ' ' ~ f.lignes|map(attribute='nom')|join(' ') ~ ' ' ~ (f.vehicule.immat or '') ~ ' ' ~ (f.vehicule.vin or ''))|lower }}">
+          <td class="mono muted">{{ f.numero }}</td>
+          <td><a class="strong" href="{{ url_for('fs.file_detail', numero=f.numero) }}">{{ vehicule(f) }}</a><div class="sub">{{ sous_titre(f) }}</div></td>
+          <td class="hide-sm">{{ calculateur(f) }}<div class="sub">{{ [f.lecture.outil, f.lecture.methode]|select|join(' · ') }}</div></td>
+          <td class="hide-sm">{{ prestas(f) }}</td>
+          <td class="right num hide-sm">{{ f.total }}</td>
+          <td>{{ badge(f) }}{% if f.non_lus %} <span class="badge attente">{{ f.non_lus }} msg</span>{% endif %}</td>
+          <td class="right muted num hide-sm">{{ f.cree_le|date_fr }}</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
-    <p class="empty" data-empty hidden>Aucun fichier ne correspond.</p>
+    <p class="empty" data-empty {{ 'hidden' if files }}>{{ 'Aucun fichier ne correspond.' if files else "Vous n'avez encore envoyé aucun fichier." }}</p>
   </div>
 </section>
 {% endblock %}

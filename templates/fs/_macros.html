@@ -1,0 +1,16 @@
+{#- Petits morceaux d'affichage partagés par les pages de l'espace client -#}
+{%- macro vehicule(f) -%}
+{{ ([f.vehicule.marque, f.vehicule.modele]|select|join(' ')) or 'Véhicule non précisé' }}
+{%- endmacro -%}
+{%- macro sous_titre(f) -%}
+{{ [f.vehicule.moteur, f.vehicule.annee]|select|join(' · ') }}
+{%- endmacro -%}
+{%- macro calculateur(f) -%}
+{{ f.lecture.ecu or f.detection.plateforme or 'Calculateur à identifier' }}
+{%- endmacro -%}
+{%- macro prestas(f) -%}
+{% for l in f.lignes %}<span class="tag">{{ l.nom }}</span>{% endfor %}
+{%- endmacro -%}
+{%- macro badge(f) -%}
+<span class="badge {{ f.statut }}">{{ f.statut_label }}</span>
+{%- endmacro -%}

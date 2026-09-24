@@ -379,3 +379,39 @@ hr.sep { border: none; border-top: 1px solid var(--line, #2a333d); margin: 20px 
 #view-clients input:focus,#view-clients select:focus{outline:none;border-color:var(--accent)}
 #view-clients .patch-row label{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
 #view-clients .job-sub.patch-row{align-items:flex-end;gap:8px;flex-wrap:wrap}
+/* Onglet Fileservice */
+.fs-wrap{max-width:1400px;margin:22px auto;padding:0 22px}
+.fs-sign{margin-left:auto;display:flex;align-items:center;gap:6px}
+.fs-filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.fs-filters .active{border-color:var(--accent);color:var(--accent)}
+.fs-filters input{margin-left:auto;min-width:260px}
+.fs-grid{display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:16px;align-items:start}
+@media(max-width:1000px){.fs-grid{grid-template-columns:1fr}}
+.fs-grid .jobs-list{margin-top:0;max-height:75vh;overflow:auto}
+.fs-row{cursor:pointer}
+.fs-row.sel{border-color:var(--accent)}
+.fs-detail{position:sticky;top:12px}
+.fs-detail h3{margin:0 0 4px}
+.fs-sec{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+.fs-kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:13px}
+.fs-kv dt{color:var(--muted)}
+.fs-kv dd{margin:0}
+.fs-thread{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto;margin:8px 0}
+.fs-msg{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;max-width:88%;align-self:flex-start}
+.fs-msg.atelier{align-self:flex-end;border-color:var(--accent)}
+.fs-msg .fs-meta{font-size:11px;color:var(--muted);margin-bottom:3px}
+.fs-msg .fs-txt{white-space:pre-wrap}
+#view-fs a.fs-link,#view-fs a.btn-link,#view-clients a.btn-link{color:var(--accent);text-decoration:none}
+#view-fs a.fs-link:hover{text-decoration:underline}
+.fs-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#view-fs input[type=text],#view-fs input[type=password],#view-fs input[type=search],#view-fs input[type=number],#view-fs textarea,#view-fs select{
+  background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:6px 9px;font:inherit;font-size:13px}
+#view-fs textarea{width:100%;min-height:60px;resize:vertical}
+#view-fs input:focus,#view-fs textarea:focus{outline:none;border-color:var(--accent)}
+#view-fs .fs-form{flex-wrap:wrap;gap:8px}
+#view-fs .fs-form label{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
+#view-fs h4{margin:16px 0 6px;font-size:13px}
+/* Barre d'onglets : passe à la ligne au lieu de déborder quand les onglets sont nombreux */
+header{flex-wrap:wrap;gap:10px}
+.tabs{flex-wrap:wrap;justify-content:flex-end;flex:1 1 600px}
+.tabs .tab{white-space:nowrap}

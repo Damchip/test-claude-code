@@ -26,15 +26,15 @@
       <a href="{{ url_for('fs.files') }}" class="{{ 'active' if nav == 'files' }}">{{ icon('files') }} Mes fichiers <span class="count">{{ user.open_count }}</span></a>
       <div class="nav-label">Compte</div>
       <a href="{{ url_for('fs.credits') }}" class="{{ 'active' if nav == 'credits' }}">{{ icon('coins') }} Crédits &amp; factures</a>
-      <a href="#" aria-disabled="true">{{ icon('help') }} Support</a>
-      <a href="#" aria-disabled="true">{{ icon('settings') }} Paramètres</a>
+      <a href="{{ url_for('fs.support') }}" class="{{ 'active' if nav == 'support' }}">{{ icon('help') }} Support</a>
+      <a href="{{ url_for('fs.settings') }}" class="{{ 'active' if nav == 'settings' }}">{{ icon('settings') }} Paramètres</a>
     </nav>
 
     <div class="side-foot">
       <div class="side-cta">
         <strong>Besoin d'aide ?</strong>
-        <p>Un technicien répond sous 15 min pendant les heures d'ouverture.</p>
-        <a class="btn btn-sm btn-block" href="#">{{ icon('message', 'icon-sm') }} Contacter l'atelier</a>
+        <p>Posez votre question directement dans la demande concernée, ou contactez l'atelier.</p>
+        <a class="btn btn-sm btn-block" href="{{ url_for('fs.support') }}">{{ icon('message', 'icon-sm') }} Contacter l'atelier</a>
       </div>
     </div>
   </aside>
@@ -45,10 +45,9 @@
       <button class="icon-btn menu-btn" type="button" data-open-nav aria-label="Ouvrir le menu">{{ icon('menu') }}</button>
       <span class="status-pill">
         <span class="dot {{ 'on' if service.open else 'off' }}"></span>
-        {% if service.open %}Service ouvert<span class="hide-sm"> · délai moyen {{ service.avg_delay }}</span>
+        {% if service.open %}Service ouvert
         {% else %}Service fermé<span class="hide-sm"> · {{ service.next_open }}</span>{% endif %}
       </span>
-      {% if demo %}<span class="demo-tag hide-sm" title="Données de démonstration">Maquette</span>{% endif %}
       <span class="top-spacer"></span>
       <a class="credit-chip" href="{{ url_for('fs.credits') }}" title="Recharger">
         <span class="num">{{ user.credits }}</span><span class="muted small hide-sm">crédits</span>
@@ -65,8 +64,8 @@
     </header>
 
     <main class="content">
-      {% for msg in get_flashed_messages() %}
-      <div class="flash">{{ icon('check') }} {{ msg }}</div>
+      {% for cat, msg in get_flashed_messages(with_categories=true) %}
+      <div class="flash {{ 'flash-err' if cat == 'erreur' }}">{{ icon('info' if cat == 'erreur' else 'check') }} {{ msg }}</div>
       {% endfor %}
       {% block content %}{% endblock %}
     </main>

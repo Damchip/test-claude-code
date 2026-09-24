@@ -600,25 +600,56 @@ Plus de contrôle, mais plus de maintenance et ta box est exposée.
 - Intégration à ton site WordPress : le plus simple est un lien/bouton vers
   `https://portail.tondomaine.fr` (ou une iframe si tu veux l'intégrer visuellement).
 
-## Espace client du fileservice (/espace)
+## Fileservice (espace client /espace)
 
-Servi par le portail (port 5001) : `http://127.0.0.1:5001/espace/`.
+Le portail (port 5001) sert l'espace client : `http://127.0.0.1:5001/espace/`.
+Tout se gère ensuite dans l'outil interne (port 5000), onglets **Fileservice** et **Clients**.
+Les données sont dans `data/fileservice.db` (comptes, demandes, factures) et
+`data/fileservice_fichiers/` (fichiers déposés et livrés), séparées de la bibliothèque de solutions.
 
-1. **Le client s'inscrit** sur `/espace/inscription` (société, SIRET, TVA, e-mail, mot de passe).
-   Le compte est créé **en attente**.
-2. **L'atelier valide** dans l'outil interne, onglet **Clients** → *Valider*. Le client reçoit
-   l'e-mail d'activation et peut se connecter.
-3. **Crédits** : tant que le paiement en ligne n'est pas branché, l'atelier crédite le compte à la
-   main dans l'onglet Clients (ex. `+440`, motif « pack 400 + 40, virement du 24/09 »).
+### Mise en service (une fois)
+1. **Fileservice → Réglages** : identité légale (raison sociale, adresse, SIRET, RCS, TVA, contact)
+   — elle apparaît sur les factures et la page Support —, puis les horaires d'ouverture.
+2. **Clients → E-mails (SMTP)** : boîte O2switch (voir plus bas), adresse de notification atelier et
+   **adresse publique du portail** (ex. `https://portail.ton-domaine.fr`). Clique *Tester l'envoi*.
+3. *Optionnel* — **Fileservice → Réglages → Stripe** pour le paiement en ligne (voir plus bas).
+   Sans Stripe, les clients commandent par virement et tu crédites à la main.
+4. Mets le portail en ligne (section « Mise en ligne du portail ») avec le lanceur production.
 
-Les comptes sont dans `data/fileservice.db`, séparée de la bibliothèque de solutions.
+### Au quotidien
+- **Nouvelle inscription** → onglet Clients (badge) → *Valider* : le client reçoit l'e-mail d'activation.
+- **Paiement reçu par virement** → Clients → *Paiement reçu hors ligne* : choisis le pack, mets la
+  référence du virement → crédits ajoutés **et** facture émise. Une même référence ne crédite qu'une fois.
+- **Nouveau fichier** → onglet Fileservice (badge, e-mail atelier) → ouvre la demande :
+  - *Analyser* cherche en bibliothèque ; *Auto-patch* charge le fichier client et ouvre l'onglet
+    Auto-patch avec les fiches même stock ;
+  - besoin d'une précision → écris au client en cochant « demander une info » ;
+  - fichier prêt → *Livrer* : le client est prévenu et télécharge depuis son espace ;
+  - impossible → *Refuser* avec le motif : les crédits sont remboursés automatiquement.
+- Le client peut demander une **révision** gratuite pendant 30 jours : la demande repasse « en traitement ».
+- Signe tes messages (champ *Signature* en haut de l'onglet Fileservice).
+
+### Tarifs
+Catalogue, packs, garanties et prix des packs de crédits : `catalogue.py` (prix en crédits,
+1 crédit = 2,50 € HT, TVA 20 %). Le prix de chaque demande est toujours recalculé par le serveur.
+Un client pro d'un autre pays de l'UE avec un numéro de TVA est facturé HT (autoliquidation).
 
 ### E-mails (O2switch)
 Dans cPanel O2switch → *Comptes de messagerie*, crée une boîte (ex. `fileservice@ton-domaine.fr`),
-puis *Connecter les appareils* pour lire le **serveur SMTP**. Renseigne-le dans l'onglet
-**Clients → E-mails (SMTP)** : serveur, port **465**, adresse complète, mot de passe, adresse de
-notification atelier, et l'**adresse publique du portail** (ex. `https://portail.ton-domaine.fr`,
-utilisée dans les liens des e-mails). Clique *Tester l'envoi*.
+puis *Connecter les appareils* pour lire le **serveur SMTP**. Renseigne serveur, port **465**,
+adresse complète et mot de passe dans **Clients → E-mails (SMTP)**.
 Tant que rien n'est réglé, les e-mails sont écrits dans `data/mails_non_envoyes.log`.
-Les réglages (mot de passe compris) sont dans `data/portal_config.json`, jamais dans git.
 
+### Paiement en ligne (Stripe)
+1. Crée un compte Stripe. Commence en **mode test** (clé `sk_test_…`, carte `4242 4242 4242 4242`).
+2. Développeurs → *Clés API* : copie la **clé secrète** dans Fileservice → Réglages.
+3. Développeurs → *Webhooks* → ajoute `https://<adresse publique>/espace/stripe/webhook`, événements
+   `checkout.session.completed` et `checkout.session.async_payment_succeeded` ; copie le
+   **secret de signature** (`whsec_…`) dans les réglages.
+4. Le client clique *Acheter* sur un pack, paie sur la page Stripe, revient : crédits et facture
+   sont ajoutés (une seule fois, même si Stripe renvoie l'événement). Si le montant payé ne
+   correspond pas au prix du pack, rien n'est crédité et l'atelier reçoit une alerte.
+5. Passe en clé `sk_live_…` quand tout fonctionne.
+
+Clés Stripe et mot de passe SMTP sont stockés dans `data/portal_config.json`, jamais dans git, et
+ne sont jamais renvoyés au navigateur.
