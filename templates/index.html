@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carto Matcher — recherche de solution locale</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ version }}">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>CARTO&nbsp;MATCHER</h1>
+      <span class="tag">v{{ version }}&nbsp;·&nbsp;local&nbsp;·&nbsp;hors-ligne</span>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-view="search">Recherche</button>
+      <button class="tab" data-view="solutions">Solutions</button>
+      <button class="tab" data-view="import">Importer</button>
+      <button class="tab" data-view="viz">Cartes 2D</button>
+      <button class="tab" data-view="patch">Auto-patch</button>
+      <button class="tab" data-view="batch">Traitement par lot</button>
+      <button class="tab" data-view="dash">Tableau de bord</button>
+      <button class="tab" data-view="jobs">Dossiers <span id="dosCount" class="tab-count hidden"></span></button>
+      <button class="tab" data-view="inbox">Demandes <span id="inboxCount" class="tab-count hidden"></span></button>
+      <button class="tab" data-view="inspect">Inspecteur</button>
+    </nav>
+    <div class="dbinfo">Base : <strong id="dbSize">{{ db_size }}</strong>
+      <a href="/logout" id="logoutLink" class="gear hidden" title="Se déconnecter">⎋</a>
+      <button id="settingsBtn" class="gear" title="Réglages (clé IA)">⚙</button>
+    </div>
+  </header>
+
+  <!-- ===== Vue Recherche ===== -->
+  <main id="view-search">
+    <section class="left">
+      <div id="drop" class="drop">
+        <input type="file" id="file" hidden>
+        <div class="drop-inner">
+          <div class="drop-icon">⬇</div>
+          <p><strong>Dépose un fichier client</strong></p>
+          <p class="muted">ou clique pour parcourir — lecture ECU / .bin</p>
+        </div>
+      </div>
+
+      <label class="pathfield">Dossier / chemin (optionnel — aide la détection)
+        <input type="text" id="relpath" placeholder="ex : BMW 320d E90/EDC17C41/320d_Stage1.bin">
+      </label>
+
+      <div id="fileMeta" class="meta hidden"></div>
+      <div id="results" class="results"></div>
+    </section>
+
+    <aside class="right">
+      <div class="panel-head">Assistant</div>
+      <div id="chat" class="chat">
+        <p class="muted center">Analyse un fichier pour obtenir une synthèse.</p>
+      </div>
+      <div class="chatbar">
+        <input type="text" id="q" placeholder="Pose une question sur les résultats…" disabled>
+        <button id="ask" disabled>→</button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ===== Vue Solutions ===== -->
+  <main id="view-solutions" class="hidden">
+    <div class="sol-toolbar">
+      <input type="text" id="solSearch" placeholder="Rechercher (véhicule, plateforme, ECU, type…)">
+      <label class="sol-dim">Classer par
+        <select id="solDim">
+          <option value="type">Type</option>
+          <option value="manufacturer">Fabricant</option>
+          <option value="platform">Plateforme</option>
+          <option value="status">Statut</option>
+          <option value="tags">Étiquettes</option>
+        </select>
+      </label>
+      <label class="sol-dim">puis par
+        <select id="solDim2">
+          <option value="">Aucun</option>
+          <option value="type">Type</option>
+          <option value="manufacturer">Fabricant</option>
+          <option value="platform">Plateforme</option>
+          <option value="status">Statut</option>
+          <option value="tags">Étiquettes</option>
+        </select>
+      </label>
+      <button id="solRepair" class="ghost sm" title="Reconstruit le lien vers le fichier original pour les anciennes fiches">Réparer les liens</button>
+      <button id="solRelabel" class="ghost sm" title="Relit type, plateforme et libellé depuis les chemins (OneDrive / dossier)">Relire les fiches</button>
+      <button id="solRebuildFp" class="ghost sm" title="File atelier : archive + empreintes v2 + versions ECU">File atelier</button>
+      <button id="solBackup" class="ghost sm" title="Copie horodatée de la base dans data\backups\">Sauvegarder</button>
+      <span id="solCount" class="muted"></span>
+    </div>
+    <div id="solFacets" class="sol-facets"></div>
+    <div id="solBulk" class="sol-bulk hidden">
+      <span id="solBulkCount" class="muted"></span>
+      <input type="text" id="solBulkTag" placeholder="étiquette à ajouter">
+      <button id="solBulkTagBtn" class="ghost sm">Ajouter l'étiquette</button>
+      <select id="solBulkStatus">
+        <option value="">— statut —</option>
+        <option value="a_confirmer">À confirmer</option>
+        <option value="testee">Testée</option>
+        <option value="validee_client">Validée client</option>
+      </select>
+      <button id="solBulkStatusBtn" class="ghost sm">Appliquer le statut</button>
+      <button id="solBulkClear" class="ghost sm">Tout désélectionner</button>
+    </div>
+    <div id="solList" class="sol-list"></div>
+  </main>
+
+  <!-- ===== Vue Tableau de bord ===== -->
+  <main id="view-dash" class="hidden">
+    <div class="dash">
+      <div class="dash-head">
+        <h2>Tableau de bord</h2>
+        <button id="dashCsv" class="ghost sm">Exporter en CSV</button>
+        <button id="dashBackupNow" class="ghost sm">Sauvegarder maintenant</button>
+      </div>
+      <div id="dashStats" class="dash-stats"></div>
+
+      <h3>File atelier</h3>
+      <p class="muted small">Archive les BIN dans la base, recalcule les empreintes v2
+        (lots de 12, on reprend si ça s'arrête) et lit la version ECU dans le fichier.
+        Sans BIN sur cette machine : pointe d'abord CARTOS ci-dessous.</p>
+      <div id="dashAtelierStats" class="muted small" style="margin:6px 0 8px"></div>
+      <div class="patch-row" style="margin:8px 0 12px">
+        <button id="dashAtelierGo" class="ghost sm">Lancer la file</button>
+        <button id="dashCleanupTest" class="ghost sm">Nettoyer (aperçu)</button>
+        <button id="dashCleanupApply" class="ghost sm">Nettoyer pour de bon</button>
+      </div>
+      <div id="dashAtelierOut" class="muted small"></div>
+
+      <h3>Doublons (binaire identique)</h3>
+      <div id="dashDupes"><button id="dashDupBtn" class="ghost sm">Détecter les doublons</button></div>
+      <h3>Fichiers CARTOS (OneDrive)</h3>
+      <p class="muted small">Les chemins pointent encore vers
+        <code id="dashPrefix">…</code>. Indique le dossier CARTOS de <em>cette</em>
+        machine pour que Auto-patch et Cartes 2D retrouvent les BIN.
+        Tester d'abord : rien n'est écrit tant que tu n'appliques pas.</p>
+      <div class="patch-row" style="margin:8px 0 12px">
+        <label>Dossier CARTOS
+          <input type="text" id="dash_cartos" placeholder="ex : D:\OneDrive E85\OneDrive\CARTOS">
+        </label>
+        <button id="dashRemapTest" class="ghost sm">Tester</button>
+        <button id="dashRemapApply" class="ghost sm">Appliquer</button>
+      </div>
+      <div id="dashRemapOut" class="muted small"></div>
+
+      <h3>Sauvegardes</h3>
+      <p class="muted small">Restaure une copie de <code>data/backups/</code>, ou importe un
+        fichier <code>.db</code> (sauvegarde Carto Matcher d'un autre PC / une ancienne version).
+        La base actuelle est d'abord sauvegardée. Les chemins des BIN (OneDrive, D:\)
+        restent ceux enregistrés — le matching marche sans les fichiers ; Auto-patch et
+        Cartes 2D en ont besoin sur le disque.</p>
+      <div class="patch-row" style="margin:8px 0 12px">
+        <label>Importer une base .db
+          <input type="file" id="dash_import_db" accept=".db">
+        </label>
+        <button id="dashImportDb" class="ghost sm">Importer</button>
+      </div>
+      <div id="dashBackups" class="dash-backups"></div>
+    </div>
+  </main>
+
+  <!-- ===== Vue Dossiers client ===== -->
+  <main id="view-jobs" class="hidden">
+    <div class="jobs" id="dosListWrap">
+      <div class="dash-head">
+        <h2>Dossiers client</h2>
+        <span class="muted small">Un dossier = un véhicule (immat / VIN) + le client, les prestations et le dump.</span>
+      </div>
+      <div class="patch-row" style="margin:10px 0 8px">
+        <label>Recherche
+          <input type="search" id="dos_q" placeholder="nom, immat, VIN, téléphone…">
+        </label>
+        <label>Statut
+          <select id="dos_status">
+            <option value="">Tous</option>
+            <option value="ouvert">Ouverts</option>
+            <option value="en_cours">En cours</option>
+            <option value="livre">Livrés</option>
+            <option value="archive">Archivés</option>
+          </select>
+        </label>
+        <button id="dos_new">Nouveau dossier</button>
+      </div>
+      <div id="dosStats" class="muted small"></div>
+      <div id="jobsList" class="jobs-list"></div>
+      <div id="dosUnattached" class="jobs-list"></div>
+    </div>
+    <div class="jobs hidden" id="dosDetailWrap">
+      <div class="dash-head">
+        <button type="button" id="dos_back" class="ghost sm">← Liste</button>
+        <h2 id="dos_title">Dossier</h2>
+        <button type="button" id="dos_del" class="ghost sm danger">Supprimer</button>
+      </div>
+      <div id="dosDup" class="dos-dup hidden"></div>
+      <div class="dos-grid">
+        <label>Client <input id="dos_name" placeholder="Nom"></label>
+        <label>Téléphone <input id="dos_phone" placeholder="06…"></label>
+        <label>Email <input id="dos_email" type="email"></label>
+        <label>Garage / société <input id="dos_company" placeholder="partenaire"></label>
+        <label>Immatriculation <input id="dos_plate" placeholder="AA-123-BB" class="mono"></label>
+        <label>VIN <input id="dos_vin" placeholder="17 caractères" class="mono" maxlength="17">
+          <span id="dos_vin_warn" class="muted small hidden">VIN incomplet / caractères I O Q</span></label>
+        <label>Véhicule <input id="dos_vehicle" placeholder="Clio 4 1.5 dCi"></label>
+        <label>Calculateur <input id="dos_ecu" placeholder="version ECU" class="mono"></label>
+        <label>Plateforme <input id="dos_platform" placeholder="EDC17…" class="mono"></label>
+        <label>Fabricant <input id="dos_manuf"></label>
+        <label>Statut
+          <select id="dos_st">
+            <option value="ouvert">Ouvert</option>
+            <option value="en_cours">En cours</option>
+            <option value="livre">Livré</option>
+            <option value="archive">Archivé</option>
+          </select>
+        </label>
+      </div>
+      <div class="dos-prestas">
+        <div class="muted small">Prestations</div>
+        <div id="dos_presta_chips" class="typechips"></div>
+      </div>
+      <label class="dos-notes">Notes
+        <textarea id="dos_notes" rows="3" placeholder="commande, remarques atelier…"></textarea>
+      </label>
+      <div class="patch-row">
+        <button type="button" id="dos_save">Enregistrer</button>
+        <span id="dos_save_st" class="muted small"></span>
+      </div>
+      <h3>Fichier client</h3>
+      <div id="dos_dump" class="job-sub"></div>
+      <div class="patch-row">
+        <label>Déposer / remplacer le dump
+          <input type="file" id="dos_dump_file">
+        </label>
+        <button type="button" id="dos_dump_up" class="ghost">Archiver</button>
+        <button type="button" id="dos_to_search" class="ghost">Analyser (Recherche)</button>
+        <button type="button" id="dos_to_patch" class="ghost">Auto-patch</button>
+      </div>
+      <h3>Patchs de ce dossier</h3>
+      <div id="dos_jobs" class="jobs-list"></div>
+    </div>
+  </main>
+
+  <!-- ===== Vue Demandes clients (portail) ===== -->
+  <main id="view-inbox" class="hidden">
+    <div class="jobs">
+      <div class="dash-head">
+        <h2>Demandes clients</h2>
+        <span class="muted small">Les commandes (prestas cochées) apparaissent en tête.
+          <b>Packer</b> enchaîne combo + ZIP + traité.</span>
+      </div>
+      <div id="inboxList" class="jobs-list"></div>
+    </div>
+  </main>
+
+  <!-- ===== Vue Inspecteur ===== -->
+  <main id="view-inspect" class="hidden">
+    <div class="insp">
+      <p class="muted small">Inspecte un fichier ECU : plateforme et identifiants détectés,
+        et la liste des chaînes ASCII avec leur position. Utile pour affiner la détection —
+        le bouton « Copier le rapport » te permet de le partager.</p>
+      <div class="patch-row">
+        <label>Fichier à inspecter <input type="file" id="insp_file"></label>
+        <button id="insp_run">Inspecter</button>
+        <button id="insp_copy" class="ghost hidden">Copier le rapport</button>
+      </div>
+      <div id="insp_head" class="insp-head"></div>
+      <div id="insp_filter" class="insp-filter hidden">
+        <input type="text" id="insp_q" placeholder="filtrer les chaînes (texte ou offset hex)">
+        <label class="insp-chk"><input type="checkbox" id="insp_zonly"> isolées [Z] seulement</label>
+        <span id="insp_count" class="muted small"></span>
+      </div>
+      <div id="insp_strings" class="insp-strings"></div>
+    </div>
+  </main>
+
+  <!-- ===== Vue Importer ===== -->
+  <main id="view-import" class="hidden">
+    <div class="import-form">
+      <label>Dossier à importer (chemin sur cette machine)
+        <span class="pick-row">
+          <input type="text" id="imp_path" placeholder="ex : D:\Mes solutions">
+          <button type="button" id="imp_browse" class="secondary">Parcourir…</button>
+        </span>
+      </label>
+      <div class="import-row">
+        <label>Statut des fiches
+          <select id="imp_status">
+            <option value="a_confirmer">À confirmer</option>
+            <option value="testee">Testée</option>
+            <option value="validee_client">Validée client</option>
+          </select>
+        </label>
+        <div class="import-buttons">
+          <button id="imp_preview">Prévisualiser</button>
+          <button id="imp_run" class="hidden">Importer maintenant</button>
+        </div>
+      </div>
+      <label class="check-row">
+        <input type="checkbox" id="imp_incremental">
+        Uniquement les nouveautés depuis le dernier scan
+        <span id="imp_lastscan" class="muted small"></span>
+      </label>
+      <p class="muted small">Un dossier = un original. Original = fichier marqué
+        <b>ORI</b> (ou <code>.ori</code>) · une fiche par <b>type</b> de prestation
+        (Stage 1, FAP off, E85…) ; si plusieurs fichiers du même type, la révision
+        <b>SAV</b> la plus élevée gagne. Aucun fichier n'est déplacé ni modifié.</p>
+    </div>
+    <div id="imp_progress" class="imp-progress hidden">
+      <div class="imp-track"><div id="imp_bar"></div></div>
+      <span id="imp_ptext" class="muted"></span>
+    </div>
+    <div id="imp_summary" class="imp-summary"></div>
+    <div id="imp_results" class="sol-list"></div>
+  </main>
+
+  <!-- ===== Vue Cartes 2D ===== -->
+  <main id="view-viz" class="hidden">
+    <div class="viz-toolbar">
+      <label>Affichage
+        <select id="viz_type">
+          <option value="cartes">Cartes 2D (Kennfeld)</option>
+          <option value="curve">Courbe (valeurs / adresse)</option>
+          <option value="map">Aperçu mémoire (octets)</option>
+        </select>
+      </label>
+      <label>Source
+        <select id="viz_source">
+          <option value="disk">Fichier du disque</option>
+          <option value="compare">Comparer des fichiers</option>
+          <option value="base">Solution de la base</option>
+        </select>
+      </label>
+      <label id="viz_disk_wrap">Fichier
+        <input type="file" id="viz_file">
+      </label>
+      <label id="viz_compare_wrap" class="hidden">Fichiers (2 ou plus)
+        <input type="file" id="viz_files" multiple>
+      </label>
+      <label id="viz_diff_wrap" class="hidden" style="align-self:center">
+        <input type="checkbox" id="viz_diff_chk" checked> Surligner / superposer les différences
+      </label>
+      <label id="viz_base_wrap" class="hidden">Solution
+        <select id="viz_sol"></select>
+      </label>
+      <label id="viz_which_wrap" class="hidden">Vue
+        <select id="viz_which">
+          <option value="diff">Original + Solution</option>
+          <option value="solution">Solution</option>
+          <option value="original">Original</option>
+        </select>
+      </label>
+      <label class="viz-map-ctrl hidden">Largeur
+        <select id="viz_width">
+          <option>128</option><option selected>256</option>
+          <option>512</option><option>1024</option>
+        </select>
+      </label>
+      <label class="viz-map-ctrl hidden">Couleur
+        <select id="viz_mode">
+          <option value="gray">Niveaux de gris</option>
+          <option value="heat">Couleur (valeur)</option>
+        </select>
+      </label>
+      <label class="viz-curve-ctrl hidden">Bits
+        <select id="viz_bits"><option>8</option><option selected>16</option><option>32</option></select>
+      </label>
+      <label class="viz-curve-ctrl hidden">Octets
+        <select id="viz_endian">
+          <option value="le">Intel (LE)</option>
+          <option value="be">Motorola (BE)</option>
+        </select>
+      </label>
+      <label class="viz-curve-ctrl hidden">Fenêtre
+        <select id="viz_window">
+          <option>128</option><option>256</option><option selected>512</option>
+          <option>1024</option><option>2048</option><option>4096</option>
+          <option>8192</option><option>16384</option><option>65536</option>
+          <option value="all">Tout</option>
+        </select>
+      </label>
+      <label class="viz-cartes-ctrl">Bits
+        <select id="viz_map_bits"><option selected>16</option><option>8</option></select>
+      </label>
+      <label class="viz-cartes-ctrl">Octets
+        <select id="viz_map_endian">
+          <option value="le">Intel (LE)</option>
+          <option value="be">Motorola (BE)</option>
+        </select>
+      </label>
+      <button id="viz_render">Détecter</button>
+    </div>
+
+    <div id="viz_nav" class="viz-nav hidden">
+      <button id="viz_zoomout" class="ghost sm" title="Dézoomer">−</button>
+      <button id="viz_zoomin" class="ghost sm" title="Zoomer">+</button>
+      <button id="viz_prev" class="ghost sm">◀</button>
+      <input type="range" id="viz_pos" min="0" max="0" value="0">
+      <button id="viz_next" class="ghost sm">▶</button>
+      <button id="viz_difffirst" class="ghost sm hidden" title="Première différence">⏮ Δ</button>
+      <button id="viz_diffprev" class="ghost sm hidden" title="Différence précédente">◀ Δ</button>
+      <button id="viz_diffnext" class="ghost sm hidden" title="Différence suivante">Δ ▶</button>
+      <button id="viz_difflast" class="ghost sm hidden" title="Dernière différence">Δ ⏭</button>
+      <input type="text" id="viz_addr" placeholder="offset (déc ou 0x…)">
+      <button id="viz_go" class="ghost sm">Aller</button>
+      <span id="viz_pos_label" class="muted"></span>
+    </div>
+
+    <div id="viz_info" class="muted viz-info"></div>
+
+    <div id="viz_cartes_wrap" class="viz-cartes hidden">
+      <aside id="viz_maps_list"></aside>
+      <section class="viz-maps-main">
+        <div class="viz-map-edit">
+          <label>Offset <input type="text" id="viz_map_off" placeholder="0x…"></label>
+          <label>Lignes <input type="number" id="viz_map_rows" min="1" max="64" value="8"></label>
+          <label>Colonnes <input type="number" id="viz_map_cols" min="1" max="64" value="8"></label>
+          <label class="check-row" style="margin:0"><input type="checkbox" id="viz_map_signed"> Signé</label>
+          <button id="viz_map_swap" class="ghost sm" type="button">Inverser X/Y</button>
+          <button id="viz_map_apply" class="ghost sm" type="button">Appliquer</button>
+        </div>
+        <div class="viz-map-edit viz-map-phys">
+          <label>Facteur Z
+            <select id="viz_map_factor">
+              <option value="1" selected>1 (brut)</option>
+              <option value="0.1">× 0.1</option>
+              <option value="0.01">× 0.01</option>
+              <option value="0.001">× 0.001</option>
+              <option value="0.0234375">× 0.0234375 (1/42.67)</option>
+              <option value="0.0078125">× 0.0078125 (1/128)</option>
+              <option value="0.00390625">× 0.00390625 (1/256)</option>
+              <option value="custom">Personnalisé…</option>
+            </select>
+          </label>
+          <label id="viz_map_factor_custom_wrap" class="hidden">Personnalisé
+            <input type="number" id="viz_map_factor_custom" step="any" placeholder="0.01">
+          </label>
+          <label>Offset Z <input type="number" id="viz_map_zoff" step="any" value="0"></label>
+          <label>Unité <input type="text" id="viz_map_unit" placeholder="mg, %, °C…"></label>
+          <button id="viz_map_csv" class="ghost sm" type="button">CSV cette carte</button>
+          <button id="viz_map_csv_all" class="ghost sm" type="button">CSV toutes (Δ)</button>
+        </div>
+
+        <div id="viz_map_meta" class="muted small"></div>
+        <div id="viz_map_grid" class="viz-grid-scroll"></div>
+      </section>
+    </div>
+
+    <div class="viz-canvas-wrap" id="viz_panels"></div>
+    <div id="viz_curve_wrap" class="hidden"><canvas id="viz_curve_canvas"></canvas></div>
+  </main>
+
+  <main id="view-batch" class="hidden">
+    <div class="import-form">
+      <label>Dossier clients à traiter (chemin sur cette machine)
+        <span class="pick-row">
+          <input type="text" id="batch_path" placeholder="ex : D:\Fichiers clients">
+          <button type="button" id="batch_browse" class="secondary">Parcourir…</button>
+        </span>
+      </label>
+      <div class="import-row">
+        <label>Seuil de correspondance
+          <select id="batch_score">
+            <option value="0.6" selected>Standard (0.6 — recommandé)</option>
+            <option value="0.5">Large (0.5 — plus de candidats, moins fiable)</option>
+            <option value="0.8">Strict (0.8 — solutions quasi certaines)</option>
+          </select>
+        </label>
+        <div class="import-buttons">
+          <button id="batch_run">Lancer le traitement</button>
+        </div>
+      </div>
+      <label class="check-row">
+        <input type="checkbox" id="batch_apply" checked>
+        Générer automatiquement le fichier patché quand le verdict est « propre »
+      </label>
+      <p class="muted small">Pour chaque fichier trouvé dans le dossier (et ses
+        sous-dossiers) : recherche de la meilleure solution connue, puis même
+        analyse que l'onglet <b>Auto-patch</b>. Seuls les fichiers au verdict
+        <b>propre</b> sont patchés automatiquement ; les autres sont signalés pour
+        une vérification manuelle — rien n'est jamais patché à l'aveugle. Les
+        fichiers sources ne sont jamais modifiés ; les fichiers patchés sont
+        écrits dans un sous-dossier <code>_traite</code>.</p>
+    </div>
+    <div id="batch_progress" class="imp-progress hidden">
+      <div class="imp-track"><div id="batch_bar"></div></div>
+      <span id="batch_ptext" class="muted"></span>
+    </div>
+    <div id="batch_summary" class="imp-summary"></div>
+    <div id="batch_results" class="sol-list"></div>
+  </main>
+
+  <!-- ===== Vue Auto-patch ===== -->
+  <main id="view-patch" class="hidden">
+    <div class="patch-form">
+      <p class="muted small">Applique automatiquement les modifications d'une ou <b>plusieurs</b> solutions
+        (Stage 1 + FAP + E85…) au même <b>fichier client</b>. Les deltas se superposent ;
+        un octet en conflit n'est pas écrit. Calcul 100 % serveur :
+        headers programmeur (KESS, Autotuner…) retirés puis recollés, checksums Bosch additifs
+        ou CRC-16 corrigés si le schéma est <b>clair</b>. Une signature RSA/CSA détectée
+        (PKCS#1) n'est <b>jamais</b> patchée et le fichier n'est jamais dit « prêt à flasher ».
+        Les zones sont nommées (FAP, EGR, SCR, DTC, Stage, E85) d'après la forme et le type
+        de la fiche — sans Damos. Le fichier source n'est jamais modifié.</p>
+
+      <div class="patch-row">
+        <label>Fichier client à patcher
+          <input type="file" id="patch_file">
+        </label>
+        <label>Solution (patch à appliquer)
+          <select id="patch_sol"></select>
+        </label>
+        <button id="patch_autofind" class="ghost">Trouver automatiquement</button>
+        <button id="patch_analyze">Analyser la compatibilité</button>
+      </div>
+      <div class="patch-row">
+        <label>Rattacher au dossier
+          <select id="patch_dossier">
+            <option value="">— aucun —</option>
+          </select>
+        </label>
+        <button type="button" id="patch_new_dos" class="ghost">Nouveau dossier avec ce fichier</button>
+      <div id="patch_report" class="patch-report"></div>
+      <div id="patch_ai" class="patch-ai hidden">
+        <label class="switch-label">
+          <input type="checkbox" id="patch_ai_toggle"> Étiquetage IA
+          <span class="muted small">(envoie un résumé structuré en ligne — jamais les octets ni la base)</span>
+        </label>
+        <button id="patch_ai_run" disabled>Étiqueter les zones avec l'IA</button>
+        <span id="patch_ai_status" class="muted small"></span>
+      </div>
+      <div id="patch_gen" class="patch-gen hidden">
+        <label class="patch-chk hidden" id="patch_partial_wrap">
+          <input type="checkbox" id="patch_partial"> Forcer : n'appliquer que les zones compatibles (risqué)
+        </label>
+        <button id="patch_generate">Générer le fichier patché</button>
+        <button id="patch_pack">Pack de sortie (ZIP)</button>
+        <button id="patch_viz" class="ghost">Visualiser le résultat</button>
+        <button id="patch_combo2d" class="ghost">Cartes 2D multi-SOL</button>
+        <button id="patch_pdf" class="ghost">Rapport (PDF)</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- modale d'enregistrement (nouvelle solution) -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <h3>Enregistrer comme solution</h3>
+      <label>Libellé véhicule<input id="m_label" placeholder="Audi A3 2.0 TDI"></label>
+      <label>Version ECU<input id="m_ecu" placeholder="auto-détectée"></label>
+      <label>Plateforme ECU<input id="m_platform" placeholder="auto-détectée (EDC17, SIMOS…)"></label>
+      <label>Type de solution<input id="m_type" placeholder="Stage 1 / DPF off…"></label>
+      <label>Statut
+        <select id="m_status">
+          <option value="a_confirmer">À confirmer</option>
+          <option value="testee">Testée</option>
+          <option value="validee_client">Validée client</option>
+        </select>
+      </label>
+      <label>Notes<textarea id="m_notes" rows="2"></textarea></label>
+      <div class="modal-actions">
+        <button id="m_cancel" class="ghost">Annuler</button>
+        <button id="m_save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- modale d'édition (solution existante) -->
+  <div id="editModal" class="modal hidden">
+    <div class="modal-box">
+      <h3>Modifier la solution</h3>
+      <label>Libellé véhicule<input id="e_label"></label>
+      <label>Version ECU<input id="e_ecu"></label>
+      <label>Plateforme ECU<input id="e_platform"></label>
+      <label>Fabricant<input id="e_manufacturer"></label>
+      <label>Type de solution<input id="e_type"></label>
+      <label>Statut
+        <select id="e_status">
+          <option value="a_confirmer">À confirmer</option>
+          <option value="testee">Testée</option>
+          <option value="validee_client">Validée client</option>
+        </select>
+      </label>
+      <label>Étiquettes (séparées par des virgules)
+        <input id="e_tags" placeholder="ex : client VIP, urgent, à revoir">
+      </label>
+      <label>Notes<textarea id="e_notes" rows="2"></textarea></label>
+      <div class="modal-actions">
+        <button id="e_cancel" class="ghost">Annuler</button>
+        <button id="e_save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- modale réglages -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-box">
+      <h3>Réglages</h3>
+      <p class="muted small">Clé API Anthropic pour l'étiquetage IA des zones (et l'assistant en ligne).
+        Elle est stockée <b>localement</b> sur cette machine (<code>data/config.json</code>), en clair.
+        Laisse vide pour rester 100 % hors-ligne.</p>
+      <label>Clé API
+        <input id="set_key" type="password" placeholder="sk-ant-…" autocomplete="off">
+      </label>
+      <div id="set_status" class="muted small"></div>
+      <div class="modal-actions">
+        <button id="set_test" class="ghost">Tester</button>
+        <button id="set_cancel" class="ghost">Fermer</button>
+        <button id="set_save">Enregistrer</button>
+      </div>
+
+      <hr class="sep">
+      <h3>Verrou d'accès</h3>
+      <p class="muted small">Protège l'outil <b>et</b> ta bibliothèque quand tu utilises
+        le mode réseau atelier (plusieurs postes). Sans mot de passe, tout poste
+        du réseau local peut ouvrir librement l'interface. Laisse vide pour rester
+        en accès libre (usage local seul).</p>
+      <label>Mot de passe d'accès
+        <input id="set_pw" type="password" placeholder="laisser vide = pas de verrou" autocomplete="new-password">
+      </label>
+      <div id="pw_status" class="muted small"></div>
+      <div class="modal-actions">
+        <button id="pw_save">Enregistrer le verrou</button>
+      </div>
+
+      <hr class="sep">
+      <h3>Portail client</h3>
+      <p class="muted small">Personnalise la page vue par tes clients
+        (<code>data/portal_config.json</code>). Les changements s'appliquent
+        immédiatement, sans redémarrer le portail.</p>
+      <label>Nom de l'atelier
+        <input id="pc_shop" type="text" placeholder="E85FRANCE">
+      </label>
+      <label>Texte d'accueil
+        <textarea id="pc_intro" rows="2" placeholder="Déposez votre fichier…"></textarea>
+      </label>
+      <label>Contact affiché (si aucune solution)
+        <input id="pc_contact" type="text" placeholder="email ou téléphone">
+      </label>
+      <label class="check-row">
+        <input type="checkbox" id="pc_ask_contact">
+        Demander les coordonnées du client (capture de lead)
+      </label>
+      <label class="check-row">
+        <input type="checkbox" id="pc_show_prices">
+        Afficher des tarifs (sinon « sur devis »)
+      </label>
+      <div class="import-row">
+        <label>Devise
+          <input id="pc_currency" type="text" placeholder="€" style="max-width:70px">
+        </label>
+        <label>Prix par défaut (optionnel)
+          <input id="pc_default_price" type="text" placeholder="ex : 150">
+        </label>
+      </div>
+      <label>Tarifs par prestation — une ligne <code>Prestation = prix</code>
+        <textarea id="pc_prices" rows="4" placeholder="DPF off = 150&#10;AdBlue off = 200&#10;Stage 1 = 250&#10;E85 / Flexfuel = 499"></textarea>
+      </label>
+      <label>Délai par défaut (optionnel)
+        <input id="pc_default_delay" type="text" placeholder="ex : sous 48 h">
+      </label>
+      <label>Délais par prestation — une ligne <code>Prestation = délai</code>
+        <textarea id="pc_delays" rows="3" placeholder="E85 / Flexfuel = 24 h&#10;AdBlue/SCR off = 48 h"></textarea>
+      </label>
+      <label>Verrou du portail (optionnel)
+        <input id="pc_password" type="password" placeholder="laisser vide = portail public, sans mot de passe" autocomplete="new-password">
+      </label>
+      <p class="muted small">⚠ Un mot de passe ici bloque aussi tes <b>vrais clients</b> :
+        ils ne pourront plus déposer leur fichier sans le connaître. À n'utiliser que
+        pour un accès restreint (tests, lien privé partagé à des clients choisis).
+        Pour un portail public normal, laisse ce champ vide.</p>
+      <div id="pc_pw_status" class="muted small"></div>
+      <div class="modal-actions">
+        <button id="pc_pw_save" class="ghost">Enregistrer le verrou du portail</button>
+      </div>
+
+      <div id="pc_status" class="muted small"></div>
+      <div class="modal-actions">
+        <button id="pc_save">Enregistrer le portail</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}?v={{ version }}"></script>
+</body>
+</html>

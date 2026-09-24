@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+
+# Données locales : bases, secrets, dépôts clients — jamais dans git
+data/*.db
+data/*.db-*
+data/config.json
+data/portal_config.json
+data/portal_inbox/
+data/backups/

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portail client — {{ cfg.shop_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='portal.css') }}?v={{ version }}">
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>{{ cfg.shop_name }}</h1>
+      <p class="intro">{{ cfg.intro }}</p>
+    </header>
+
+    <section id="drop" class="drop">
+      <input type="file" id="file" hidden>
+      <div class="drop-inner">
+        <div class="drop-icon">⬆</div>
+        <p class="drop-title">Déposez votre fichier ici</p>
+        <p class="drop-sub">ou <button type="button" id="browse" class="link">parcourir</button></p>
+        <p id="fname" class="fname"></p>
+      </div>
+    </section>
+
+    {% if cfg.ask_contact %}
+    <section class="contact">
+      <p class="contact-title">Vos coordonnées (facultatif, pour vous recontacter)</p>
+      <div class="fields">
+        <input type="text" id="nom" placeholder="Nom">
+        <input type="text" id="vehicule" placeholder="Véhicule / motorisation">
+        <input type="text" id="immat" placeholder="Immatriculation" autocomplete="off">
+        <input type="text" id="vin" placeholder="VIN (17 caractères)" autocomplete="off">
+        <input type="email" id="email" placeholder="Email">
+        <input type="tel" id="tel" placeholder="Téléphone">
+      </div>
+    </section>
+    {% endif %}
+
+    <button type="button" id="send" class="send" disabled>Vérifier mon fichier</button>
+
+    <section id="result" class="result" hidden></section>
+
+    <footer>
+      <p>Vos fichiers restent chez {{ cfg.shop_name }}. Aucune donnée n'est revendue.</p>
+    </footer>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById('file');
+    const drop = document.getElementById('drop');
+    const fname = document.getElementById('fname');
+    const sendBtn = document.getElementById('send');
+    const result = document.getElementById('result');
+    let chosen = null;
+
+    document.getElementById('browse').onclick = () => fileInput.click();
+    drop.onclick = (e) => { if (e.target.tagName !== 'BUTTON') fileInput.click(); };
+    fileInput.onchange = () => setFile(fileInput.files[0]);
+
+    ['dragover', 'dragenter'].forEach(ev =>
+      drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+      drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+    drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+
+    function setFile(f) {
+      if (!f) return;
+      chosen = f;
+      fname.textContent = f.name;
+      sendBtn.disabled = false;
+      result.hidden = true;
+    }
+
+    sendBtn.onclick = async () => {
+      if (!chosen) return;
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Analyse en cours…';
+      result.hidden = true;
+      const fd = new FormData();
+      fd.append('file', chosen);
+      const v = document.getElementById('vehicule');
+      const e = document.getElementById('email');
+      const t = document.getElementById('tel');
+      if (v) fd.append('vehicule', v.value);
+      const nom = document.getElementById('nom');
+      const im = document.getElementById('immat');
+      const vn = document.getElementById('vin');
+      if (nom) fd.append('nom', nom.value);
+      if (im) fd.append('immat', im.value);
+      if (vn) fd.append('vin', vn.value);
+      if (e) fd.append('email', e.value);
+      if (t) fd.append('tel', t.value);
+      try {
+        const r = await fetch('/check', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Erreur');
+        render(data);
+      } catch (err) {
+        result.className = 'result show err';
+        result.innerHTML = '<p>Une erreur est survenue. Réessayez ou contactez-nous.</p>';
+        result.hidden = false;
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Vérifier mon fichier';
+      }
+    };
+
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c];
+      });
+    }
+
+    function render(d) {
+      window.lastToken = d.token;
+      const cls = { compatible: 'ok', a_verifier: 'warn', non_trouve: 'none' }[d.verdict] || 'none';
+      let html = `<div class="verdict ${cls}"><span class="badge"></span><h2>${esc(d.titre)}</h2></div>`;
+      html += `<p class="msg">${esc(d.message)}</p>`;
+      if (d.prestations && d.prestations.length) {
+        const hasDelai = d.prestations.some(p => p.delai);
+        html += '<table class="presta"><thead><tr><th>Prestation</th><th>Tarif</th>';
+        if (hasDelai) html += '<th>Délai</th>';
+        html += '</tr></thead><tbody>';
+        for (const p of d.prestations) {
+          html += `<tr><td><label><input type="checkbox" class="want" value="${esc(p.prestation)}" checked> ${esc(p.prestation)}</label></td><td>${esc(p.tarif)}</td>`;
+          if (hasDelai) html += `<td>${esc(p.delai || "—")}</td>`;
+          html += '</tr>';
+        }
+        html += '</tbody></table>';
+        if (d.token && d.verdict !== 'non_trouve') {
+          html += '<button type="button" id="orderBtn" class="send" style="margin-top:12px">Commander les prestations cochées</button>';
+          html += '<p class="msg" id="orderMsg"></p>';
+        }
+      }
+      if (d.verdict === 'non_trouve' && d.contact_atelier) {
+        html += `<p class="msg">Contact : <strong>${esc(d.contact_atelier)}</strong></p>`;
+      }
+      result.className = 'result show';
+      result.innerHTML = html;
+      result.hidden = false;
+      const ob = document.getElementById('orderBtn');
+      if (ob) ob.onclick = async () => {
+        const want = [...result.querySelectorAll('.want:checked')].map(x => x.value);
+        if (!want.length) { document.getElementById('orderMsg').textContent = 'Cochez au moins une prestation.'; return; }
+        const fd = new FormData();
+        fd.append('token', window.lastToken || '');
+        fd.append('prestas', want.join(','));
+        const r = await fetch('/order', { method: 'POST', body: fd });
+        const x = await r.json();
+        document.getElementById('orderMsg').textContent = x.ok
+          ? 'Demande enregistrée : ' + want.join(' + ') + '. L’atelier prépare le fichier.'
+          : (x.error || 'Erreur');
+      };
+    }
+  </script>
+</body>
+</html>
