@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Crédits &amp; factures</h1>
-    <p>1 crédit = {{ '%.2f'|format(prix_credit)|replace('.', ',') }} €. Les crédits n'expirent pas ; les packs les plus gros donnent des crédits offerts.</p>
+    <p>1 crédit = {{ '%.2f'|format(prix_credit)|replace('.', ',') }} € HT ({{ '%.2f'|format(prix_credit * (1 + tva))|replace('.', ',') }} € TTC). Les crédits n'expirent pas ; les packs les plus gros donnent des crédits offerts.</p>
   </div>
   <div class="card kpi hero" style="min-width: 240px">
     <div class="kpi-label">{{ icon('coins', 'icon-sm') }} Solde disponible</div>
@@ -20,8 +20,9 @@
     <span class="muted small">Pack</span>
     <span class="qty">{{ p.credits }} <small>crédits</small></span>
     {% if p.bonus %}<span class="amount-plus small">+ {{ p.bonus }} offerts · {{ ((p.bonus / p.credits) * 100)|round|int }} % de bonus</span>{% else %}<span class="muted small">&nbsp;</span>{% endif %}
-    <span class="price">{{ '{:,}'.format(p.prix_eur).replace(',', ' ') }} €</span>
-    <span class="unit">soit {{ '%.2f'|format(p.prix_eur / (p.credits + p.bonus))|replace('.', ',') }} € / crédit reçu</span>
+    <span class="price">{{ p.prix_eur|euros }} HT</span>
+    <span class="muted small">{{ (p.prix_eur * (1 + tva))|euros }} TTC</span>
+    <span class="unit">soit {{ '%.2f'|format(p.prix_eur / (p.credits + p.bonus))|replace('.', ',') }} € HT / crédit reçu</span>
     <a class="btn {{ 'btn-primary' if p.vedette }} btn-block" href="#">Acheter</a>
   </div>
   {% endfor %}
@@ -36,10 +37,12 @@
         <tbody>
         {% for t in transactions %}
           <tr>
-            <td class="muted num" style="white-space: nowrap">{{ t.date }}</td>
+            <td class="muted num" style="white-space: nowrap">{{ t.date[8:10] }}/{{ t.date[5:7] }}/{{ t.date[:4] }}</td>
             <td>{{ t.libelle }}</td>
             <td class="right num {{ 'amount-plus' if t.montant > 0 else 'amount-minus' }}">{{ t.montant|credits }}</td>
           </tr>
+        {% else %}
+          <tr><td colspan="3" class="empty">Aucun mouvement pour l'instant. Rechargez des crédits pour envoyer votre premier fichier.</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -51,7 +54,7 @@
     {% for inv in [('FA-2026-0412', '23/09/2026', '1 000,00 €'), ('FA-2026-0371', '02/09/2026', '500,00 €'), ('FA-2026-0318', '11/08/2026', '1 000,00 €')] %}
     <div class="file-row">
       <span class="file-ic">{{ icon('receipt') }}</span>
-      <div class="grow"><div class="name mono">{{ inv[0] }}</div><div class="muted small">{{ inv[1] }} · {{ inv[2] }}</div></div>
+      <div class="grow"><div class="name mono">{{ inv[0] }}</div><div class="muted small">{{ inv[1] }} · {{ inv[2] }} HT</div></div>
       <a class="icon-btn" href="#" aria-label="Télécharger {{ inv[0] }}">{{ icon('download', 'icon-sm') }}</a>
     </div>
     {% endfor %}

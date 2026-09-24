@@ -599,3 +599,26 @@ Plus de contrôle, mais plus de maintenance et ta box est exposée.
 - Le poste doit rester allumé ; pense aux mises à jour Windows programmées.
 - Intégration à ton site WordPress : le plus simple est un lien/bouton vers
   `https://portail.tondomaine.fr` (ou une iframe si tu veux l'intégrer visuellement).
+
+## Espace client du fileservice (/espace)
+
+Servi par le portail (port 5001) : `http://127.0.0.1:5001/espace/`.
+
+1. **Le client s'inscrit** sur `/espace/inscription` (société, SIRET, TVA, e-mail, mot de passe).
+   Le compte est créé **en attente**.
+2. **L'atelier valide** dans l'outil interne, onglet **Clients** → *Valider*. Le client reçoit
+   l'e-mail d'activation et peut se connecter.
+3. **Crédits** : tant que le paiement en ligne n'est pas branché, l'atelier crédite le compte à la
+   main dans l'onglet Clients (ex. `+440`, motif « pack 400 + 40, virement du 24/09 »).
+
+Les comptes sont dans `data/fileservice.db`, séparée de la bibliothèque de solutions.
+
+### E-mails (O2switch)
+Dans cPanel O2switch → *Comptes de messagerie*, crée une boîte (ex. `fileservice@ton-domaine.fr`),
+puis *Connecter les appareils* pour lire le **serveur SMTP**. Renseigne-le dans l'onglet
+**Clients → E-mails (SMTP)** : serveur, port **465**, adresse complète, mot de passe, adresse de
+notification atelier, et l'**adresse publique du portail** (ex. `https://portail.ton-domaine.fr`,
+utilisée dans les liens des e-mails). Clique *Tester l'envoi*.
+Tant que rien n'est réglé, les e-mails sont écrits dans `data/mails_non_envoyes.log`.
+Les réglages (mot de passe compris) sont dans `data/portal_config.json`, jamais dans git.
+

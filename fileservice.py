@@ -1,18 +1,24 @@
 """
-Espace client du fileservice — maquette navigable.
+Espace client du fileservice, monté par portal.py sous /espace.
 
-Toutes les pages tournent sur des DONNÉES DE DÉMONSTRATION (DEMO_* ci-dessous) :
-aucun compte, crédit ni fichier réel n'est créé. Elles servent à valider le
-thème et les parcours avant de brancher la base (comptes, crédits, demandes).
+Comptes RÉELS (comptes.py, data/fileservice.db) : inscription pro, validation
+par l'atelier dans l'outil interne, connexion, mot de passe oublié, solde et
+mouvements de crédits.
 
-Monté par portal.py sous /espace.
+Encore en DONNÉES DE DÉMONSTRATION (DEMO_*) : les fichiers/demandes et les
+factures — prochaine étape.
 """
 import datetime as dt
+import hmac
+import secrets
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import (Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template,
+                   request, session, url_for)
 
 import catalogue
+import comptes
+import mailer
 
 bp = Blueprint("fs", __name__, url_prefix="/espace")
 
@@ -33,14 +39,6 @@ STATUSES = {
 }
 
 TOOLS = ["KESS3", "Autotuner", "Flex", "CMD Flash", "MagicMotorsport", "KTAG", "PCMFlash", "Autre"]
-
-DEMO_USER = {
-    "company": "Garage Martin Performance",
-    "contact": "Julien Martin",
-    "initials": "JM",
-    "credits": 412,
-    "level": "Partenaire",
-}
 
 DEMO_FILES = [
     {"id": "F-24817", "cat": "vl", "vehicule": "Volkswagen Golf VII", "moteur": "2.0 TDI 150 ch", "annee": 2016,
@@ -81,16 +79,6 @@ DEMO_THREAD = [
              "vous pouvez la joindre ici directement."},
 ]
 
-DEMO_TRANSACTIONS = [
-    {"date": "24/09/2026", "libelle": "Fichier F-24817 · Stage 1 + Start & Stop", "montant": -88},
-    {"date": "24/09/2026", "libelle": "Fichier F-24812 · Adaptation E85", "montant": -59},
-    {"date": "23/09/2026", "libelle": "Achat pack 400 + 40 crédits offerts · facture FA-2026-0412", "montant": 440},
-    {"date": "23/09/2026", "libelle": "Fichier F-24806 · Pack E85 + débridage moteur", "montant": -99},
-    {"date": "21/09/2026", "libelle": "Remboursement F-24752 · lecture incomplète", "montant": 59},
-    {"date": "21/09/2026", "libelle": "Fichier F-24752 · Stage 1", "montant": -59},
-]
-
-
 def service_status(now=None):
     """Ouvert / fermé selon HOURS, et prochaine ouverture si fermé."""
     now = now or dt.datetime.now(TZ)
@@ -117,17 +105,107 @@ def hours_table(now=None):
     return rows
 
 
+@bp.app_template_filter("euros")
+def _fmt_euros(v):
+    """1234.5 -> « 1 234,50 € » (espace fine insécable pour les milliers)."""
+    return f"{v:,.2f}".replace(",", "\u202f").replace(".", ",") + " €"
+
+
 @bp.app_template_filter("credits")
 def _fmt_credits(n):
     return f"{n:+d}" if isinstance(n, int) else n
 
 
+PUBLIC_ENDPOINTS = {"fs.login", "fs.register", "fs.forgot", "fs.reset"}
+LIMITEUR = comptes.Limiteur(max_echecs=5, fenetre=900)
+
+
+def _db():
+    return current_app.config["FS_DB"]
+
+
+def _smtp():
+    return mailer.config_smtp(current_app.config["FS_CONFIG"])
+
+
+def _mail(a, sujet, texte):
+    ok, err = mailer.envoyer(_smtp(), a, sujet, texte, nom_expediteur=SHOP["name"],
+                             journal_dir=current_app.config["FS_DATA_DIR"])
+    if not ok:
+        current_app.logger.warning("E-mail non envoyé à %s : %s", a, err)
+    return ok
+
+
+def _url_publique(endpoint, **kw):
+    """Lien absolu pour les e-mails. public_url (portal_config.json) prime sur l'hôte de la requête."""
+    base = (current_app.config.get("FS_PUBLIC_URL")
+            or mailer.lire_config(current_app.config["FS_CONFIG"]).get("public_url") or "").rstrip("/")
+    if base:
+        return base + url_for(endpoint, **kw)
+    return url_for(endpoint, _external=True, **kw)
+
+
+def _ip():
+    return current_app.config["FS_CLIENT_IP"]()
+
+
+def csrf_token():
+    tok = session.get("csrf")
+    if not tok:
+        tok = session["csrf"] = secrets.token_urlsafe(24)
+    return tok
+
+
+@bp.before_request
+def _securite():
+    # Jeton anti-CSRF sur tout POST (champ de formulaire ou en-tête pour les appels JS)
+    if request.method == "POST":
+        sent = request.form.get("csrf") or request.headers.get("X-CSRF-Token") or ""
+        attendu = session.get("csrf") or ""
+        if not attendu or not hmac.compare_digest(sent, attendu):
+            if request.is_json:
+                return jsonify({"erreur": "Session expirée, rechargez la page."}), 400
+            flash("Session expirée, merci de réessayer.")
+            return redirect(request.url)
+
+    g.client = None
+    cid = session.get("client_id")
+    if cid:
+        c = comptes.get_client(_db(), cid)
+        if c and c["statut"] == "actif":
+            g.client = c
+        else:
+            session.pop("client_id", None)
+    if g.client is None and request.endpoint not in PUBLIC_ENDPOINTS:
+        if request.is_json:
+            return jsonify({"erreur": "Connexion requise."}), 401
+        return redirect(url_for("fs.login", next=request.full_path.rstrip("?")))
+    return None
+
+
+def _initiales(c):
+    base = c.get("contact") or c.get("societe") or "?"
+    parts = [p for p in base.replace("-", " ").split() if p]
+    return "".join(p[0] for p in parts[:2]).upper() or "?"
+
+
 @bp.context_processor
 def _inject():
-    user = dict(DEMO_USER)
-    user["open_count"] = sum(1 for f in DEMO_FILES if f["status"] in ("recu", "en_cours", "attente"))
+    user = None
+    c = getattr(g, "client", None)
+    if c:
+        user = {"company": c["societe"], "contact": c["contact"] or c["societe"], "initials": _initiales(c),
+                "credits": c["credits"], "level": c["niveau"],
+                "open_count": sum(1 for f in DEMO_FILES if f["status"] in ("recu", "en_cours", "attente"))}
     return {"shop": SHOP, "user": user, "service": service_status(), "demo": True,
-            "statuses": STATUSES}
+            "statuses": STATUSES, "csrf_token": csrf_token}
+
+
+def _safe_next(raw):
+    raw = (raw or "").strip()
+    if not raw.startswith("/espace") or raw.startswith("//") or "\\" in raw or ":" in raw:
+        return url_for("fs.dashboard")
+    return raw
 
 
 def _file(file_id):
@@ -139,9 +217,104 @@ def _file(file_id):
 
 @bp.route("/connexion", methods=["GET", "POST"])
 def login():
-    if request.method == "POST":
+    if g.client:
         return redirect(url_for("fs.dashboard"))
-    return render_template("fs/login.html", mode=request.args.get("mode", "login"))
+    erreur, email = None, ""
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        cles = ("ip:" + _ip(), "email:" + email)
+        if LIMITEUR.bloque(*cles):
+            erreur = "Trop de tentatives. Réessayez dans 15 minutes ou réinitialisez votre mot de passe."
+        else:
+            c = comptes.authentifier(_db(), email, request.form.get("password", ""))
+            if not c:
+                LIMITEUR.echec(*cles)
+                erreur = "E-mail ou mot de passe incorrect."
+            elif c["statut"] == "en_attente":
+                erreur = "Votre compte est en attente de validation par l'atelier. Vous recevrez un e-mail dès son ouverture."
+            elif c["statut"] == "bloque":
+                erreur = "Ce compte est suspendu. Contactez l'atelier."
+            else:
+                LIMITEUR.reussite(*cles)
+                session.clear()
+                session["client_id"] = c["id"]
+                session.permanent = bool(request.form.get("remember"))
+                return redirect(_safe_next(request.args.get("next")))
+    return render_template("fs/login.html", mode="login", erreur=erreur, email=email)
+
+
+@bp.route("/inscription", methods=["GET", "POST"])
+def register():
+    if g.client:
+        return redirect(url_for("fs.dashboard"))
+    erreur, form = None, {}
+    if request.method == "POST":
+        form = {k: (request.form.get(k) or "").strip() for k in ("societe", "siret", "tva", "contact", "email", "tel")}
+        if not request.form.get("cgv"):
+            erreur = "Merci d'accepter les conditions générales de vente."
+        elif LIMITEUR.bloque("inscription:" + _ip()):
+            erreur = "Trop de demandes depuis votre connexion. Réessayez plus tard."
+        else:
+            try:
+                comptes.creer_client(_db(), mdp=request.form.get("password", ""), **form)
+            except comptes.ErreurCompte as e:
+                erreur = str(e)
+            else:
+                LIMITEUR.echec("inscription:" + _ip())   # compte les inscriptions, pas seulement les erreurs
+                _mail(form["email"], f"{SHOP['name']} — demande d'ouverture de compte reçue",
+                      f"Bonjour,\n\nNous avons bien reçu la demande d'ouverture de compte pour "
+                      f"{form['societe']}.\nL'atelier la vérifie sous 24 h ouvrées ; vous recevrez un "
+                      f"e-mail dès que votre compte sera actif.\n\n{SHOP['name']}")
+                atelier = _smtp().get("atelier")
+                if atelier:
+                    _mail(atelier, f"Nouvelle inscription fileservice : {form['societe']}",
+                          f"Société : {form['societe']}\nSIRET : {form['siret']}\nTVA : {form['tva'] or '—'}\n"
+                          f"Contact : {form['contact'] or '—'}\nE-mail : {form['email']}\nTél. : {form['tel'] or '—'}\n\n"
+                          "À valider dans l'outil interne, onglet Clients.")
+                return render_template("fs/login.html", mode="registered", societe=form["societe"])
+    return render_template("fs/login.html", mode="register", erreur=erreur, form=form)
+
+
+@bp.route("/mot-de-passe-oublie", methods=["GET", "POST"])
+def forgot():
+    envoye = False
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        if not LIMITEUR.bloque("oubli:" + _ip()):
+            LIMITEUR.echec("oubli:" + _ip())
+            c = comptes.client_par_email(_db(), email)
+            if c and c["statut"] != "bloque":
+                lien = _url_publique("fs.reset", jeton=comptes.creer_jeton(_db(), c["id"]))
+                _mail(c["email"], f"{SHOP['name']} — réinitialisation du mot de passe",
+                      f"Bonjour,\n\nPour choisir un nouveau mot de passe, ouvrez ce lien (valable 1 heure) :\n"
+                      f"{lien}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.\n\n{SHOP['name']}")
+        envoye = True   # même réponse que le compte existe ou non
+    return render_template("fs/login.html", mode="forgot", envoye=envoye)
+
+
+@bp.route("/reinitialiser/<jeton>", methods=["GET", "POST"])
+def reset(jeton):
+    if not comptes.jeton_valide(_db(), jeton):
+        return render_template("fs/login.html", mode="reset", invalide=True)
+    erreur = None
+    if request.method == "POST":
+        if request.form.get("password") != request.form.get("password2"):
+            erreur = "Les deux mots de passe ne correspondent pas."
+        else:
+            try:
+                comptes.reinitialiser_mdp(_db(), jeton, request.form.get("password", ""))
+            except comptes.ErreurCompte as e:
+                erreur = str(e)
+            else:
+                flash("Mot de passe modifié. Vous pouvez vous connecter.")
+                return redirect(url_for("fs.login"))
+    return render_template("fs/login.html", mode="reset", erreur=erreur, jeton=jeton)
+
+
+@bp.route("/deconnexion", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("fs.login"))
 
 
 @bp.route("/")
@@ -203,5 +376,5 @@ def file_detail(file_id):
 @bp.route("/credits")
 def credits():
     return render_template("fs/credits.html", nav="credits", packs=catalogue.PACKS_CREDITS,
-                           prix_credit=catalogue.PRIX_CREDIT_EUR,
-                           transactions=DEMO_TRANSACTIONS)
+                           prix_credit=catalogue.PRIX_CREDIT_EUR, tva=catalogue.TVA,
+                           transactions=comptes.mouvements(_db(), g.client["id"]))

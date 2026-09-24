@@ -4,6 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}Espace client{% endblock %} · {{ shop.name }}</title>
   <script>try { var t = localStorage.getItem('fs-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon.png') }}">
@@ -56,7 +57,11 @@
       <button class="icon-btn hide-sm" type="button" data-theme-toggle aria-label="Changer de thème">
         <span class="ti-sun">{{ icon('sun') }}</span><span class="ti-moon">{{ icon('moon') }}</span>
       </button>
-      <a class="avatar" href="{{ url_for('fs.login') }}" title="{{ user.company }} — se déconnecter">{{ user.initials }}</a>
+      <form method="post" action="{{ url_for('fs.logout') }}" class="logout-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <span class="avatar" title="{{ user.company }}">{{ user.initials }}</span>
+        <button class="icon-btn" type="submit" title="Se déconnecter" aria-label="Se déconnecter">{{ icon('logout', 'icon-sm') }}</button>
+      </form>
     </header>
 
     <main class="content">

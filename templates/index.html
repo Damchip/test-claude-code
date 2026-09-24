@@ -23,6 +23,7 @@
       <button class="tab" data-view="dash">Tableau de bord</button>
       <button class="tab" data-view="jobs">Dossiers <span id="dosCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="inbox">Demandes <span id="inboxCount" class="tab-count hidden"></span></button>
+      <button class="tab" data-view="clients">Clients <span id="clientsCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="inspect">Inspecteur</button>
     </nav>
     <div class="dbinfo">Base : <strong id="dbSize">{{ db_size }}</strong>
@@ -252,6 +253,42 @@
           <b>Packer</b> enchaîne combo + ZIP + traité.</span>
       </div>
       <div id="inboxList" class="jobs-list"></div>
+    </div>
+  </main>
+
+  <!-- ===== Vue Clients du fileservice ===== -->
+  <main id="view-clients" class="hidden">
+    <div class="jobs">
+      <div class="dash-head">
+        <h2>Clients du fileservice</h2>
+        <span class="muted small">Les inscriptions de l'espace client arrivent <b>en attente</b> :
+          <b>Valider</b> ouvre le compte et envoie l'e-mail d'activation.</span>
+      </div>
+      <div id="clientsList" class="jobs-list"></div>
+
+      <div class="dash-card" style="margin-top:22px">
+        <h3 style="margin-top:0">E-mails (SMTP O2switch)</h3>
+        <p class="muted small">Dans cPanel O2switch → <b>Comptes de messagerie</b>, crée une boîte
+          (ex. fileservice@ton-domaine.fr) puis « Connecter les appareils » pour lire le serveur SMTP.
+          Port 465 (SSL). Sans réglage, les e-mails sont écrits dans <code>data/mails_non_envoyes.log</code>.</p>
+        <div class="patch-row" style="margin:8px 0;flex-wrap:wrap">
+          <label>Serveur SMTP <input type="text" id="smtp_host" placeholder="ex : mail.ton-domaine.fr"></label>
+          <label>Port <input type="text" id="smtp_port" placeholder="465" style="width:70px"></label>
+          <label>Identifiant (adresse complète) <input type="text" id="smtp_user" placeholder="fileservice@ton-domaine.fr"></label>
+          <label>Mot de passe <input type="password" id="smtp_password" placeholder="inchangé si vide" autocomplete="new-password"></label>
+        </div>
+        <div class="patch-row" style="margin:8px 0;flex-wrap:wrap">
+          <label>Expéditeur affiché <input type="text" id="smtp_from" placeholder="= identifiant"></label>
+          <label>Notifications atelier <input type="text" id="smtp_atelier" placeholder="ex : atelier@ton-domaine.fr"></label>
+          <label>Adresse publique du portail <input type="text" id="smtp_public_url" placeholder="https://portail.ton-domaine.fr"></label>
+        </div>
+        <div class="patch-row" style="margin:8px 0">
+          <button id="smtpSave" class="patchbtn sm">Enregistrer</button>
+          <label>Envoyer un test à <input type="text" id="smtp_test_to" placeholder="ton adresse"></label>
+          <button id="smtpTest" class="ghost sm">Tester l'envoi</button>
+        </div>
+        <div id="smtpOut" class="muted small"></div>
+      </div>
     </div>
   </main>
 

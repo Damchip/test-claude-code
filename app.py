@@ -22,6 +22,8 @@ from flask import Flask, Response, jsonify, redirect, render_template, request, 
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from matcher import ai, atelier, batch, db, dossiers as dos, engine, extract, importer, maps as mapsmod, pack as packmod, patch as pmod
+import comptes
+import mailer
 
 app = Flask(__name__)
 APP_VERSION = "1.52.0"
@@ -457,7 +459,7 @@ def settings_set():
 
 PORTAL_CONFIG_PATH = os.path.join(DATA_DIR, "portal_config.json")
 PORTAL_DEFAULTS = {
-    "shop_name": "E85FRANCE",
+    "shop_name": "E85-FRANCE",
     "intro": "Déposez votre fichier d'origine : nous vérifions instantanément "
              "si une solution est disponible pour votre calculateur.",
     "show_prices": False, "currency": "€", "default_price": None,
@@ -485,6 +487,7 @@ def portal_config_get():
     cfg["delays_text"] = "\n".join(dlines)
     cfg["has_password"] = bool(cfg.get("access_password_hash"))
     cfg.pop("access_password_hash", None)
+    cfg.pop("smtp", None)   # géré par /clients/smtp, jamais renvoyé avec son mot de passe
     return jsonify(cfg)
 
 
@@ -529,6 +532,122 @@ def portal_config_set():
     with open(PORTAL_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Clients du fileservice (comptes créés sur l'espace client du portail)
+# ---------------------------------------------------------------------------
+FS_DB = os.environ.get("CARTO_FS_DB") or os.path.join(DATA_DIR, "fileservice.db")
+
+
+def _save_portal_config(cfg):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(PORTAL_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+def _mail_client(to, sujet, texte):
+    cfg = load_portal_config()
+    return mailer.envoyer(cfg.get("smtp") or {}, to, sujet, texte,
+                          nom_expediteur=cfg.get("shop_name") or "E85-FRANCE", journal_dir=DATA_DIR)
+
+
+@app.route("/clients")
+def clients_list():
+    comptes.init_db(FS_DB)
+    return jsonify({"clients": comptes.lister_clients(FS_DB)})
+
+
+@app.route("/clients/statut", methods=["POST"])
+def clients_statut():
+    b = request.json or {}
+    cid = int(b.get("id") or 0)
+    avant = comptes.get_client(FS_DB, cid)
+    if not avant:
+        return jsonify({"error": "Client introuvable."}), 404
+    try:
+        comptes.changer_statut(FS_DB, cid, b.get("statut"))
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    mail = None
+    if b.get("statut") == "actif" and avant["statut"] == "en_attente":
+        cfg = load_portal_config()
+        base = (cfg.get("public_url") or "").rstrip("/")
+        acces = (f"Connectez-vous avec votre e-mail et le mot de passe choisi à l'inscription :\n"
+                 f"{base}/espace/connexion" if base else
+                 "Connectez-vous à votre espace client avec votre e-mail et le mot de passe choisi à l'inscription.")
+        ok, err = _mail_client(
+            avant["email"], f"{cfg.get('shop_name') or 'E85-FRANCE'} — votre compte est ouvert",
+            f"Bonjour,\n\nVotre compte fileservice pour {avant['societe']} est maintenant actif.\n"
+            f"{acces}\n\n{cfg.get('shop_name') or 'E85-FRANCE'}")
+        mail = "E-mail d'activation envoyé." if ok else err
+        if not base:
+            mail += " (Adresse publique du portail non renseignée : l'e-mail ne contient pas de lien.)"
+    return jsonify({"ok": True, "mail": mail})
+
+
+@app.route("/clients/niveau", methods=["POST"])
+def clients_niveau():
+    b = request.json or {}
+    comptes.changer_niveau(FS_DB, int(b.get("id") or 0), b.get("niveau"))
+    return jsonify({"ok": True})
+
+
+@app.route("/clients/credits", methods=["POST"])
+def clients_credits():
+    b = request.json or {}
+    try:
+        montant = int(str(b.get("montant") or "0").replace(" ", ""))
+    except ValueError:
+        return jsonify({"error": "Montant invalide (nombre entier de crédits)."}), 400
+    if not montant:
+        return jsonify({"error": "Montant nul."}), 400
+    try:
+        solde = comptes.mouvement(FS_DB, int(b.get("id") or 0), montant,
+                                  b.get("libelle") or "Ajustement par l'atelier")
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "credits": solde})
+
+
+@app.route("/clients/smtp", methods=["GET"])
+def clients_smtp_get():
+    cfg = load_portal_config()
+    smtp = dict(cfg.get("smtp") or {})
+    smtp["password_set"] = bool(smtp.pop("password", ""))
+    smtp["public_url"] = cfg.get("public_url", "")
+    return jsonify(smtp)
+
+
+@app.route("/clients/smtp", methods=["POST"])
+def clients_smtp_set():
+    b = request.json or {}
+    cfg = load_portal_config()
+    smtp = dict(cfg.get("smtp") or {})
+    for key in ("host", "user", "from", "atelier"):
+        if key in b:
+            smtp[key] = (b.get(key) or "").strip()
+    if "port" in b:
+        try:
+            smtp["port"] = int(b.get("port") or 465)
+        except ValueError:
+            return jsonify({"error": "Port invalide."}), 400
+    if (b.get("password") or "").strip():          # vide = on garde l'actuel
+        smtp["password"] = b["password"].strip()
+    cfg["smtp"] = smtp
+    if "public_url" in b:
+        cfg["public_url"] = (b.get("public_url") or "").strip().rstrip("/")
+    _save_portal_config(cfg)
+    return jsonify({"ok": True})
+
+
+@app.route("/clients/smtp/test", methods=["POST"])
+def clients_smtp_test():
+    to = ((request.json or {}).get("to") or "").strip()
+    if not to:
+        return jsonify({"error": "Indique une adresse de test."}), 400
+    ok, err = _mail_client(to, "Test d'envoi — fileservice", "Si vous lisez ce message, l'envoi d'e-mails fonctionne.")
+    return jsonify({"ok": ok, "error": err})
 
 
 def _num(s):

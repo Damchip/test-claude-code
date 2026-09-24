@@ -9,7 +9,8 @@ chère de packs et de prestations seules qui couvre exactement la sélection :
 le tarif pack s'applique tout seul.
 """
 
-PRIX_CREDIT_EUR = 2.50
+PRIX_CREDIT_EUR = 2.50   # HT
+TVA = 0.20               # prix affichés HT et TTC
 
 CATEGORIES = [
     {"code": "vl", "nom": "Véhicule léger"},

@@ -233,7 +233,7 @@ function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;"
 
 function showView(v) {
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x.dataset.view === v));
-  ["search", "solutions", "import", "viz", "patch", "batch", "dash", "jobs", "inbox", "inspect"].forEach(name => {
+  ["search", "solutions", "import", "viz", "patch", "batch", "dash", "jobs", "inbox", "clients", "inspect"].forEach(name => {
     const el = document.getElementById("view-" + name);
     if (el) el.classList.toggle("hidden", name !== v);
   });
@@ -243,6 +243,7 @@ function showView(v) {
   if (v === "dash") initDash();
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
+  if (v === "clients") { loadClients(); loadSmtp(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -3136,3 +3137,112 @@ refreshInboxCount();
 refreshDosCount();
 setInterval(refreshInboxCount, 30000);
 setInterval(refreshDosCount, 30000);
+
+/* ===== Clients du fileservice ===== */
+const CLIENT_STATUT = { en_attente: ["warn", "en attente"], actif: ["ok", "actif"], bloque: ["danger", "bloqué"] };
+
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || "Erreur " + r.status);
+  return d;
+}
+
+async function refreshClientsCount(rows) {
+  try {
+    if (!rows) rows = (await (await fetch("/clients")).json()).clients || [];
+    const n = rows.filter(c => c.statut === "en_attente").length;
+    const el = $("#clientsCount");
+    el.textContent = n;
+    el.classList.toggle("hidden", !n);
+  } catch (e) { /* silencieux */ }
+}
+
+async function loadClients() {
+  const box = $("#clientsList");
+  box.innerHTML = `<div class="empty"><span class="spin"></span> Chargement…</div>`;
+  const rows = (await (await fetch("/clients")).json()).clients || [];
+  refreshClientsCount(rows);
+  if (!rows.length) {
+    box.innerHTML = `<div class="empty">Aucun client pour l'instant. Les inscriptions faites sur
+      l'espace client du portail (/espace/inscription) apparaîtront ici.</div>`;
+    return;
+  }
+  box.innerHTML = rows.map(c => {
+    const [cls, lbl] = CLIENT_STATUT[c.statut] || ["", c.statut];
+    const actions = c.statut === "en_attente"
+      ? `<button class="patchbtn sm" data-cstat="actif" data-id="${c.id}">Valider</button>
+         <button class="ghost sm" data-cstat="bloque" data-id="${c.id}">Refuser</button>`
+      : c.statut === "actif"
+        ? `<button class="ghost sm" data-cstat="bloque" data-id="${c.id}">Bloquer</button>`
+        : `<button class="ghost sm" data-cstat="actif" data-id="${c.id}">Débloquer</button>`;
+    return `<div class="job-row" data-id="${c.id}">
+      <div class="job-main">
+        <div class="job-top"><b>${esc(c.societe)}</b> <span class="badge ${cls}">${esc(lbl)}</span>
+          <span class="badge">${esc(c.niveau)}</span> <span class="muted small">${c.credits} crédits</span></div>
+        <div class="job-sub muted">SIRET ${esc(c.siret)}${c.tva ? " · TVA " + esc(c.tva) : ""} · inscrit le ${esc(c.cree_le.slice(0, 10))}</div>
+        <div class="job-sub">${[c.contact, c.email, c.tel].filter(Boolean).map(esc).join(" · ")}</div>
+        <div class="job-sub patch-row" style="margin-top:6px">
+          <label>Crédits <input type="text" class="c-montant" placeholder="+440 ou -59" style="width:100px"></label>
+          <input type="text" class="c-libelle" placeholder="motif (ex : pack 400 + 40, virement du 24/09)" style="flex:1">
+          <button class="ghost sm" data-ccred="${c.id}">Appliquer</button>
+          <select class="c-niveau" data-cniv="${c.id}">
+            ${["Standard", "Partenaire", "VIP"].map(n => `<option ${n === c.niveau ? "selected" : ""}>${n}</option>`).join("")}
+          </select>
+        </div>
+        <div class="c-out muted small"></div>
+      </div>
+      <div class="inbox-actions">${actions}</div>
+    </div>`;
+  }).join("");
+}
+
+$("#clientsList").addEventListener("click", async e => {
+  const row = e.target.closest(".job-row");
+  if (!row) return;
+  const out = row.querySelector(".c-out");
+  try {
+    if (e.target.dataset.cstat) {
+      const d = await postJSON("/clients/statut", { id: +e.target.dataset.id, statut: e.target.dataset.cstat });
+      await loadClients();
+      if (d.mail) alert(d.mail);
+    } else if (e.target.dataset.ccred) {
+      const montant = row.querySelector(".c-montant").value.trim();
+      const libelle = row.querySelector(".c-libelle").value.trim();
+      if (!montant) { out.textContent = "Indique un nombre de crédits (négatif pour retirer)."; return; }
+      if (!confirm(`Appliquer ${montant} crédits à ce client ?`)) return;
+      await postJSON("/clients/credits", { id: +e.target.dataset.ccred, montant, libelle });
+      await loadClients();
+    }
+  } catch (err) { out.textContent = err.message; }
+});
+
+$("#clientsList").addEventListener("change", async e => {
+  if (!e.target.dataset.cniv) return;
+  try { await postJSON("/clients/niveau", { id: +e.target.dataset.cniv, niveau: e.target.value }); }
+  catch (err) { e.target.closest(".job-row").querySelector(".c-out").textContent = err.message; }
+});
+
+async function loadSmtp() {
+  const d = await (await fetch("/clients/smtp")).json();
+  for (const k of ["host", "port", "user", "from", "atelier", "public_url"]) $("#smtp_" + k).value = d[k] || "";
+  $("#smtp_password").value = "";
+  $("#smtp_password").placeholder = d.password_set ? "inchangé si vide" : "mot de passe de la boîte";
+}
+
+$("#smtpSave").onclick = async () => {
+  const body = {};
+  for (const k of ["host", "port", "user", "password", "from", "atelier", "public_url"]) body[k] = $("#smtp_" + k).value;
+  try { await postJSON("/clients/smtp", body); $("#smtpOut").textContent = "Réglages enregistrés."; loadSmtp(); }
+  catch (err) { $("#smtpOut").textContent = err.message; }
+};
+
+$("#smtpTest").onclick = async () => {
+  $("#smtpOut").textContent = "Envoi en cours…";
+  try {
+    const d = await postJSON("/clients/smtp/test", { to: $("#smtp_test_to").value });
+    $("#smtpOut").textContent = d.ok ? "E-mail de test envoyé : vérifie la boîte de réception." : d.error;
+  } catch (err) { $("#smtpOut").textContent = err.message; }
+};
+
+refreshClientsCount();

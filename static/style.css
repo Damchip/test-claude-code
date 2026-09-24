@@ -89,6 +89,7 @@ button.danger:hover{background:rgba(255,107,107,.12)}
 #view-search{display:grid;grid-template-columns:1fr 360px;gap:18px;
   max-width:1200px;margin:22px auto;padding:0 22px}
 @media(max-width:840px){#view-search{grid-template-columns:1fr}}
+#view-search.hidden{display:none}
 
 .drop{border:1.5px dashed var(--line);border-radius:14px;padding:34px;
   text-align:center;cursor:pointer;transition:.15s;background:var(--panel)}
@@ -371,3 +372,10 @@ hr.sep { border: none; border-top: 1px solid var(--line, #2a333d); margin: 20px 
 .inbox-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .inbox-actions .btn-link { text-decoration: none; text-align: center; }
 .inbox-result { margin-top: 6px; }
+/* Onglet Clients (fileservice) */
+#view-clients input[type=text],#view-clients input[type=password],#view-clients select{
+  background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+  padding:6px 9px;font:inherit;font-size:13px;margin-top:4px}
+#view-clients input:focus,#view-clients select:focus{outline:none;border-color:var(--accent)}
+#view-clients .patch-row label{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
+#view-clients .job-sub.patch-row{align-items:flex-end;gap:8px;flex-wrap:wrap}

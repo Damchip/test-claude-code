@@ -9,3 +9,4 @@ data/config.json
 data/portal_config.json
 data/portal_inbox/
 data/backups/
+data/*.log

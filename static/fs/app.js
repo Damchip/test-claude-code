@@ -76,6 +76,7 @@
     const summary = $('#summary');
     const balance = parseInt(summary.dataset.balance, 10) || 0;
     const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     let seq = 0;
 
     // N'affiche que les prestations du type de véhicule choisi (les services restent visibles)
@@ -101,7 +102,8 @@
       let d;
       try {
         const r = await fetch(summary.dataset.url, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+          method: 'POST', body: JSON.stringify(body),
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
         });
         d = await r.json();
       } catch (e) {

@@ -19,8 +19,18 @@ Fileservice : thème et espace client (maquette).
   Colissimo / Chronopost. Prix au siège pour l'E85. Packs de crédits à 2,50 €/crédit avec bonus.
 - **Tarif pack automatique** : le serveur (`/espace/tarif`) choisit la combinaison la moins chère
   de packs et de prestations seules ; le récapitulatif affiche l'économie réalisée.
-- ⚠ Maquette : toutes les pages tournent sur des données de démonstration (`fileservice.py`),
-  rien n'est encore enregistré.
+- **Comptes clients réels** (`comptes.py`, base séparée `data/fileservice.db`) : inscription pro
+  (SIRET vérifié, TVA), compte **en attente** jusqu'à validation par l'atelier, connexion,
+  « rester connecté » 30 jours, mot de passe oublié par e-mail (lien 1 h, usage unique),
+  déconnexion. Protection CSRF, blocage après 5 échecs en 15 min, pas d'énumération des comptes.
+- **Onglet Clients** dans l'outil interne : valider / refuser / bloquer, niveau, ajout ou retrait
+  de crédits journalisé, réglages **SMTP O2switch** avec bouton de test.
+- **E-mails** (`mailer.py`) : accusé d'inscription, notification atelier, activation du compte,
+  réinitialisation. Sans SMTP configuré, écrits dans `data/mails_non_envoyes.log`.
+- Crédits affichés **HT et TTC** (TVA 20 %) ; mouvements de crédits réels sur la page Crédits.
+- Correctif outil interne : la vue Recherche restait affichée sous les autres onglets.
+- ⚠ Maquette (reste) : toutes les pages tournent sur des données de démonstration (`fileservice.py`),
+  les fichiers / demandes et les factures sont encore des données de démonstration.
 
 ## v1.52.0
 File inbox, livré, cartes multi-SOL.

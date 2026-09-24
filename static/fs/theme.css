@@ -609,3 +609,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav a[aria-disabled="true"]:hover { background: none; color: var(--text-2); }
 .drop-empty { display: contents; }
 .drop-file .grow { display: flex; flex-direction: column; }
+.logout-form { display: flex; align-items: center; gap: 8px; margin: 0; }
+.auth-card .flash { margin-bottom: 18px; }
