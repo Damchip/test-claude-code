@@ -152,6 +152,7 @@ def _detecter(data, filename):
 
 
 app.config["FS_DETECT"] = _detecter
+app.config["FS_SOLUTIONS_DB"] = DB_PATH   # bibliothèque (lecture) pour la livraison automatique
 demandes.init_db(app.config["FS_DB"])
 factures.init_db(app.config["FS_DB"])
 app.register_blueprint(fileservice.bp)

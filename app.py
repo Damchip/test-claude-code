@@ -18,14 +18,16 @@ import threading
 import time
 from datetime import timedelta
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, Response, g, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from matcher import ai, atelier, batch, db, dossiers as dos, engine, extract, importer, maps as mapsmod, pack as packmod, patch as pmod
 import catalogue
 import comptes
 import demandes
+import equipe
 import factures
+import livraison_auto
 import mailer
 import pages_legales
 import stripe_api
@@ -115,36 +117,169 @@ def _refuser_requetes_inter_sites():
     return None
 
 
+# Actions réservées aux administrateurs quand des comptes atelier existent
+ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "clients_credits", "clients_facture",
+                   "fs_reglages_set", "clients_smtp_set", "backups_restore", "backups_import",
+                   "equipe_creer", "equipe_modifier"}
+
+
+def _equipe_active():
+    try:
+        equipe.init_db(FS_DB)
+        return equipe.existe(FS_DB)
+    except Exception:
+        return False
+
+
 @app.before_request
 def _require_login():
-    if not access_password_set():
-        return None  # pas de mot de passe configuré -> accès libre (comportement d'origine)
+    g.tech = None
     if request.endpoint in ("login", "static"):
         return None
-    if session.get("authed"):
+    if _equipe_active():
+        t = equipe.get(FS_DB, session.get("tech_id") or 0)
+        if t and t["actif"]:
+            g.tech = t
+            if request.endpoint in ADMIN_ENDPOINTS and t["role"] != "admin":
+                return jsonify({"error": "Action réservée à un administrateur de l'atelier."}), 403
+            return None
+        session.pop("tech_id", None)
+    elif not access_password_set():
+        return None  # ni comptes ni mot de passe -> accès libre (comportement d'origine)
+    elif session.get("authed"):
         return None
     if request.endpoint == "index":
         return redirect(url_for("login", next=request.path))
     return jsonify({"error": "Session expirée, reconnecte-toi."}), 401
 
 
+# Journal des actions : libellé par route (écritures réussies seulement)
+JOURNAL_ACTIONS = {
+    "fs_message": "Message au client", "fs_livrer": "Livraison", "fs_livrer_auto": "Livraison en un clic",
+    "fs_refuser": "Refus + remboursement", "fs_statut": "Changement de statut",
+    "clients_statut": "Statut client", "clients_credits": "Crédits (ajustement)", "clients_facture": "Facture hors ligne",
+    "clients_supprimer": "Suppression de compte (RGPD)", "clients_niveau": "Niveau client",
+    "fs_reglages_set": "Réglages fileservice", "clients_smtp_set": "Réglages e-mail",
+    "equipe_creer": "Compte atelier créé", "equipe_modifier": "Compte atelier modifié",
+    "settings_set": "Réglages de l'outil", "backups_restore": "Restauration de la bibliothèque",
+}
+
+
+@app.after_request
+def _journaliser(resp):
+    ep = request.endpoint
+    if request.method != "POST" or ep not in JOURNAL_ACTIONS or resp.status_code >= 400:
+        return resp
+    try:
+        b = request.get_json(silent=True) or {}
+        cible, detail = "", ""
+        did = (request.view_args or {}).get("did")
+        if did:
+            d = demandes.get(FS_DB, did)
+            cible = f"{d['numero']} · {d['societe']}" if d else f"demande {did}"
+        elif b.get("id") and ep.startswith("clients_"):
+            c = comptes.get_client(FS_DB, int(b["id"]))
+            cible = c["societe"] if c else f"client {b['id']}"
+        elif b.get("identifiant"):
+            cible = b["identifiant"]
+        detail = " · ".join(str(x) for x in (b.get("statut"), b.get("motif"), b.get("montant"), b.get("libelle"),
+                                             b.get("niveau"), b.get("credits") and f"{b.get('credits')} cr.",
+                                             b.get("ht") and f"{b.get('ht')} € HT", b.get("reference"),
+                                             request.form.get("note")) if x)
+        equipe.noter(FS_DB, g.tech["nom"] if getattr(g, "tech", None) else "", JOURNAL_ACTIONS[ep], cible, detail)
+    except Exception:
+        pass
+    return resp
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
+    avec_equipe = _equipe_active()
     if request.method == "POST":
         pw = request.form.get("password", "")
-        if check_access_password(pw):
+        cles = ("ip:" + (request.remote_addr or "?"),)
+        if LIMITEUR_OUTIL.bloque(*cles):
+            error = "Trop de tentatives, réessaie dans 15 minutes."
+        elif avec_equipe:
+            t = equipe.authentifier(FS_DB, request.form.get("identifiant", ""), pw)
+            if t:
+                LIMITEUR_OUTIL.reussite(*cles)
+                session.clear()
+                session["tech_id"] = t["id"]
+                session.permanent = True
+                return redirect(_safe_next(request.args.get("next"), url_for("index")))
+            LIMITEUR_OUTIL.echec(*cles)
+            error = "Identifiant ou mot de passe incorrect."
+        elif check_access_password(pw):
+            LIMITEUR_OUTIL.reussite(*cles)
             session["authed"] = True
             session.permanent = True
             return redirect(_safe_next(request.args.get("next"), url_for("index")))
-        error = "Mot de passe incorrect."
-    return render_template("login.html", error=error, version=APP_VERSION)
+        else:
+            LIMITEUR_OUTIL.echec(*cles)
+            error = "Mot de passe incorrect."
+    return render_template("login.html", error=error, version=APP_VERSION, equipe=avec_equipe)
 
 
 @app.route("/logout")
 def logout():
     session.pop("authed", None)
+    session.pop("tech_id", None)
     return redirect(url_for("login"))
+
+
+LIMITEUR_OUTIL = comptes.Limiteur(max_echecs=8, fenetre=900)
+
+
+def _auteur_nom():
+    """Signature des messages : le technicien connecté, sinon le champ « Signature »."""
+    if getattr(g, "tech", None):
+        return g.tech["nom"]
+    return (request.form.get("auteur") or (request.get_json(silent=True) or {}).get("auteur") or "").strip()[:40]
+
+
+@app.route("/equipe")
+def equipe_liste():
+    _fs_init()
+    moi = g.tech
+    return jsonify({"moi": moi, "active": equipe.existe(FS_DB),
+                    "techniciens": equipe.lister(FS_DB) if (not moi or moi["role"] == "admin") else [],
+                    "roles": list(equipe.ROLES)})
+
+
+@app.route("/equipe/creer", methods=["POST"])
+def equipe_creer():
+    _fs_init()
+    b = request.json or {}
+    premier = not equipe.existe(FS_DB)
+    try:
+        tid = equipe.creer(FS_DB, b.get("identifiant"), b.get("nom"), "admin" if premier else b.get("role"),
+                           b.get("mdp") or "")
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    if premier:
+        # le premier compte est administrateur et reste connecté : sinon on s'enfermerait dehors
+        session["tech_id"] = tid
+        session.permanent = True
+    return jsonify({"ok": True, "premier": premier})
+
+
+@app.route("/equipe/modifier", methods=["POST"])
+def equipe_modifier():
+    b = request.json or {}
+    try:
+        equipe.modifier(FS_DB, int(b.get("id") or 0), nom=b.get("nom"), role=b.get("role"),
+                        actif=bool(b.get("actif", True)), mdp=b.get("mdp") or None)
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/equipe/journal")
+def equipe_journal():
+    _fs_init()
+    return jsonify({"journal": equipe.journal(FS_DB, recherche=(request.args.get("q") or "").strip()[:60])})
 
 
 DATA_DIR = os.path.dirname(os.path.abspath(DB_PATH))
@@ -587,7 +722,8 @@ def clients_list():
     packs = [{"credits": p["credits"] + p["bonus"], "ht": p["prix_eur"],
               "label": f"Pack {p['credits']}" + (f" + {p['bonus']} offerts" if p["bonus"] else "") + f" · {p['prix_eur']} € HT",
               "designation": factures.designation_pack(p)} for p in catalogue.PACKS_CREDITS]
-    return jsonify({"clients": comptes.lister_clients(FS_DB), "packs": packs})
+    return jsonify({"clients": comptes.lister_clients(FS_DB), "packs": packs,
+                    "niveaux": catalogue.remises(load_portal_config())})
 
 
 @app.route("/clients/statut", methods=["POST"])
@@ -736,6 +872,8 @@ def fs_reglages_get():
                                        ("live" if stripe.get("secret_key") else ""),
                                "webhook_secret_set": bool(stripe.get("webhook_secret"))},
                     "public_url": cfg.get("public_url", ""),
+                    "livraison_auto": bool(cfg.get("livraison_auto")),
+                    "remises": catalogue.remises(cfg),
                     "pages": {k: {"titre": t, "texte": pages_legales.texte(cfg, k),
                                   "a_completer": pages_legales.a_completer(cfg, k)}
                               for k, t in pages_legales.PAGES.items()}})
@@ -773,6 +911,24 @@ def fs_reglages_set():
         if stripe.get("secret_key") and not stripe_api.configure(stripe):
             return jsonify({"error": "Clé secrète Stripe invalide (elle commence par sk_live_ ou sk_test_)."}), 400
         cfg["stripe"] = stripe
+    if "livraison_auto" in b:
+        cfg["livraison_auto"] = bool(b.get("livraison_auto"))
+    if isinstance(b.get("remises"), dict):
+        rem = {}
+        for k, v in b["remises"].items():
+            k = str(k).strip()[:30]
+            if not k:
+                continue
+            try:
+                v = float(str(v).replace(",", ".") or 0)
+            except ValueError:
+                return jsonify({"error": f"Remise invalide pour {k}."}), 400
+            if not 0 <= v <= 90:
+                return jsonify({"error": "Une remise doit être entre 0 et 90 %."}), 400
+            rem[k] = v
+        if "Standard" not in rem:
+            rem["Standard"] = 0.0
+        cfg["remises"] = rem
     if isinstance(b.get("pages"), dict):
         pages = dict(cfg.get("pages") or {})
         for k in pages_legales.PAGES:
@@ -838,6 +994,7 @@ FS_FILES = os.environ.get("CARTO_FS_FILES") or os.path.join(DATA_DIR, "fileservi
 def _fs_init():
     demandes.init_db(FS_DB)
     factures.init_db(FS_DB)
+    equipe.init_db(FS_DB)
 
 
 def _fs_demande(did):
@@ -866,6 +1023,12 @@ def fs_demandes():
     statut = request.args.get("statut") or None
     rows = demandes.lister(FS_DB, statut=statut if statut in demandes.STATUTS else None)
     return jsonify({"demandes": rows, "stats": demandes.stats(FS_DB)})
+
+
+@app.route("/fs/alertes")
+def fs_alertes():
+    _fs_init()
+    return jsonify(demandes.alertes(FS_DB))
 
 
 @app.route("/fs/demandes/<int:did>")
@@ -916,6 +1079,52 @@ def fs_analyser(did):
     return jsonify({k: v for k, v in result.items() if k != "minhash"})
 
 
+def _fs_original_bytes(d):
+    p = demandes.chemin(FS_FILES, d["id"], "original_" + d["fichier_nom"])
+    if not p:
+        return None
+    with open(p, "rb") as f:
+        return f.read()
+
+
+@app.route("/fs/demandes/<int:did>/preparer", methods=["POST"])
+def fs_preparer(did):
+    """Livraison en un clic, étape 1 : vérifie sans rien écrire que le fichier peut être préparé."""
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    data = _fs_original_bytes(d)
+    if data is None:
+        return jsonify({"error": "Fichier d'origine introuvable."}), 404
+    prep = livraison_auto.preparer(d, data, DB_PATH)
+    prep.pop("patched", None)
+    return jsonify(prep)
+
+
+@app.route("/fs/demandes/<int:did>/livrer-auto", methods=["POST"])
+def fs_livrer_auto(did):
+    """Livraison en un clic, étape 2 : prépare à nouveau et livre (déterministe)."""
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    if d["statut"] == "refuse":
+        return jsonify({"error": "Demande refusée."}), 400
+    data = _fs_original_bytes(d)
+    if data is None:
+        return jsonify({"error": "Fichier d'origine introuvable."}), 404
+    prep = livraison_auto.preparer(d, data, DB_PATH)
+    if not prep["ok"]:
+        return jsonify({"error": prep["raison"]}), 400
+    cr = prep["compte_rendu"]
+    auteur = _auteur_nom()
+    version = demandes.livrer(FS_DB, FS_FILES, did, livraison_auto.nom_fichier(d), prep["patched"],
+                              f"{' + '.join(cr['types'])} · checksum {cr['checksum'] or 'OK'}")
+    livraison_auto.journaliser(DB_PATH, d, prep, auteur)
+    txt = (f"Votre fichier {d['numero']} est prêt" + (f" (version {version})" if version > 1 else "") +
+           ". Téléchargez-le depuis votre espace client :")
+    return jsonify({"ok": True, "version": version, "compte_rendu": cr, "mail": _fs_prevenir(d, "fichier prêt", txt)})
+
+
 @app.route("/fs/demandes/<int:did>/statut", methods=["POST"])
 def fs_statut(did):
     d, err = _fs_demande(did)
@@ -936,7 +1145,7 @@ def fs_message(did):
     pj = request.files.get("pj")
     texte = request.form.get("texte", "")
     try:
-        demandes.ajouter_message(FS_DB, FS_FILES, did, "atelier", (request.form.get("auteur") or "").strip()[:40],
+        demandes.ajouter_message(FS_DB, FS_FILES, did, "atelier", _auteur_nom(),
                                  texte, pj_nom=pj.filename if pj else "", pj_contenu=(pj.read() or None) if pj else None)
         if request.form.get("attente"):
             demandes.changer_statut(FS_DB, did, "attente")

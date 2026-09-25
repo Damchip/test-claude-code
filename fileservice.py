@@ -22,6 +22,7 @@ import catalogue
 import comptes
 import demandes
 import factures
+import livraison_auto
 import mailer
 import pages_legales
 import stripe_api
@@ -332,7 +333,7 @@ def dashboard():
     recents = demandes.lister(_db(), g.client["id"], limite=6)
     attente = next((d for d in recents if d["statut"] == "attente"), None)
     return render_template("fs/dashboard.html", nav="dashboard", files=recents, stats=st,
-                           hours=hours_table(), attente=attente)
+                           hours=hours_table(), attente=attente, remise=_remise_client()["remise"])
 
 
 # --- Envoi d'un fichier ------------------------------------------------------
@@ -358,23 +359,50 @@ def new_file():
                 prestations=form.getlist("prestas"), siege=bool(form.get("siege")),
                 garantie=form.get("garantie", ""), retour=form.get("retour", ""), vehicule=vehicule,
                 lecture=lecture, commentaire=form.get("comment", ""), fichier_nom=f.filename if f else "",
-                contenu=contenu, detection=detection)
+                contenu=contenu, detection=detection, **_remise_client())
         except comptes.ErreurCompte as e:
             flash(str(e), "erreur")
             return redirect(url_for("fs.new_file"))
         d = demandes.get(_db(), did)
+        livre = _livraison_auto_reception(d, contenu)
         veh = " ".join(v for v in (d["vehicule"].get("marque"), d["vehicule"].get("modele"),
                                    d["vehicule"].get("moteur")) if v)
         _mail_atelier(f"Nouveau fichier {d['numero']} · {g.client['societe']}",
                       f"Client : {g.client['societe']} ({g.client['email']})\nVéhicule : {veh or '—'}\n"
                       f"Calculateur : {d['lecture'].get('ecu') or d['detection'].get('plateforme') or '—'}\n"
                       f"Prestations : {' + '.join(l['nom'] for l in d['lignes'])}\nCrédits : {d['total']}\n"
-                      f"Commentaire : {d['commentaire'] or '—'}\n\nÀ traiter dans l'outil interne, onglet Fileservice.")
-        flash(f"Demande {d['numero']} envoyée : {d['total']} crédits débités. Vous serez prévenu par e-mail.")
+                      f"Commentaire : {d['commentaire'] or '—'}\n\n"
+                      + ("Livré AUTOMATIQUEMENT (solution même stock, patch propre)." if livre else
+                         "À traiter dans l'outil interne, onglet Fileservice."))
+        if livre:
+            flash(f"Demande {d['numero']} : votre fichier est déjà prêt ! {d['total']} crédits débités.")
+        else:
+            flash(f"Demande {d['numero']} envoyée : {d['total']} crédits débités. Vous serez prévenu par e-mail.")
         return redirect(url_for("fs.file_detail", numero=d["numero"]))
     return render_template("fs/new.html", nav="new", categories=catalogue.CATEGORIES,
                            prestations=catalogue.PRESTATIONS, services=catalogue.SERVICES,
                            garanties=catalogue.GARANTIES, retours=catalogue.RETOURS, tools=TOOLS)
+
+
+def _livraison_auto_reception(d, contenu):
+    """Option « livraison automatique à la réception » (réglages atelier). Ne lève jamais."""
+    if not reglages().get("livraison_auto") or not current_app.config.get("FS_SOLUTIONS_DB"):
+        return False
+    try:
+        prep = livraison_auto.preparer(d, contenu, current_app.config["FS_SOLUTIONS_DB"])
+        if not prep["ok"]:
+            return False
+        cr = prep["compte_rendu"]
+        demandes.livrer(_db(), _files(), d["id"], livraison_auto.nom_fichier(d), prep["patched"],
+                        f"{' + '.join(cr['types'])} · checksum {cr['checksum'] or 'OK'}")
+        livraison_auto.journaliser(current_app.config["FS_SOLUTIONS_DB"], d, prep, "automatique")
+        _mail(d["email"], f"{shop()['name']} — {d['numero']} : fichier prêt",
+              f"Bonjour,\n\nVotre fichier {d['numero']} est prêt. Téléchargez-le depuis votre espace client :\n"
+              f"{_url_publique('fs.file_detail', numero=d['numero'])}\n\n{shop()['name']}")
+        return True
+    except Exception:
+        current_app.logger.exception("Livraison automatique impossible pour %s", d["numero"])
+        return False
 
 
 @bp.route("/tarif", methods=["POST"])
@@ -387,7 +415,14 @@ def tarif():
     if not isinstance(codes, list):
         codes = []
     return jsonify(catalogue.devis(str(data.get("categorie", "")), [str(c) for c in codes][:20],
-                                   siege=bool(data.get("siege")), garantie=str(data.get("garantie") or "")))
+                                   siege=bool(data.get("siege")), garantie=str(data.get("garantie") or ""),
+                                   **_remise_client()))
+
+
+def _remise_client():
+    """Remise du niveau du client connecté (réglages atelier)."""
+    niveau = g.client["niveau"] if g.client else ""
+    return {"remise": catalogue.remises(reglages()).get(niveau, 0), "niveau": niveau}
 
 
 # --- Suivi des demandes ------------------------------------------------------

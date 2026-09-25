@@ -421,3 +421,6 @@ header{flex-wrap:wrap;gap:10px}
 #view-fs .fs-table th{text-align:left;color:var(--muted);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--line)}
 #view-fs .fs-table td{padding:5px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 #view-fs input[type=month]{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 8px;color-scheme:dark}
+/* Technicien : les actions réservées aux administrateurs sont masquées (le serveur les refuse de toute façon) */
+.role-technicien [data-cfac], .role-technicien [data-ccred], .role-technicien [data-csuppr],
+.role-technicien #clientsList details, .role-technicien .c-montant, .role-technicien .c-libelle { display:none !important }

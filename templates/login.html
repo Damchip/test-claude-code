@@ -25,10 +25,15 @@
   <div class="box">
     <div class="lock">🔒</div>
     <h1>Carto Matcher</h1>
-    <p class="sub">Accès réseau protégé — v{{ version }}</p>
+    <p class="sub">{{ 'Compte atelier' if equipe else 'Accès réseau protégé' }} — v{{ version }}</p>
     <form method="post">
       {% if error %}<p class="err">{{ error }}</p>{% endif %}
+      {% if equipe %}
+      <input type="text" name="identifiant" placeholder="Identifiant" autofocus autocomplete="username" autocapitalize="off">
+      <input type="password" name="password" placeholder="Mot de passe" autocomplete="current-password">
+      {% else %}
       <input type="password" name="password" placeholder="Mot de passe" autofocus autocomplete="current-password">
+      {% endif %}
       <button type="submit">Se connecter</button>
     </form>
   </div>

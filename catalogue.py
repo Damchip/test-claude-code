@@ -19,26 +19,32 @@ CATEGORIES = [
 ]
 
 # prix_siege : prix quand le calculateur est envoyé au siège pour ouverture du boîtier
+# type       : type de solution correspondant dans la bibliothèque (livraison en un clic) ;
+#              sans type, la prestation se traite toujours à la main
 PRESTATIONS = {
     "vl": [
-        {"code": "stage1", "nom": "Stage 1", "desc": "Fichier sur mesure", "prix": 59},
-        {"code": "e85", "nom": "Adaptation E85", "desc": "Fichier sur mesure bioéthanol", "prix": 59, "prix_siege": 89},
-        {"code": "speed", "nom": "Speed limit", "desc": "Réglage du limiteur de vitesse", "prix": 29},
+        {"code": "stage1", "nom": "Stage 1", "desc": "Fichier sur mesure", "prix": 59, "type": "Stage 1"},
+        {"code": "e85", "nom": "Adaptation E85", "desc": "Fichier sur mesure bioéthanol", "prix": 59, "prix_siege": 89,
+         "type": "E85 / Flexfuel"},
+        {"code": "speed", "nom": "Speed limit", "desc": "Réglage du limiteur de vitesse", "prix": 29, "type": "Vmax off"},
         {"code": "startstop", "nom": "Start & Stop", "desc": "Réglage du Start & Stop", "prix": 29},
-        {"code": "dtc", "nom": "Suppression DTC", "desc": "Codes défaut à préciser en commentaire", "prix": 29},
+        {"code": "dtc", "nom": "Suppression DTC", "desc": "Codes défaut à préciser en commentaire", "prix": 29,
+         "type": "DTC off"},
         {"code": "immo", "nom": "Réglage IMMO", "desc": "Antidémarrage", "prix": 59},
         {"code": "volet_adm", "nom": "Volet collecteur d'admission", "desc": "Réglage du volet d'admission", "prix": 39},
         {"code": "volet_ech", "nom": "Volet d'échappement", "desc": "Réglage du volet d'échappement", "prix": 39},
         {"code": "torque", "nom": "Torque OFF", "desc": "Limitation de couple", "prix": 19},
     ],
     "pl": [
-        {"code": "stage1", "nom": "Stage 1 – PL", "desc": "Fichier sur mesure", "prix": 79},
-        {"code": "dtc", "nom": "Suppression DTC – PL", "desc": "Codes défaut à préciser en commentaire", "prix": 59},
+        {"code": "stage1", "nom": "Stage 1 – PL", "desc": "Fichier sur mesure", "prix": 79, "type": "Stage 1"},
+        {"code": "dtc", "nom": "Suppression DTC – PL", "desc": "Codes défaut à préciser en commentaire", "prix": 59,
+         "type": "DTC off"},
         {"code": "immo", "nom": "Réglage IMMO – PL", "desc": "Antidémarrage", "prix": 59},
     ],
     "moto": [
-        {"code": "stage1", "nom": "Stage 1 – Moto", "desc": "Fichier sur mesure", "prix": 59},
-        {"code": "speed", "nom": "Speed limit – Moto/Quad", "desc": "Réglage du limiteur de vitesse", "prix": 20},
+        {"code": "stage1", "nom": "Stage 1 – Moto", "desc": "Fichier sur mesure", "prix": 59, "type": "Stage 1"},
+        {"code": "speed", "nom": "Speed limit – Moto/Quad", "desc": "Réglage du limiteur de vitesse", "prix": 20,
+         "type": "Vmax off"},
     ],
 }
 
@@ -86,10 +92,11 @@ def _prix(item, siege):
     return item["prix_siege"] if siege and item.get("prix_siege") is not None else item["prix"]
 
 
-def devis(categorie, codes, siege=False, garantie=None):
+def devis(categorie, codes, siege=False, garantie=None, remise=0, niveau=""):
     """Tarif le plus avantageux pour la sélection.
 
-    Retourne {"lignes": [{"nom", "credits"}], "total", "economie", "siege_possible", "erreur"}.
+    remise : pourcentage accordé au niveau du client (sur les prestations, pas sur la garantie).
+    Retourne {"lignes": [{"nom", "credits"}], "total", "economie", "remise", "siege_possible", "erreur"}.
     """
     if categorie not in PRESTATIONS:
         return {"lignes": [], "total": 0, "economie": 0, "siege_possible": False,
@@ -132,9 +139,32 @@ def devis(categorie, codes, siege=False, garantie=None):
     total, lignes = best[full]
     somme_seules = sum(_prix(catalogue[c], siege) for c in choix)
     lignes = [{"nom": nom, "credits": prix} for nom, prix in lignes]
+    try:
+        remise = max(0.0, min(float(remise or 0), 90.0))
+    except (TypeError, ValueError):
+        remise = 0.0
+    montant_remise = int(round(total * remise / 100)) if total else 0
+    if montant_remise:
+        lignes.append({"nom": f"Remise {niveau or 'client'} −{remise:g} %", "credits": -montant_remise})
+        total -= montant_remise
     g = next((g for g in GARANTIES if g["code"] == garantie), None)
     if g and choix:
         lignes.append({"nom": g["nom"], "credits": g["prix"]})
         total += g["prix"]
     return {"lignes": lignes, "total": total, "economie": somme_seules - best[full][0],
-            "siege_possible": siege_possible, "erreur": ""}
+            "remise": montant_remise, "siege_possible": siege_possible, "erreur": ""}
+
+
+NIVEAUX_DEFAUT = {"Standard": 0, "Partenaire": 10, "VIP": 20}
+
+
+def remises(cfg):
+    """Pourcentage de remise par niveau (réglages atelier, sinon valeurs par défaut)."""
+    raw = cfg.get("remises") if isinstance(cfg.get("remises"), dict) else None
+    out = {}
+    for k, v in (raw or NIVEAUX_DEFAUT).items():
+        try:
+            out[str(k)[:30]] = max(0.0, min(float(v), 90.0))
+        except (TypeError, ValueError):
+            continue
+    return out or dict(NIVEAUX_DEFAUT)

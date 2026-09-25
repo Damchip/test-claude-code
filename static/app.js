@@ -244,7 +244,7 @@ function showView(v) {
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
   if (v === "clients") { loadClients(); loadSmtp(); }
-  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); }
+  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadEquipe(); loadJournal(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -2131,7 +2131,7 @@ async function refreshSettingsStatus() {
     $("#pw_status").innerHTML = d.has_password
       ? "🔒 Verrou actif — un mot de passe est requis pour accéder à l'outil."
       : "🔓 Pas de verrou — accès libre à qui est sur le réseau.";
-    $("#logoutLink").classList.toggle("hidden", !d.has_password);
+    $("#logoutLink").classList.toggle("hidden", !d.has_password && !MOI);
   } catch (e) { $("#set_status").textContent = ""; }
 }
 $("#settingsBtn").onclick = () => {
@@ -3165,6 +3165,7 @@ async function loadClients() {
   const cd = await (await fetch("/clients")).json();
   const rows = cd.clients || [];
   FS_PACKS = cd.packs || [];
+  const NIVEAUX = Object.keys(cd.niveaux || { Standard: 0, Partenaire: 10, VIP: 20 });
   refreshClientsCount(rows);
   if (!rows.length) {
     box.innerHTML = `<div class="empty">Aucun client pour l'instant. Les inscriptions faites sur
@@ -3192,7 +3193,7 @@ async function loadClients() {
           <input type="text" class="c-libelle" placeholder="motif (ex : pack 400 + 40, virement du 24/09)" style="flex:1">
           <button class="ghost sm" data-ccred="${c.id}">Appliquer</button>
           <select class="c-niveau" data-cniv="${c.id}">
-            ${["Standard", "Partenaire", "VIP"].map(n => `<option ${n === c.niveau ? "selected" : ""}>${n}</option>`).join("")}
+            ${[...new Set([...NIVEAUX, c.niveau])].map(n => `<option ${n === c.niveau ? "selected" : ""}>${esc(n)}</option>`).join("")}
           </select>
         </div>
         <details class="job-sub" style="margin-top:6px">
@@ -3363,7 +3364,7 @@ function renderFsList() {
         <div class="job-top"><b>${esc(d.numero)}</b> <span class="badge ${cls}">${esc(lbl)}</span>
           ${d.non_lus ? `<span class="badge warn">${d.non_lus} msg</span>` : ""}</div>
         <div class="job-sub"><b>${esc(fsVeh(d))}</b> · ${esc(fsEcu(d))}</div>
-        <div class="job-sub muted">${esc(d.societe)} · ${esc(d.lignes.map(l => l.nom).join(" + "))} · ${d.total} cr. · ${esc(fsDate(d.cree_le))}</div>
+        <div class="job-sub muted">${esc(d.societe)} · ${esc(d.lignes.filter(l => l.credits > 0).map(l => l.nom).join(" + "))} · ${d.total} cr. · ${esc(fsDate(d.cree_le))}</div>
       </div></div>`;
   }).join("");
 }
@@ -3405,14 +3406,15 @@ async function openFs(id) {
         <dt>Bibliothèque</dt><dd><span class="badge ${vcls}">${esc(vlbl)}</span></dd></dl>
     </div>
     <div class="fs-sec">
-      <b>${esc(d.lignes.map(z => z.nom).join(" + "))}</b> — ${d.total} crédits${d.siege ? " · <b>ouverture au siège</b>" + (d.retour ? " (retour " + esc(d.retour) + ")" : "") : ""}${d.garantie ? " · garantie " + esc(d.garantie === "g2" ? "2 ans" : "1 an") : ""}
+      <b>${esc(d.lignes.filter(z => z.credits > 0).map(z => z.nom).join(" + "))}</b> — ${d.total} crédits${d.lignes.some(z => z.credits < 0) ? " (" + esc(d.lignes.filter(z => z.credits < 0).map(z => z.nom).join(", ")) + ")" : ""}${d.siege ? " · <b>ouverture au siège</b>" + (d.retour ? " (retour " + esc(d.retour) + ")" : "") : ""}${d.garantie ? " · garantie " + esc(d.garantie === "g2" ? "2 ans" : "1 an") : ""}
       ${d.commentaire ? `<div class="muted" style="white-space:pre-wrap;margin-top:4px">« ${esc(d.commentaire)} »</div>` : ""}
       ${ferme ? `<div class="muted" style="margin-top:4px">Refusé : ${esc(d.motif_refus)}${d.rembourse ? " · remboursé" : ""}</div>` : ""}
     </div>
     <div class="fs-sec fs-actions">
       <a class="ghost sm btn-link" href="/fs/demandes/${d.id}/original">Télécharger l'original</a>
       <button class="ghost sm" data-fsact="analyser">Analyser</button>
-      <button class="patchbtn sm" data-fsact="autopatch">Auto-patch</button>
+      ${ferme ? "" : `<button class="patchbtn sm" data-fsact="unclic" title="Solution même stock en bibliothèque + patch propre + checksums prêts">⚡ Livrer en un clic</button>`}
+      <button class="ghost sm" data-fsact="autopatch">Auto-patch</button>
       ${!ferme && d.statut !== "en_cours" ? `<button class="ghost sm" data-fsstat="en_cours">Passer en traitement</button>` : ""}
     </div>
     <div class="fs-ana muted small"></div>
@@ -3471,6 +3473,17 @@ $("#fsDetail").addEventListener("click", async e => {
         `→ <b>${esc(x.vehicle_label || "#" + x.id)}</b> (${esc(x.solution_type || "?")}) — score ${(x.score * 100).toFixed(0)} %${x.exact ? " · exact" : ""}${x.same_stock ? " · même stock" : ""}`
       ).join("<br>") : "Aucune solution connue en base pour ce fichier.";
       return;
+    } else if (b.dataset.fsact === "unclic") {
+      const ana = $("#fsDetail .fs-ana");
+      ana.innerHTML = `<span class="spin"></span> préparation…`;
+      const p = await postJSON(`/fs/demandes/${id}/preparer`, {});
+      if (!p.ok) { ana.innerHTML = `<span class="badge warn">traitement manuel</span> ${esc(p.raison)}`; return; }
+      const cr = p.compte_rendu;
+      ana.innerHTML = `<span class="badge ok">prêt</span> ${esc(cr.types.join(" + "))} · fiche(s) : ${esc(cr.fiches.join(", "))}
+        · checksum : ${esc(cr.checksum || "OK")}${cr.checksum_note ? " — " + esc(cr.checksum_note) : ""}`;
+      if (!confirm(`Livrer maintenant au client ?\n\n${cr.types.join(" + ")}\nFiche(s) : ${cr.fiches.join(", ")}\nChecksum : ${cr.checksum || "OK"}\n\nLe client est prévenu par e-mail.`)) return;
+      const d = await postJSON(`/fs/demandes/${id}/livrer-auto`, { auteur: fsAuteur() });
+      alert(`Version ${d.version} livrée. ${d.mail || ""}`);
     } else if (b.dataset.fsact === "autopatch") {
       const row = fsRows.find(r => r.id === id) || {};
       const blob = await (await fetch(`/fs/demandes/${id}/original`)).blob();
@@ -3531,6 +3544,11 @@ async function loadFsReglages() {
       · <a class="fs-link" href="${esc(fsPortail)}/legal/${k}" target="_blank">voir la page</a> <span class="muted small">(portail)</span></summary>
     <textarea data-page="${k}" rows="14" style="margin-top:6px;font-family:var(--mono);font-size:12px">${esc(p.texte)}</textarea>
   </details>`).join("");
+  $("#fsAutoLivraison").checked = !!d.livraison_auto;
+  $("#fsRemises").innerHTML = Object.entries(d.remises).map(([n, v]) =>
+    `<label>${esc(n)} <span><input type="text" data-remise="${esc(n)}" value="${v}" style="width:60px"> %</span></label>`).join("")
+    + `<label>Nouveau niveau <span><input type="text" id="fsNiveauNom" placeholder="ex : Revendeur" style="width:110px">
+       <input type="text" id="fsNiveauPct" placeholder="%" style="width:50px"></span></label>`;
   const st = d.stripe;
   $("#fsStripeKey").value = ""; $("#fsStripeWh").value = "";
   $("#fsStripeKey").placeholder = st.secret_key_set ? "enregistrée (vide = inchangée)" : "sk_live_… ou sk_test_…";
@@ -3578,11 +3596,183 @@ $("#fsSaveReglages").onclick = async () => {
   try {
     const pages = {};
     document.querySelectorAll("[data-page]").forEach(t => { pages[t.dataset.page] = t.value; });
-    await postJSON("/fs/reglages", { societe, horaires, pages, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
+    const remises = {};
+    document.querySelectorAll("[data-remise]").forEach(i => { remises[i.dataset.remise] = i.value; });
+    if ($("#fsNiveauNom").value.trim()) remises[$("#fsNiveauNom").value.trim()] = $("#fsNiveauPct").value || "0";
+    await postJSON("/fs/reglages", { societe, horaires, pages, remises, livraison_auto: $("#fsAutoLivraison").checked, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
     $("#fsReglagesOut").textContent = "Réglages enregistrés.";
     loadFsReglages();
   } catch (err) { $("#fsReglagesOut").textContent = err.message; }
 };
 
 refreshFsCount();
+
+/* ===== Alertes en direct : nouveau fichier, message client, inscription ===== */
+const ALERTE_INTERVALLE = 20000;
+let alerteEtat = null;          // dernier instantané connu
+const titreBase = document.title;
+
+function alertesActives() {
+  try { return localStorage.getItem("fs_alertes") !== "off"; } catch (e) { return true; }
+}
+function majBoutonAlertes() {
+  const b = $("#fsNotifBtn");
+  if (!b) return;
+  const perm = ("Notification" in window) ? Notification.permission : "indisponible";
+  b.textContent = alertesActives() ? (perm === "granted" ? "🔔 Alertes activées" : "🔔 Alertes (son)") : "🔕 Alertes coupées";
+}
+$("#fsNotifBtn").onclick = async () => {
+  const actif = alertesActives();
+  if (actif && "Notification" in window && Notification.permission === "default") {
+    await Notification.requestPermission();        // demande seulement sur clic
+  } else {
+    try { localStorage.setItem("fs_alertes", actif ? "off" : "on"); } catch (e) {}
+  }
+  bip(); majBoutonAlertes();
+};
+
+function bip() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1320].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+      const t = ctx.currentTime + i * 0.18;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.start(t); o.stop(t + 0.17);
+    });
+  } catch (e) { /* pas de son disponible */ }
+}
+
+function notifier(titre, texte) {
+  if (!alertesActives()) return;
+  bip();
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      const n = new Notification(titre, { body: texte, tag: "carto-fs" });
+      n.onclick = () => { window.focus(); showView("fs"); n.close(); };
+    } catch (e) { /* notifications indisponibles (réseau local sans HTTPS) */ }
+  }
+}
+
+async function surveiller() {
+  let a;
+  try { a = await (await fetch("/fs/alertes")).json(); } catch (e) { return; }
+  const total = a.a_traiter + a.non_lus + a.inscriptions;
+  document.title = total ? `(${total}) ${titreBase}` : titreBase;
+  const el = $("#fsCount");
+  const nFs = a.a_traiter + a.non_lus;
+  el.textContent = nFs; el.classList.toggle("hidden", !nFs);
+  const ec = $("#clientsCount");
+  ec.textContent = a.inscriptions; ec.classList.toggle("hidden", !a.inscriptions);
+  if (alerteEtat) {
+    const msgs = [];
+    if (a.derniere_demande > alerteEtat.derniere_demande) msgs.push(`${a.derniere_demande - alerteEtat.derniere_demande} nouveau(x) fichier(s)`);
+    if (a.dernier_message > alerteEtat.dernier_message) msgs.push("nouveau message client");
+    if (a.inscriptions > alerteEtat.inscriptions) msgs.push("nouvelle inscription");
+    if (msgs.length) {
+      notifier("Fileservice E85-FRANCE", msgs.join(" · "));
+      // liste à jour si l'onglet est ouvert (sans perdre la demande sélectionnée)
+      if (!$("#view-fs").classList.contains("hidden")) loadFs();
+      if (!$("#view-clients").classList.contains("hidden") && a.inscriptions > alerteEtat.inscriptions) loadClients();
+    }
+  }
+  alerteEtat = a;
+}
+majBoutonAlertes();
+surveiller();
+setInterval(surveiller, ALERTE_INTERVALLE);
+
+/* ===== Équipe de l'atelier et journal ===== */
+let MOI = null;
+
+async function initSession() {
+  try {
+    const d = await (await fetch("/equipe")).json();
+    MOI = d.moi;
+    if (MOI) {
+      const lk = $("#logoutLink");
+      lk.classList.remove("hidden");
+      lk.textContent = `${MOI.nom} ⎋`;
+      lk.title = `Connecté : ${MOI.nom} (${MOI.role}) — se déconnecter`;
+      // signature automatique : plus besoin du champ
+      const lab = $("#fsAuteur").closest("label");
+      if (lab) lab.innerHTML = `<span class="muted small">Connecté : <b>${esc(MOI.nom)}</b></span>`;
+      if (MOI.role !== "admin") {
+        ["#fsReglages", "#fsEquipeForm"].forEach(sel => { const el = $(sel); if (el) el.classList.add("hidden"); });
+        document.body.classList.add("role-technicien");
+      }
+    }
+  } catch (e) { /* outil sans comptes */ }
+}
+
+async function loadEquipe() {
+  const d = await (await fetch("/equipe")).json();
+  const intro = $("#fsEquipeIntro");
+  if (!d.active) {
+    intro.innerHTML = "Aucun compte pour l'instant : l'outil est accessible sans identifiant (ou avec le mot de passe unique des Réglages). "
+      + "<b>Crée ton compte administrateur</b> : dès lors, chaque technicien se connecte avec son identifiant, ses messages sont signés "
+      + "automatiquement et ses actions sont tracées dans le journal.";
+    $("#eqRole").value = "admin"; $("#eqRole").disabled = true;
+    $("#eqCreer").textContent = "Créer mon compte administrateur";
+  } else {
+    intro.textContent = MOI && MOI.role !== "admin" ? "Seul un administrateur peut gérer les comptes."
+      : "Administrateur : tout, dont crédits, factures, suppressions et réglages. Technicien : traitement des demandes et validation des inscriptions.";
+    $("#eqRole").disabled = false;
+    $("#eqCreer").textContent = "Créer le compte";
+  }
+  $("#fsEquipeListe").innerHTML = (d.techniciens || []).map(t => `<div class="job-row" data-tid="${t.id}">
+    <div class="job-main"><div class="job-top"><b>${esc(t.nom)}</b> <span class="muted small">${esc(t.identifiant)}</span>
+      <span class="badge ${t.role === "admin" ? "ok" : ""}">${t.role === "admin" ? "administrateur" : "technicien"}</span>
+      ${t.actif ? "" : '<span class="badge danger">désactivé</span>'}</div>
+      <div class="job-sub muted small">Dernière connexion : ${esc(t.derniere_connexion || "jamais")}</div></div>
+    <div class="inbox-actions">
+      <button class="ghost sm" data-eqrole="${t.role === "admin" ? "technicien" : "admin"}">${t.role === "admin" ? "Passer technicien" : "Passer admin"}</button>
+      <button class="ghost sm" data-eqactif="${t.actif ? 0 : 1}">${t.actif ? "Désactiver" : "Réactiver"}</button>
+      <button class="ghost sm" data-eqmdp="1">Nouveau mot de passe</button>
+    </div></div>`).join("");
+  window.fsEquipe = d.techniciens || [];
+}
+
+$("#eqCreer").onclick = async () => {
+  try {
+    const d = await postJSON("/equipe/creer", { identifiant: $("#eqId").value, nom: $("#eqNom").value,
+                                                role: $("#eqRole").value, mdp: $("#eqMdp").value });
+    $("#eqOut").textContent = d.premier ? "Compte administrateur créé : tu es connecté avec. Crée maintenant les comptes des techniciens."
+                                        : "Compte créé.";
+    ["#eqId", "#eqNom", "#eqMdp"].forEach(sel => { $(sel).value = ""; });
+    await initSession(); loadEquipe(); loadJournal();
+  } catch (err) { $("#eqOut").textContent = err.message; }
+};
+
+$("#fsEquipeListe").addEventListener("click", async e => {
+  const row = e.target.closest("[data-tid]");
+  if (!row || e.target.tagName !== "BUTTON") return;
+  const t = (window.fsEquipe || []).find(x => x.id === +row.dataset.tid);
+  if (!t) return;
+  const body = { id: t.id, nom: t.nom, role: t.role, actif: !!t.actif };
+  if (e.target.dataset.eqrole) body.role = e.target.dataset.eqrole;
+  if (e.target.dataset.eqactif) body.actif = e.target.dataset.eqactif === "1";
+  if (e.target.dataset.eqmdp) {
+    const mdp = prompt(`Nouveau mot de passe pour ${t.nom} (10 caractères minimum) :`);
+    if (!mdp) return;
+    body.mdp = mdp;
+  }
+  try { await postJSON("/equipe/modifier", body); $("#eqOut").textContent = "Compte mis à jour."; loadEquipe(); loadJournal(); }
+  catch (err) { $("#eqOut").textContent = err.message; }
+});
+
+async function loadJournal() {
+  const q = $("#jnQ").value.trim();
+  const d = await (await fetch("/equipe/journal?q=" + encodeURIComponent(q))).json();
+  $("#jnListe").innerHTML = d.journal.length ? `<table class="fs-table"><thead><tr><th>Date</th><th>Qui</th><th>Action</th><th>Sur</th><th>Détail</th></tr></thead><tbody>`
+    + d.journal.map(j => `<tr><td style="white-space:nowrap">${esc(j.date.slice(8, 10) + "/" + j.date.slice(5, 7) + " " + j.date.slice(11, 16))}</td>
+      <td>${esc(j.technicien || "—")}</td><td>${esc(j.action)}</td><td>${esc(j.cible)}</td><td>${esc(j.detail)}</td></tr>`).join("")
+    + "</tbody></table>" : "Aucune action enregistrée.";
+}
+$("#jnRefresh").onclick = loadJournal;
+$("#jnQ").addEventListener("change", loadJournal);
+
+initSession();
 

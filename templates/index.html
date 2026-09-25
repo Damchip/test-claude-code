@@ -263,7 +263,8 @@
       <div class="dash-head">
         <h2>Fileservice</h2>
         <span class="muted small" id="fsStats"></span>
-        <label class="muted small fs-sign">Signature <input type="text" id="fsAuteur" placeholder="ton prénom" maxlength="40"></label>
+        <button class="ghost sm fs-sign" id="fsNotifBtn" type="button" title="Son et notification Windows à chaque nouveau fichier ou message client">🔔 Alertes</button>
+        <label class="muted small" style="display:flex;align-items:center;gap:6px">Signature <input type="text" id="fsAuteur" placeholder="ton prénom" maxlength="40"></label>
       </div>
       <div class="fs-filters" id="fsFilters">
         <button class="ghost sm active" data-fsf="ouverts">À traiter</button>
@@ -288,8 +289,38 @@
         </div>
       </div>
 
+      <div class="dash-card" style="margin-top:22px" id="fsEquipe">
+        <h3 style="margin-top:0">Équipe de l'atelier</h3>
+        <p class="muted small" id="fsEquipeIntro"></p>
+        <div id="fsEquipeListe" class="jobs-list"></div>
+        <div class="patch-row fs-form" style="margin-top:10px;align-items:flex-end" id="fsEquipeForm">
+          <label>Identifiant <input type="text" id="eqId" placeholder="thomas" autocapitalize="off"></label>
+          <label>Nom affiché <input type="text" id="eqNom" placeholder="Thomas"></label>
+          <label>Rôle <select id="eqRole"><option value="technicien">Technicien</option><option value="admin">Administrateur</option></select></label>
+          <label>Mot de passe <input type="password" id="eqMdp" autocomplete="new-password" placeholder="10 caractères min."></label>
+          <button class="patchbtn sm" id="eqCreer">Créer le compte</button>
+        </div>
+        <div id="eqOut" class="muted small"></div>
+      </div>
+
+      <div class="dash-card" style="margin-top:22px">
+        <h3 style="margin-top:0">Journal des actions</h3>
+        <div class="patch-row"><input type="search" id="jnQ" placeholder="technicien, action, n° de demande, client…" style="flex:1">
+          <button class="ghost sm" id="jnRefresh">Actualiser</button></div>
+        <div id="jnListe" class="muted small" style="margin-top:8px"></div>
+      </div>
+
       <div class="dash-card" style="margin-top:22px" id="fsReglages">
         <h3 style="margin-top:0">Réglages du fileservice</h3>
+        <h4>Livraison automatique</h4>
+        <label class="muted small" style="display:flex;gap:8px;align-items:flex-start">
+          <input type="checkbox" id="fsAutoLivraison">
+          <span>Livrer <b>dès la réception</b> quand la bibliothèque a une solution de même stock pour chaque prestation,
+            que le patch est « propre » et les checksums prêts (sinon la demande arrive normalement dans la file).
+            Sans cette case, utilise le bouton « ⚡ Livrer en un clic » de chaque demande.</span>
+        </label>
+        <h4>Remises par niveau de client <span class="muted small">(sur les prestations ; le niveau se choisit dans l'onglet Clients)</span></h4>
+        <div class="patch-row fs-form" id="fsRemises"></div>
         <h4>Identité légale (affichée sur les factures et la page Support)</h4>
         <div class="patch-row fs-form" id="fsSociete"></div>
         <h4>Horaires d'ouverture <span class="muted small">(laisser vide = fermé)</span></h4>

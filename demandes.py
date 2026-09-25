@@ -137,12 +137,14 @@ def _decoder(row):
 # --- Création ----------------------------------------------------------------
 
 def creer(db_path, files_dir, client_id, *, categorie, prestations, siege=False, garantie="",
-          retour="", vehicule=None, lecture=None, commentaire="", fichier_nom, contenu, detection=None):
+          retour="", vehicule=None, lecture=None, commentaire="", fichier_nom, contenu, detection=None,
+          remise=0, niveau=""):
     if not contenu:
         raise ErreurCompte("Le fichier est vide.")
     if len(contenu) > TAILLE_MAX:
         raise ErreurCompte("Fichier trop volumineux (64 Mo maximum).")
-    devis = catalogue.devis(categorie, prestations, siege=siege, garantie=garantie or None)
+    devis = catalogue.devis(categorie, prestations, siege=siege, garantie=garantie or None,
+                            remise=remise, niveau=niveau)
     if devis["erreur"]:
         raise ErreurCompte(devis["erreur"])
     if not prestations or not devis["lignes"]:
@@ -176,7 +178,7 @@ def creer(db_path, files_dir, client_id, *, categorie, prestations, siege=False,
         numero = f"F-{did:05d}"
         con.execute("UPDATE demandes SET numero = ? WHERE id = ?", (numero, did))
         con.execute("UPDATE clients SET credits = credits - ? WHERE id = ?", (total, client_id))
-        libelle = f"Fichier {numero} · " + " + ".join(l["nom"] for l in devis["lignes"])
+        libelle = f"Fichier {numero} · " + " + ".join(l["nom"] for l in devis["lignes"] if l["credits"] > 0)
         con.execute("INSERT INTO mouvements (client_id, date, libelle, montant) VALUES (?, ?, ?, ?)",
                     (client_id, now, libelle[:200], -total))
         dossier = _dossier(files_dir, did)
@@ -433,4 +435,17 @@ def anonymiser_client(db_path, files_dir, client_id):
     for did in ids:
         shutil.rmtree(os.path.join(files_dir, str(int(did))), ignore_errors=True)
     return len(ids)
+
+
+def alertes(db_path):
+    """Instantané léger pour les alertes de l'outil interne (interrogé toutes les ~20 s)."""
+    with connect(db_path) as con:
+        r = con.execute(
+            "SELECT (SELECT COALESCE(MAX(id), 0) FROM demandes) AS derniere_demande,"
+            " (SELECT COALESCE(MAX(id), 0) FROM messages WHERE auteur = 'client') AS dernier_message,"
+            " (SELECT COUNT(*) FROM demandes WHERE statut IN ('recu', 'en_cours')) AS a_traiter,"
+            " (SELECT COUNT(*) FROM messages m JOIN demandes d ON d.id = m.demande_id"
+            "   WHERE m.auteur = 'client' AND m.lu = 0 AND d.statut != 'refuse') AS non_lus,"
+            " (SELECT COUNT(*) FROM clients WHERE statut = 'en_attente') AS inscriptions").fetchone()
+        return dict(r)
 

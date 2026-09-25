@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>Bonjour {{ user.contact.split(' ')[0] }}</h1>
-    <p>{{ user.company }} · compte {{ user.level }}</p>
+    <p>{{ user.company }} · compte {{ user.level }}{% if remise %} · <span class="amount-plus">−{{ '%g'|format(remise) }} % sur vos prestations</span>{% endif %}</p>
   </div>
   <a class="btn btn-primary btn-lg" href="{{ url_for('fs.new_file') }}">{{ icon('upload') }} Envoyer un fichier</a>
 </div>
