@@ -29,7 +29,9 @@ from matcher import db, engine
 import comptes
 import demandes
 import factures
+import api
 import fileservice
+import relances
 
 APP_VERSION = "1.54.1"
 
@@ -155,7 +157,10 @@ app.config["FS_DETECT"] = _detecter
 app.config["FS_SOLUTIONS_DB"] = DB_PATH   # bibliothèque (lecture) pour la livraison automatique
 demandes.init_db(app.config["FS_DB"])
 factures.init_db(app.config["FS_DB"])
+relances.init_db(app.config["FS_DB"])
+api.init_db(app.config["FS_DB"])
 app.register_blueprint(fileservice.bp)
+app.register_blueprint(api.bp)
 
 
 def _safe_next(raw, fallback):
@@ -174,7 +179,7 @@ def _maybe_require_login():
     cfg = load_config()
     if not cfg.get("access_password_hash"):
         return None
-    if request.endpoint in ("portal_login", "static", "espace_legacy") or (request.endpoint or "").startswith("fs."):
+    if request.endpoint in ("portal_login", "static", "espace_legacy") or (request.endpoint or "").startswith(("fs.", "api.")):
         return None   # l'espace client a ses propres comptes
     if session.get("authed"):
         return None
@@ -398,16 +403,24 @@ def order():
 
 
 def _sauvegardes_quotidiennes():
-    """Sauvegarde la base du fileservice au démarrage puis toutes les 24 h (fil en arrière-plan)."""
+    """Fil en arrière-plan : sauvegarde de la base au démarrage puis toutes les 24 h,
+    relances automatiques toutes les heures."""
     import threading
 
     def boucle():
+        derniere_sauvegarde = 0
         while True:
+            if time.time() - derniere_sauvegarde >= 24 * 3600:
+                try:
+                    comptes.sauvegarder(app.config["FS_DB"])
+                    derniere_sauvegarde = time.time()
+                except Exception as e:   # une sauvegarde ratée ne doit jamais arrêter le portail
+                    print(f"  ⚠ Sauvegarde du fileservice impossible : {e}")
             try:
-                comptes.sauvegarder(app.config["FS_DB"])
-            except Exception as e:   # une sauvegarde ratée ne doit jamais arrêter le portail
-                print(f"  ⚠ Sauvegarde du fileservice impossible : {e}")
-            time.sleep(24 * 3600)
+                fileservice.executer_relances(app, f"http://127.0.0.1:{os.environ.get('PORT', '5001')}")
+            except Exception as e:
+                print(f"  ⚠ Relances automatiques impossibles : {e}")
+            time.sleep(3600)
 
     threading.Thread(target=boucle, name="sauvegardes-fileservice", daemon=True).start()
 

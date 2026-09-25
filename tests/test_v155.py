@@ -225,3 +225,114 @@ class RemisesTests(unittest.TestCase):
             self.assertEqual(demandes.get(db, did)["total"], 47)
             self.assertEqual(comptes.get_client(db, cid)["credits"], 200 - 47)
             self.assertNotIn("Remise", comptes.mouvements(db, cid)[0]["libelle"])
+
+
+class RelancesTests(unittest.TestCase):
+    def test_solde_bas_et_fichier_non_telecharge(self):
+        import datetime as dt
+        import relances
+        with tempfile.TemporaryDirectory() as t:
+            db = _base(t)
+            files = os.path.join(t, "f")
+            cid = _client(db, credits=60)
+            envoyes = []
+            run = lambda cfg={}, **kw: relances.verifier(db, cfg, lambda a, s, x: envoyes.append((a, s, x)),
+                                                        lambda p: "https://portail.fr" + p, **kw)
+            self.assertEqual(run(), [])                                  # 60 >= 50 : rien
+            did = _creer(db, files, cid)                                 # -59 -> 1 crédit
+            self.assertEqual([r[0] for r in run()], ["solde_bas"])
+            self.assertIn("https://portail.fr/credits", envoyes[-1][2])
+            self.assertEqual(run(), [])                                  # une seule fois
+            comptes.mouvement(db, cid, 100, "recharge")
+            run()                                                        # au-dessus du seuil : ré-armé
+            comptes.mouvement(db, cid, -100, "conso")
+            self.assertEqual([r[0] for r in run()], ["solde_bas"])
+
+            demandes.livrer(db, files, did, "mod.bin", b"\x02")
+            self.assertEqual(run(), [])                                  # livré à l'instant : trop tôt
+            plus_tard = dt.datetime.now() + dt.timedelta(hours=49)
+            self.assertEqual([r[0] for r in run(maintenant=plus_tard)], ["non_telecharge"])
+            self.assertIn("/fichiers/F-", envoyes[-1][2])
+            self.assertEqual(run(maintenant=plus_tard), [])
+            demandes.livrer(db, files, did, "mod.bin", b"\x03")          # nouvelle version : nouveau rappel possible
+            self.assertEqual(len(run(maintenant=plus_tard + dt.timedelta(hours=49))), 1)
+            self.assertEqual(run({"relances": {"solde_bas": False, "non_telecharge": False}},
+                                 maintenant=plus_tard + dt.timedelta(days=9)), [])
+
+
+class ApiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import portal
+        cls.portal = portal
+
+    def setUp(self):
+        import api
+        self.api = api
+        self.tmp = tempfile.TemporaryDirectory()
+        t = self.tmp.name
+        self.sol_db, self.raw, _ = bibliotheque(t)
+        app = self.portal.app
+        self.cfg = os.path.join(t, "portal_config.json")
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            json.dump({"api_active": True}, fh)
+        self.saved = {k: app.config.get(k) for k in ("FS_DB", "FS_FILES", "FS_DATA_DIR", "FS_CONFIG", "FS_SOLUTIONS_DB", "FS_DETECT")}
+        app.config.update(FS_DB=_base(t), FS_FILES=os.path.join(t, "fichiers"), FS_DATA_DIR=t, FS_CONFIG=self.cfg,
+                          FS_SOLUTIONS_DB=self.sol_db, FS_DETECT=None)
+        api.init_db(app.config["FS_DB"])
+        self.db = app.config["FS_DB"]
+        self.cid = _client(self.db)
+        self.cle = api.creer_cle(self.db, self.cid, "test")
+        self.c = app.test_client()
+
+    def tearDown(self):
+        self.portal.app.config.update(self.saved)
+        self.tmp.cleanup()
+
+    def _h(self, cle=None):
+        return {"Authorization": "Bearer " + (cle or self.cle)}
+
+    def test_auth(self):
+        self.assertEqual(self.c.get("/api/v1/compte").status_code, 401)               # sans clé
+        self.assertEqual(self.c.get("/api/v1/compte", headers=self._h("e85_faux")).status_code, 401)
+        r = self.c.get("/api/v1/compte", headers=self._h())
+        self.assertEqual(r.get_json()["credits"], 200)
+        # API désactivée -> 403 même avec une clé valide
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            json.dump({"api_active": False}, fh)
+        self.assertEqual(self.c.get("/api/v1/compte", headers=self._h()).status_code, 403)
+
+    def test_cycle_complet(self):
+        d = self.c.get("/api/v1/catalogue", headers=self._h()).get_json()
+        self.assertTrue(any(p["code"] == "stage1" for p in d["categories"][0]["prestations"]))
+        dv = self.c.post("/api/v1/devis", json={"categorie": "vl", "prestations": ["stage1", "e85"]}, headers=self._h())
+        self.assertEqual(dv.get_json()["total"], 99)
+
+        r = self.c.post("/api/v1/demandes", headers=self._h(), data={
+            "categorie": "vl", "prestations": "stage1", "marque": "Audi", "modele": "A3",
+            "file": (io.BytesIO(self.raw), "ori.bin")}, content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 201)
+        j = r.get_json()
+        numero = j["demande"]["numero"]
+        self.assertEqual(j["credits_restants"], 200 - 59)
+        self.assertEqual(demandes.get(self.db, demandes.get_par_numero(self.db, numero)["id"])["client_id"], self.cid)
+
+        self.assertEqual(self.c.get("/api/v1/demandes", headers=self._h()).get_json()["demandes"][0]["numero"], numero)
+        self.assertEqual(self.c.get(f"/api/v1/demandes/{numero}/original", headers=self._h()).data, self.raw)
+        self.assertEqual(self.c.post(f"/api/v1/demandes/{numero}/messages", json={"texte": "Bonjour"},
+                                     headers=self._h()).status_code, 201)
+        did = demandes.get_par_numero(self.db, numero)["id"]
+        demandes.livrer(self.db, self.portal.app.config["FS_FILES"], did, "mod.bin", b"\x09" * 50)
+        det = self.c.get(f"/api/v1/demandes/{numero}", headers=self._h()).get_json()
+        self.assertEqual(det["livrables"][0]["version"], 1)
+        self.assertEqual(self.c.get(det["livrables"][0]["url"], headers=self._h()).data, b"\x09" * 50)
+        self.assertIsNotNone(demandes.get(self.db, did)["telecharge_le"])
+
+    def test_isolation_et_revocation(self):
+        autre = _client(self.db, email="autre@garage.fr")
+        did = _creer(self.db, self.portal.app.config["FS_FILES"], autre)
+        num = demandes.get(self.db, did)["numero"]
+        self.assertEqual(self.c.get(f"/api/v1/demandes/{num}", headers=self._h()).status_code, 404)  # pas mes demandes
+        cle_id = self.api.lister_cles(self.db, self.cid)[0]["id"]
+        self.api.revoquer_cle(self.db, self.cid, cle_id)
+        self.assertEqual(self.c.get("/api/v1/compte", headers=self._h()).status_code, 401)

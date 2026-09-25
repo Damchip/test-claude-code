@@ -30,6 +30,7 @@ import factures
 import livraison_auto
 import mailer
 import pages_legales
+import relances
 import stripe_api
 
 app = Flask(__name__)
@@ -873,7 +874,9 @@ def fs_reglages_get():
                                "webhook_secret_set": bool(stripe.get("webhook_secret"))},
                     "public_url": cfg.get("public_url", ""),
                     "livraison_auto": bool(cfg.get("livraison_auto")),
+                    "api_active": bool(cfg.get("api_active")),
                     "remises": catalogue.remises(cfg),
+                    "relances": relances.reglages(cfg),
                     "pages": {k: {"titre": t, "texte": pages_legales.texte(cfg, k),
                                   "a_completer": pages_legales.a_completer(cfg, k)}
                               for k, t in pages_legales.PAGES.items()}})
@@ -913,6 +916,15 @@ def fs_reglages_set():
         cfg["stripe"] = stripe
     if "livraison_auto" in b:
         cfg["livraison_auto"] = bool(b.get("livraison_auto"))
+    if "api_active" in b:
+        cfg["api_active"] = bool(b.get("api_active"))
+    if isinstance(b.get("relances"), dict):
+        rr = b["relances"]
+        try:
+            cfg["relances"] = {"solde_bas": bool(rr.get("solde_bas")), "non_telecharge": bool(rr.get("non_telecharge")),
+                               "seuil": max(0, int(rr.get("seuil", 50))), "delai_h": max(1, int(rr.get("delai_h", 48)))}
+        except (TypeError, ValueError):
+            return jsonify({"error": "Relances : seuil et délai doivent être des nombres entiers."}), 400
     if isinstance(b.get("remises"), dict):
         rem = {}
         for k, v in b["remises"].items():

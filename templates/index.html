@@ -319,6 +319,19 @@
             que le patch est « propre » et les checksums prêts (sinon la demande arrive normalement dans la file).
             Sans cette case, utilise le bouton « ⚡ Livrer en un clic » de chaque demande.</span>
         </label>
+        <h4>API revendeurs</h4>
+        <label class="muted small" style="display:flex;gap:8px;align-items:flex-start">
+          <input type="checkbox" id="fsApiActive">
+          <span>Autoriser les clients à connecter leur logiciel (clés générées dans leur espace, Paramètres → API revendeur).
+            Documentation visible par le client sur <code>/parametres/api</code>.</span>
+        </label>
+        <h4>Relances automatiques par e-mail</h4>
+        <div class="patch-row fs-form" style="align-items:flex-end">
+          <label class="muted small" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" id="rlSolde"> Solde bas sous</label>
+          <label><span><input type="text" id="rlSeuil" style="width:60px"> crédits</span></label>
+          <label class="muted small" style="flex-direction:row;gap:6px;align-items:center;margin-left:16px"><input type="checkbox" id="rlDl"> Fichier prêt non téléchargé après</label>
+          <label><span><input type="text" id="rlDelai" style="width:60px"> heures</span></label>
+        </div>
         <h4>Remises par niveau de client <span class="muted small">(sur les prestations ; le niveau se choisit dans l'onglet Clients)</span></h4>
         <div class="patch-row fs-form" id="fsRemises"></div>
         <h4>Identité légale (affichée sur les factures et la page Support)</h4>

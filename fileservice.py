@@ -25,6 +25,7 @@ import factures
 import livraison_auto
 import mailer
 import pages_legales
+import relances
 import stripe_api
 
 bp = Blueprint("fs", __name__)
@@ -338,42 +339,55 @@ def dashboard():
 
 # --- Envoi d'un fichier ------------------------------------------------------
 
+CHAMPS_VEHICULE = ("marque", "modele", "moteur", "annee", "boite", "km", "vin", "immat")
+CHAMPS_LECTURE = ("outil", "ecu", "methode")
+
+
+def creer_demande(champs, prestations, fichier_nom, contenu, source="site"):
+    """Crée une demande pour le client connecté (g.client) : site et API passent par ici.
+    Lève ErreurCompte. Renvoie (demande, livree_automatiquement)."""
+    detection = {}
+    detect = current_app.config.get("FS_DETECT")
+    if detect and contenu:
+        try:
+            detection = detect(contenu, fichier_nom or "") or {}
+        except Exception:
+            current_app.logger.exception("Détection du calculateur impossible")
+    did = demandes.creer(
+        _db(), _files(), g.client["id"], categorie=champs.get("categorie", ""), prestations=prestations,
+        siege=bool(champs.get("siege")), garantie=champs.get("garantie", ""), retour=champs.get("retour", ""),
+        vehicule={k: champs.get(k, "") for k in CHAMPS_VEHICULE},
+        lecture={k: champs.get(k, "") for k in CHAMPS_LECTURE},
+        commentaire=champs.get("comment", "") or champs.get("commentaire", ""), fichier_nom=fichier_nom or "",
+        contenu=contenu, detection=detection, **_remise_client())
+    d = demandes.get(_db(), did)
+    livre = _livraison_auto_reception(d, contenu)
+    veh = " ".join(v for v in (d["vehicule"].get("marque"), d["vehicule"].get("modele"),
+                               d["vehicule"].get("moteur")) if v)
+    _mail_atelier(f"Nouveau fichier {d['numero']} · {g.client['societe']}" + (" (API)" if source == "api" else ""),
+                  f"Client : {g.client['societe']} ({g.client['email']})\nVéhicule : {veh or '—'}\n"
+                  f"Calculateur : {d['lecture'].get('ecu') or d['detection'].get('plateforme') or '—'}\n"
+                  f"Prestations : {' + '.join(l['nom'] for l in d['lignes'])}\nCrédits : {d['total']}\n"
+                  f"Commentaire : {d['commentaire'] or '—'}\n\n"
+                  + ("Livré AUTOMATIQUEMENT (solution même stock, patch propre)." if livre else
+                     "À traiter dans l'outil interne, onglet Fileservice."))
+    try:
+        executer_relances(current_app._get_current_object(), request.host_url)   # solde bas éventuel
+    except Exception:
+        current_app.logger.exception("Relances impossibles")
+    return demandes.get(_db(), did), livre
+
+
 @bp.route("/nouveau", methods=["GET", "POST"])
 def new_file():
     if request.method == "POST":
         f = request.files.get("file")
-        contenu = f.read() if f else b""
-        form = request.form
-        vehicule = {k: form.get(k, "") for k in ("marque", "modele", "moteur", "annee", "boite", "km", "vin", "immat")}
-        lecture = {k: form.get(k, "") for k in ("outil", "ecu", "methode")}
-        detection = {}
-        detect = current_app.config.get("FS_DETECT")
-        if detect and contenu:
-            try:
-                detection = detect(contenu, f.filename or "") or {}
-            except Exception:
-                current_app.logger.exception("Détection du calculateur impossible")
         try:
-            did = demandes.creer(
-                _db(), _files(), g.client["id"], categorie=form.get("categorie", ""),
-                prestations=form.getlist("prestas"), siege=bool(form.get("siege")),
-                garantie=form.get("garantie", ""), retour=form.get("retour", ""), vehicule=vehicule,
-                lecture=lecture, commentaire=form.get("comment", ""), fichier_nom=f.filename if f else "",
-                contenu=contenu, detection=detection, **_remise_client())
+            d, livre = creer_demande(request.form, request.form.getlist("prestas"),
+                                     f.filename if f else "", f.read() if f else b"")
         except comptes.ErreurCompte as e:
             flash(str(e), "erreur")
             return redirect(url_for("fs.new_file"))
-        d = demandes.get(_db(), did)
-        livre = _livraison_auto_reception(d, contenu)
-        veh = " ".join(v for v in (d["vehicule"].get("marque"), d["vehicule"].get("modele"),
-                                   d["vehicule"].get("moteur")) if v)
-        _mail_atelier(f"Nouveau fichier {d['numero']} · {g.client['societe']}",
-                      f"Client : {g.client['societe']} ({g.client['email']})\nVéhicule : {veh or '—'}\n"
-                      f"Calculateur : {d['lecture'].get('ecu') or d['detection'].get('plateforme') or '—'}\n"
-                      f"Prestations : {' + '.join(l['nom'] for l in d['lignes'])}\nCrédits : {d['total']}\n"
-                      f"Commentaire : {d['commentaire'] or '—'}\n\n"
-                      + ("Livré AUTOMATIQUEMENT (solution même stock, patch propre)." if livre else
-                         "À traiter dans l'outil interne, onglet Fileservice."))
         if livre:
             flash(f"Demande {d['numero']} : votre fichier est déjà prêt ! {d['total']} crédits débités.")
         else:
@@ -657,6 +671,29 @@ def settings_export():
     return resp
 
 
+@bp.route("/parametres/api", methods=["GET", "POST"])
+def settings_api():
+    """Clés d'API revendeur du client (création : la clé n'est affichée qu'une fois)."""
+    import api
+    api_active = bool(reglages().get("api_active"))
+    nouvelle = None
+    if request.method == "POST":
+        try:
+            if request.form.get("action") == "revoquer":
+                api.revoquer_cle(_db(), g.client["id"], int(request.form.get("id") or 0))
+                flash("Clé révoquée : elle ne fonctionne plus.")
+                return redirect(url_for("fs.settings_api"))
+            if not api_active:
+                raise comptes.ErreurCompte("L'API n'est pas activée par l'atelier.")
+            nouvelle = api.creer_cle(_db(), g.client["id"], request.form.get("nom", ""))
+        except comptes.ErreurCompte as e:
+            flash(str(e), "erreur")
+            return redirect(url_for("fs.settings_api"))
+    base = (current_app.config.get("FS_PUBLIC_URL") or reglages().get("public_url") or request.host_url).rstrip("/")
+    return render_template("fs/api.html", nav="settings", cles=api.lister_cles(_db(), g.client["id"]),
+                           nouvelle=nouvelle, api_active=api_active, base=base, categories=catalogue.CATEGORIES)
+
+
 @bp.route("/support")
 def support():
     return render_template("fs/support.html", nav="support", hours=hours_table(),
@@ -669,4 +706,18 @@ def legal(cle):
         abort(404)
     return render_template("fs/legal.html", cle=cle, titre=pages_legales.PAGES[cle],
                            contenu=pages_legales.rendre(reglages(), cle), pages=pages_legales.PAGES)
+
+
+def executer_relances(app, base_url=""):
+    """Relances automatiques (solde bas, fichier non téléchargé). Utilisable hors requête."""
+    with app.app_context():
+        cfg = mailer.lire_config(app.config["FS_CONFIG"])
+        base = (app.config.get("FS_PUBLIC_URL") or cfg.get("public_url") or base_url or "").rstrip("/")
+        nom = cfg.get("shop_name") or "E85-FRANCE"
+
+        def envoyer(a, sujet, texte):
+            mailer.envoyer(cfg.get("smtp") or {}, a, sujet, texte, nom_expediteur=nom,
+                           journal_dir=app.config["FS_DATA_DIR"])
+
+        return relances.verifier(app.config["FS_DB"], cfg, envoyer, lambda chemin: base + chemin, nom)
 

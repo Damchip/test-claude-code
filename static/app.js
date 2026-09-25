@@ -3545,6 +3545,9 @@ async function loadFsReglages() {
     <textarea data-page="${k}" rows="14" style="margin-top:6px;font-family:var(--mono);font-size:12px">${esc(p.texte)}</textarea>
   </details>`).join("");
   $("#fsAutoLivraison").checked = !!d.livraison_auto;
+  $("#fsApiActive").checked = !!d.api_active;
+  $("#rlSolde").checked = !!d.relances.solde_bas; $("#rlSeuil").value = d.relances.seuil;
+  $("#rlDl").checked = !!d.relances.non_telecharge; $("#rlDelai").value = d.relances.delai_h;
   $("#fsRemises").innerHTML = Object.entries(d.remises).map(([n, v]) =>
     `<label>${esc(n)} <span><input type="text" data-remise="${esc(n)}" value="${v}" style="width:60px"> %</span></label>`).join("")
     + `<label>Nouveau niveau <span><input type="text" id="fsNiveauNom" placeholder="ex : Revendeur" style="width:110px">
@@ -3599,7 +3602,9 @@ $("#fsSaveReglages").onclick = async () => {
     const remises = {};
     document.querySelectorAll("[data-remise]").forEach(i => { remises[i.dataset.remise] = i.value; });
     if ($("#fsNiveauNom").value.trim()) remises[$("#fsNiveauNom").value.trim()] = $("#fsNiveauPct").value || "0";
-    await postJSON("/fs/reglages", { societe, horaires, pages, remises, livraison_auto: $("#fsAutoLivraison").checked, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
+    const relances = { solde_bas: $("#rlSolde").checked, seuil: $("#rlSeuil").value,
+                       non_telecharge: $("#rlDl").checked, delai_h: $("#rlDelai").value };
+    await postJSON("/fs/reglages", { societe, horaires, pages, remises, relances, livraison_auto: $("#fsAutoLivraison").checked, api_active: $("#fsApiActive").checked, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
     $("#fsReglagesOut").textContent = "Réglages enregistrés.";
     loadFsReglages();
   } catch (err) { $("#fsReglagesOut").textContent = err.message; }
