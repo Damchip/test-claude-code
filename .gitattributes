@@ -1,0 +1,5 @@
+# Exclus du zip de release (git archive) : inutiles pour faire tourner l'application
+.github/ export-ignore
+tests/ export-ignore
+docs/ export-ignore
+.gitattributes export-ignore

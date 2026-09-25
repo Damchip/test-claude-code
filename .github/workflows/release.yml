@@ -1,0 +1,47 @@
+# Publie une release GitHub à chaque tag vX.Y.Z poussé :
+# tests, zip prêt à l'emploi (dossier carto_matcher/), notes tirées du CHANGELOG.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dépendances
+        run: pip install -r requirements.txt
+
+      - name: Tests
+        run: python -m unittest discover -s tests
+
+      - name: Zip et notes de version
+        run: |
+          V="${GITHUB_REF_NAME}"
+          git archive --format=zip --prefix=carto_matcher/ -o "carto_matcher_${V}.zip" HEAD
+          {
+            echo "## Installation"
+            echo "1. Décompresse le zip, puis **recopie ton dossier \`data/\` actuel** dans \`carto_matcher/\` (bibliothèque de solutions et réglages)."
+            echo "2. Lance « Lancer Carto Matcher.bat » (outil interne, port 5000) et « Lancer le portail client.bat » (portail + espace client, port 5001)."
+            echo "3. Mise en service du fileservice : voir la section « Fileservice » du README."
+            echo
+            awk -v v="## ${V}" 'index($0, v) == 1 {p = 1} p && /^## v/ && index($0, v) != 1 {exit} p' CHANGELOG.md
+          } > notes.md
+          cat notes.md
+
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" "carto_matcher_${GITHUB_REF_NAME}.zip" \
+            --title "Carto Matcher ${GITHUB_REF_NAME}" --notes-file notes.md --verify-tag
