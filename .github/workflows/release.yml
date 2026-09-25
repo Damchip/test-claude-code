@@ -1,10 +1,18 @@
-# Publie une release GitHub à chaque tag vX.Y.Z poussé :
-# tests, zip prêt à l'emploi (dossier carto_matcher/), notes tirées du CHANGELOG.
+# Publie une release GitHub : tests, zip prêt à l'emploi (dossier carto_matcher/),
+# notes tirées du CHANGELOG.
+#   - automatiquement quand un tag vX.Y.Z est poussé ;
+#   - ou à la main : Actions → Release → Run workflow, en indiquant la version (ex. v1.54.0) ;
+#     le tag est alors créé par GitHub sur le commit choisi.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier (ex. v1.54.0) — doit avoir sa section dans CHANGELOG.md"
+        required: true
 
 permissions:
   contents: write
@@ -25,9 +33,17 @@ jobs:
       - name: Tests
         run: python -m unittest discover -s tests
 
+      - name: Version
+        env:
+          VERSION_DEMANDEE: ${{ github.event.inputs.version || github.ref_name }}
+        run: |
+          V="$VERSION_DEMANDEE"
+          [[ "$V" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version invalide : $V (attendu vX.Y.Z)"; exit 1; }
+          grep -q "^## ${V}\$" CHANGELOG.md || { echo "Pas de section « ## ${V} » dans CHANGELOG.md"; exit 1; }
+          echo "V=$V" >> "$GITHUB_ENV"
+
       - name: Zip et notes de version
         run: |
-          V="${GITHUB_REF_NAME}"
           git archive --format=zip --prefix=carto_matcher/ -o "carto_matcher_${V}.zip" HEAD
           {
             echo "## Installation"
@@ -43,5 +59,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" "carto_matcher_${GITHUB_REF_NAME}.zip" \
-            --title "Carto Matcher ${GITHUB_REF_NAME}" --notes-file notes.md --verify-tag
+          gh release create "${V}" "carto_matcher_${V}.zip" \
+            --title "Carto Matcher ${V}" --notes-file notes.md --target "${GITHUB_SHA}"
