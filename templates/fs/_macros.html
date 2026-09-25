@@ -6,11 +6,11 @@
 {{ [f.vehicule.moteur, f.vehicule.annee]|select|join(' · ') }}
 {%- endmacro -%}
 {%- macro calculateur(f) -%}
-{{ f.lecture.ecu or f.detection.plateforme or 'Calculateur à identifier' }}
+{{ f.lecture.ecu or f.detection.plateforme or t('Calculateur à identifier') }}
 {%- endmacro -%}
 {%- macro prestas(f) -%}
-{% for l in f.lignes if l.credits > 0 %}<span class="tag">{{ l.nom }}</span>{% endfor %}
+{% for l in f.lignes if l.credits > 0 %}<span class="tag">{{ t(l.nom) }}</span>{% endfor %}
 {%- endmacro -%}
 {%- macro badge(f) -%}
-<span class="badge {{ f.statut }}">{{ f.statut_label }}</span>
+<span class="badge {{ f.statut }}">{{ t(f.statut_label) }}</span>
 {%- endmacro -%}

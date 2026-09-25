@@ -1,11 +1,11 @@
 {% from "fs/_icons.html" import icon %}
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ langue }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>{% block title %}Espace client{% endblock %} · {{ shop.name }}</title>
+  <title>{% block title %}{{ t('Espace client') }}{% endblock %} · {{ shop.name }}</title>
   <script>try { var t = localStorage.getItem('fs-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon.png') }}">
   <link rel="preload" href="{{ url_for('static', filename='fonts/inter-400.woff2') }}" as="font" type="font/woff2" crossorigin>
@@ -17,26 +17,26 @@
   <aside class="side" id="side">
     <a class="brand" href="{{ url_for('fs.dashboard') }}">
       <img class="brand-mark" src="{{ url_for('static', filename='brand/badge.png') }}" alt="" width="38" height="38">
-      <span><span class="brand-name">{{ shop.name }}</span><span class="brand-sub">File service</span></span>
+      <span><span class="brand-name">{{ shop.name }}</span><span class="brand-sub">{{ t('File service') }}</span></span>
     </a>
 
     <nav class="nav" aria-label="Navigation principale">
-      <a href="{{ url_for('fs.dashboard') }}" class="{{ 'active' if nav == 'dashboard' }}">{{ icon('home') }} Tableau de bord</a>
-      <a href="{{ url_for('fs.new_file') }}" class="{{ 'active' if nav == 'new' }}">{{ icon('upload') }} Nouveau fichier</a>
-      <a href="{{ url_for('fs.files') }}" class="{{ 'active' if nav == 'files' }}">{{ icon('files') }} Mes fichiers <span class="count">{{ user.open_count }}</span></a>
-      <div class="nav-label">Compte</div>
-      <a href="{{ url_for('fs.credits') }}" class="{{ 'active' if nav == 'credits' }}">{{ icon('coins') }} Crédits &amp; factures</a>
-      <a href="{{ url_for('fs.support') }}" class="{{ 'active' if nav == 'support' }}">{{ icon('help') }} Support</a>
-      <a href="{{ url_for('fs.settings') }}" class="{{ 'active' if nav == 'settings' }}">{{ icon('settings') }} Paramètres</a>
+      <a href="{{ url_for('fs.dashboard') }}" class="{{ 'active' if nav == 'dashboard' }}">{{ icon('home') }} {{ t('Tableau de bord') }}</a>
+      <a href="{{ url_for('fs.new_file') }}" class="{{ 'active' if nav == 'new' }}">{{ icon('upload') }} {{ t('Nouveau fichier') }}</a>
+      <a href="{{ url_for('fs.files') }}" class="{{ 'active' if nav == 'files' }}">{{ icon('files') }} {{ t('Mes fichiers') }} <span class="count">{{ user.open_count }}</span></a>
+      <div class="nav-label">{{ t('Compte') }}</div>
+      <a href="{{ url_for('fs.credits') }}" class="{{ 'active' if nav == 'credits' }}">{{ icon('coins') }} {{ t('Crédits & factures') }}</a>
+      <a href="{{ url_for('fs.support') }}" class="{{ 'active' if nav == 'support' }}">{{ icon('help') }} {{ t('Support') }}</a>
+      <a href="{{ url_for('fs.settings') }}" class="{{ 'active' if nav == 'settings' }}">{{ icon('settings') }} {{ t('Paramètres') }}</a>
     </nav>
 
     <div class="side-foot">
       <div class="side-cta">
-        <strong>Besoin d'aide ?</strong>
-        <p>Posez votre question directement dans la demande concernée, ou contactez l'atelier.</p>
-        <a class="btn btn-sm btn-block" href="{{ url_for('fs.support') }}">{{ icon('message', 'icon-sm') }} Contacter l'atelier</a>
+        <strong>{{ t("Besoin d'aide ?") }}</strong>
+        <p>{{ t("Posez votre question directement dans la demande concernée, ou contactez l'atelier.") }}</p>
+        <a class="btn btn-sm btn-block" href="{{ url_for('fs.support') }}">{{ icon('message', 'icon-sm') }} {{ t("Contacter l'atelier") }}</a>
       </div>
-      <p class="side-legal"><a href="{{ url_for('fs.legal', cle='cgv') }}">CGV</a> · <a href="{{ url_for('fs.legal', cle='mentions-legales') }}">Mentions légales</a> · <a href="{{ url_for('fs.legal', cle='confidentialite') }}">Confidentialité</a></p>
+      <p class="side-legal"><a href="{{ url_for('fs.legal', cle='cgv') }}">{{ t('CGV') }}</a> · <a href="{{ url_for('fs.legal', cle='mentions-legales') }}">{{ t('Mentions légales') }}</a> · <a href="{{ url_for('fs.legal', cle='confidentialite') }}">{{ t('Confidentialité') }}</a></p>
     </div>
   </aside>
   <div class="scrim" data-close-nav></div>
@@ -46,21 +46,22 @@
       <button class="icon-btn menu-btn" type="button" data-open-nav aria-label="Ouvrir le menu">{{ icon('menu') }}</button>
       <span class="status-pill">
         <span class="dot {{ 'on' if service.open else 'off' }}"></span>
-        {% if service.open %}Service ouvert
-        {% else %}Service fermé<span class="hide-sm"> · {{ service.next_open }}</span>{% endif %}
+        {% if service.open %}{{ t('Service ouvert') }}
+        {% else %}{{ t('Service fermé') }}<span class="hide-sm"> · {{ service.next_open }}</span>{% endif %}
       </span>
       <span class="top-spacer"></span>
       <a class="credit-chip" href="{{ url_for('fs.credits') }}" title="Recharger">
-        <span class="num">{{ user.credits }}</span><span class="muted small hide-sm">crédits</span>
+        <span class="num">{{ user.credits }}</span><span class="muted small hide-sm">{{ t('crédits') }}</span>
         <span class="plus">{{ icon('plus', 'icon-sm') }}</span>
       </a>
+      <div class="lang-switch hide-sm">{% for code, nom in langues.items() %}<a href="{{ url_for('fs.set_langue', code=code, next=request.full_path) }}" class="{{ 'on' if code == langue }}">{{ code|upper }}</a>{% endfor %}</div>
       <button class="icon-btn hide-sm" type="button" data-theme-toggle aria-label="Changer de thème">
         <span class="ti-sun">{{ icon('sun') }}</span><span class="ti-moon">{{ icon('moon') }}</span>
       </button>
       <form method="post" action="{{ url_for('fs.logout') }}" class="logout-form">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
         <span class="avatar" title="{{ user.company }}">{{ user.initials }}</span>
-        <button class="icon-btn" type="submit" title="Se déconnecter" aria-label="Se déconnecter">{{ icon('logout', 'icon-sm') }}</button>
+        <button class="icon-btn" type="submit" title="{{ t('Se déconnecter') }}" aria-label="{{ t('Se déconnecter') }}">{{ icon('logout', 'icon-sm') }}</button>
       </form>
     </header>
 
@@ -73,6 +74,8 @@
   </div>
 </div>
 {% endblock %}
+<script>window.FS_T = {{ {"vide": t("Aucune prestation sélectionnée."), "eco": t("Tarif pack appliqué : {n} crédits économisés"),
+  "indispo": t("Tarif indisponible, réessayez."), "cr": t("cr."), "pj": t("Pièce jointe : ")}|tojson }};</script>
 <script src="{{ url_for('static', filename='fs/app.js') }}?v={{ version }}"></script>
 </body>
 </html>

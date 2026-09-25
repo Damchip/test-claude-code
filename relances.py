@@ -10,6 +10,7 @@ Relances automatiques par e-mail (réglages atelier, clé "relances" de portal_c
 """
 import datetime as dt
 
+import traductions
 from comptes import connect
 
 DEFAUT = {"solde_bas": True, "seuil": 50, "non_telecharge": True, "delai_h": 48}
@@ -60,22 +61,19 @@ def verifier(db_path, cfg, envoyer, lien, nom_atelier="E85-FRANCE", maintenant=N
     init_db(db_path)
     with connect(db_path) as con:
         clients = [dict(x) for x in con.execute(
-            "SELECT id, email, contact, societe, credits FROM clients WHERE statut = 'actif'")]
+            "SELECT id, email, contact, societe, credits, langue FROM clients WHERE statut = 'actif'")]
         a_envoyer = []
         for c in clients:
             if c["credits"] >= r["seuil"]:
                 con.execute("DELETE FROM relances WHERE client_id = ? AND type = 'solde_bas'", (c["id"],))
             elif r["solde_bas"] and not _deja(con, c["id"], "solde_bas", "1"):
                 _marquer(con, c["id"], "solde_bas", "1")
-                a_envoyer.append(("solde_bas", c, "1",
-                                  f"{nom_atelier} — votre solde de crédits est bas",
-                                  f"Bonjour,\n\nIl vous reste {c['credits']} crédit(s) sur votre compte {nom_atelier}.\n"
-                                  f"Pour continuer à envoyer vos fichiers sans attente, rechargez votre compte :\n"
-                                  f"{lien('/credits')}\n\n{nom_atelier}"))
+                a_envoyer.append(("solde_bas", c, "1", *traductions.mail(
+                    "solde_bas", c["langue"], atelier=nom_atelier, credits=c["credits"], lien=lien("/credits"))))
         if r["non_telecharge"]:
             limite = (maintenant - dt.timedelta(hours=r["delai_h"])).strftime("%Y-%m-%d %H:%M:%S")
             rows = con.execute(
-                "SELECT d.id, d.numero, d.client_id, c.email, MAX(l.version) v, MAX(l.cree_le) livre"
+                "SELECT d.id, d.numero, d.client_id, c.email, c.langue, MAX(l.version) v, MAX(l.cree_le) livre"
                 " FROM demandes d JOIN clients c ON c.id = d.client_id JOIN livrables l ON l.demande_id = d.id"
                 " WHERE d.statut = 'pret' AND d.telecharge_le IS NULL AND c.statut = 'actif'"
                 " GROUP BY d.id HAVING livre <= ?", (limite,)).fetchall()
@@ -84,11 +82,9 @@ def verifier(db_path, cfg, envoyer, lien, nom_atelier="E85-FRANCE", maintenant=N
                 if _deja(con, d["client_id"], "non_telecharge", cle):
                     continue
                 _marquer(con, d["client_id"], "non_telecharge", cle)
-                a_envoyer.append(("non_telecharge", {"id": d["client_id"], "email": d["email"]}, cle,
-                                  f"{nom_atelier} — {d['numero']} : votre fichier vous attend",
-                                  f"Bonjour,\n\nVotre fichier {d['numero']} est prêt mais n'a pas encore été téléchargé.\n"
-                                  f"Il est disponible dans votre espace client :\n{lien('/fichiers/' + d['numero'])}\n\n"
-                                  f"{nom_atelier}"))
+                a_envoyer.append(("non_telecharge", {"id": d["client_id"], "email": d["email"]}, cle, *traductions.mail(
+                    "non_telecharge", d["langue"], atelier=nom_atelier, numero=d["numero"],
+                    lien=lien("/fichiers/" + d["numero"]))))
     for type_, c, cle, sujet, texte in a_envoyer:
         envoyer(c["email"], sujet, texte)
         faites.append((type_, c["id"], cle))

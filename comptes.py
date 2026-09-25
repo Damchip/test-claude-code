@@ -92,6 +92,7 @@ COLONNES_AJOUTEES = [
     ("code_postal", "TEXT NOT NULL DEFAULT ''"),
     ("ville", "TEXT NOT NULL DEFAULT ''"),
     ("pays", "TEXT NOT NULL DEFAULT 'France'"),
+    ("langue", "TEXT NOT NULL DEFAULT 'fr'"),
 ]
 
 
@@ -247,6 +248,11 @@ def authentifier(db_path, email, mdp):
     with connect(db_path) as con:
         con.execute("UPDATE clients SET derniere_connexion = ? WHERE id = ?", (_now(), c["id"]))
     return c
+
+
+def changer_langue(db_path, client_id, langue):
+    with connect(db_path) as con:
+        con.execute("UPDATE clients SET langue = ? WHERE id = ?", ((langue or "fr")[:5], client_id))
 
 
 def modifier_profil(db_path, client_id, *, contact, tel, tva, adresse, code_postal, ville, pays):

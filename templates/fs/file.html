@@ -1,12 +1,12 @@
 {% extends "fs/base.html" %}
-{% from "fs/_macros.html" import vehicule, sous_titre, calculateur, badge %}
+{% from "fs/_macros.html" import vehicule, sous_titre, calculateur, badge with context %}
 {% block title %}{{ f.numero }} · {{ vehicule(f) }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <div class="crumbs"><a href="{{ url_for('fs.files') }}">Mes fichiers</a>{{ icon('chevron-right', 'icon-sm') }}<span class="mono">{{ f.numero }}</span></div>
+    <div class="crumbs"><a href="{{ url_for('fs.files') }}">{{ t("Mes fichiers") }}</a>{{ icon('chevron-right', 'icon-sm') }}<span class="mono">{{ f.numero }}</span></div>
     <h1>{{ vehicule(f) }} <span class="muted" style="font-weight: 500">{{ f.vehicule.moteur }}</span></h1>
-    <p>{{ calculateur(f) }}{% if f.lecture.outil %} · {{ f.lecture.outil }}{% if f.lecture.methode %} ({{ f.lecture.methode }}){% endif %}{% endif %} · envoyé le {{ f.cree_le|date_fr }}</p>
+    <p>{{ calculateur(f) }}{% if f.lecture.outil %} · {{ f.lecture.outil }}{% if f.lecture.methode %} ({{ f.lecture.methode }}){% endif %}{% endif %} · {{ t('envoyé le') }} {{ f.cree_le|date_fr }}</p>
   </div>
   <span class="badge {{ f.statut }}" style="font-size: .85rem; padding: 6px 14px 6px 12px">{{ f.statut_label }}</span>
 </div>
@@ -22,7 +22,7 @@
     {% endfor %}
   </div>
   {% if f.statut == 'attente' %}
-  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>L'atelier attend une précision de votre part.</strong> Répondez dans la conversation ci-dessous, le traitement reprend aussitôt.</div></div>
+  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>{{ t("L'atelier attend une précision de votre part.") }}</strong> Répondez dans la conversation ci-dessous, le traitement reprend aussitôt.</div></div>
   {% elif f.statut == 'refuse' %}
   <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>Fichier refusé : {{ f.motif_refus }}</strong>{% if f.rembourse %} Vos {{ f.total }} crédits ont été remboursés.{% endif %}</div></div>
   {% endif %}
@@ -31,7 +31,7 @@
 <div class="split">
   <div class="stack">
     <section class="card">
-      <div class="card-head"><div><h2>Fichiers</h2><p class="sub">Versions livrées et lecture d'origine</p></div></div>
+      <div class="card-head"><div><h2>{{ t("Fichiers") }}</h2><p class="sub">{{ t("Versions livrées et lecture d'origine") }}</p></div></div>
       {% for l in livrables %}
       <div class="file-row">
         <span class="file-ic mod">{{ icon('file-bin') }}</span>
@@ -39,18 +39,18 @@
           <div class="name">{{ f.numero }}_v{{ l.version }}_{{ l.nom }}</div>
           <div class="muted small">Version {{ l.version }} · {{ l.taille|taille }} · {{ l.cree_le|date_fr }}{% if l.note %} · {{ l.note }}{% endif %}</div>
         </div>
-        <a class="btn {{ 'btn-primary' if loop.first }} btn-sm" href="{{ url_for('fs.file_livre', numero=f.numero, version=l.version) }}">{{ icon('download', 'icon-sm') }}<span class="hide-sm">Télécharger</span></a>
+        <a class="btn {{ 'btn-primary' if loop.first }} btn-sm" href="{{ url_for('fs.file_livre', numero=f.numero, version=l.version) }}">{{ icon('download', 'icon-sm') }}<span class="hide-sm">{{ t("Télécharger") }}</span></a>
       </div>
       {% endfor %}
       <div class="file-row">
         <span class="file-ic">{{ icon('file-bin') }}</span>
         <div class="grow"><div class="name">{{ f.fichier_nom }}</div><div class="muted small">Lecture d'origine · {{ f.fichier_taille|taille }}</div></div>
-        <a class="btn btn-sm" href="{{ url_for('fs.file_original', numero=f.numero) }}">{{ icon('download', 'icon-sm') }}<span class="hide-sm">Télécharger</span></a>
+        <a class="btn btn-sm" href="{{ url_for('fs.file_original', numero=f.numero) }}">{{ icon('download', 'icon-sm') }}<span class="hide-sm">{{ t("Télécharger") }}</span></a>
       </div>
     </section>
 
     <section class="card" id="conversation">
-      <div class="card-head"><div><h2>Conversation</h2><p class="sub">Échanges avec l'atelier sur cette demande</p></div></div>
+      <div class="card-head"><div><h2>{{ t("Conversation") }}</h2><p class="sub">{{ t("Échanges avec l'atelier sur cette demande") }}</p></div></div>
       {% if thread %}
       <div class="thread">
         {% for m in thread %}
@@ -67,14 +67,14 @@
         {% endfor %}
       </div>
       {% else %}
-      <p class="empty">Pas encore de message. L'atelier vous écrira ici si besoin.</p>
+      <p class="empty">{{ t("Pas encore de message. L'atelier vous écrira ici si besoin.") }}</p>
       {% endif %}
       {% if f.statut != 'refuse' %}
       <form class="composer" method="post" action="{{ url_for('fs.file_message', numero=f.numero) }}" enctype="multipart/form-data">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-        <input class="input" name="texte" placeholder="Écrire à l'atelier…" aria-label="Message" maxlength="4000">
+        <input class="input" name="texte" placeholder="{{ t("Écrire à l'atelier…") }}" aria-label="Message" maxlength="4000">
         <label class="btn btn-ghost" title="Joindre un fichier (lecture EEPROM, photo…)">{{ icon('files', 'icon-sm') }}<span class="sr-only">Joindre</span><input type="file" name="pj" hidden data-pj></label>
-        <button class="btn btn-primary" type="submit">{{ icon('send', 'icon-sm') }}<span class="hide-sm">Envoyer</span></button>
+        <button class="btn btn-primary" type="submit">{{ icon('send', 'icon-sm') }}<span class="hide-sm">{{ t("Envoyer") }}</span></button>
       </form>
       <p class="muted small" data-pj-name style="padding: 0 22px 14px" hidden></p>
       {% endif %}
@@ -83,19 +83,19 @@
 
   <aside class="stack">
     <section class="card card-pad">
-      <h3>Véhicule</h3>
+      <h3>{{ t("Véhicule") }}</h3>
       <dl class="dl" style="margin-top: 14px">
-        <dt>Type</dt><dd>{{ categorie_nom }}</dd>
+        <dt>Type</dt><dd>{{ t(categorie_nom) }}</dd>
         {% for label, key in [('Marque', 'marque'), ('Modèle', 'modele'), ('Moteur', 'moteur'), ('Année', 'annee'), ('Boîte', 'boite'), ('Kilométrage', 'km'), ('VIN', 'vin'), ('Immatriculation', 'immat')] %}
           {% if f.vehicule[key] %}<dt>{{ label }}</dt><dd class="{{ 'mono' if key in ('vin', 'immat') }}">{{ f.vehicule[key] }}{{ ' km' if key == 'km' }}</dd>{% endif %}
         {% endfor %}
-        <dt>Calculateur</dt><dd>{{ calculateur(f) }}</dd>
+        <dt>{{ t("Calculateur") }}</dt><dd>{{ calculateur(f) }}</dd>
       </dl>
     </section>
     <section class="card card-pad">
-      <h3>Prestations</h3>
+      <h3>{{ t("Prestations") }}</h3>
       <div style="margin-top: 10px">
-        {% for l in f.lignes %}<div class="summary-line"><span>{{ l.nom }}</span><span class="num">{{ l.credits }} cr.</span></div>{% endfor %}
+        {% for l in f.lignes %}<div class="summary-line"><span>{{ t(l.nom) }}</span><span class="num">{{ l.credits }} cr.</span></div>{% endfor %}
       </div>
       {% if f.siege %}<p class="muted small" style="margin-top: 6px">Ouverture du boîtier au siège{% if f.retour %} · retour {{ f.retour|capitalize }}{% endif %}</p>{% endif %}
       <div class="summary-total"><span>{{ 'Remboursé' if f.rembourse else 'Débité' }}</span><span class="num">{{ f.total }} cr.</span></div>
@@ -103,9 +103,9 @@
       {% if revision %}
       <form method="post" action="{{ url_for('fs.file_revision', numero=f.numero) }}" class="stack" style="gap: 10px; margin-top: 16px">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-        <textarea class="textarea" name="texte" placeholder="Ce qui doit être revu (comportement, codes défaut…)" required style="min-height: 72px"></textarea>
-        <button class="btn btn-block" type="submit">{{ icon('refresh', 'icon-sm') }} Demander une révision</button>
-        <p class="muted small" style="text-align: center">Révision gratuite pendant {{ revision_jours }} jours</p>
+        <textarea class="textarea" name="texte" placeholder="{{ t('Ce qui doit être revu (comportement, codes défaut…)') }}" required style="min-height: 72px"></textarea>
+        <button class="btn btn-block" type="submit">{{ icon('refresh', 'icon-sm') }} {{ t("Demander une révision") }}</button>
+        <p class="muted small" style="text-align: center">Révision gratuite pendant {{ revision_jours }} {{ t("jours") }}</p>
       </form>
       {% endif %}
     </section>

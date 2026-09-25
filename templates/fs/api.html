@@ -1,10 +1,10 @@
 {% extends "fs/base.html" %}
-{% block title %}API revendeur{% endblock %}
+{% block title %}{{ t("API revendeur") }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <div class="crumbs"><a href="{{ url_for('fs.settings') }}">Paramètres</a>{{ icon('chevron-right', 'icon-sm') }}<span>API revendeur</span></div>
-    <h1>API revendeur</h1>
+    <div class="crumbs"><a href="{{ url_for('fs.settings') }}">{{ t("Paramètres") }}</a>{{ icon('chevron-right', 'icon-sm') }}<span>{{ t("API revendeur") }}</span></div>
+    <h1>{{ t("API revendeur") }}</h1>
     <p>Connectez votre logiciel ou votre site à {{ shop.name }} : envoi de fichiers, suivi et téléchargement automatiques.</p>
   </div>
 </div>
@@ -51,7 +51,7 @@
     <p class="muted small" style="margin-top:6px">Envoyez la clé dans l'en-tête <code>Authorization</code>. Base : <code class="mono">{{ base }}/api/v1</code></p>
     <pre class="api-code">curl -H "Authorization: Bearer VOTRE_CLE" \
   {{ base }}/api/v1/compte</pre>
-    <h4>Envoyer un fichier</h4>
+    <h4>{{ t("Envoyer un fichier") }}</h4>
     <pre class="api-code">curl -H "Authorization: Bearer VOTRE_CLE" \
   -F categorie=vl -F prestations=stage1,e85 \
   -F marque=Audi -F modele="A3" -F outil=KESS3 \
@@ -64,7 +64,7 @@
 <section class="card" style="margin-top:20px">
   <div class="card-head"><div><h2>Points d'accès</h2></div></div>
   <div class="table-wrap"><table class="table">
-    <thead><tr><th>Méthode</th><th>Chemin</th><th>Rôle</th></tr></thead>
+    <thead><tr><th>{{ t("Méthode") }}</th><th>Chemin</th><th>Rôle</th></tr></thead>
     <tbody>
       {% for m, ch, r in [
         ('GET', '/compte', 'Solde, niveau, remise'),

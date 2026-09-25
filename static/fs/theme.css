@@ -638,3 +638,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 640px) { .legal-body { padding: 22px 18px; } }
 .api-code { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; font-family: var(--mono); font-size: .8rem; overflow-x: auto; white-space: pre; margin: 6px 0 14px; }
 .api-code + h4 { margin-top: 4px; }
+.lang-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.lang-switch a { padding: 6px 9px; font-size: .78rem; font-weight: 600; color: var(--muted); }
+.lang-switch a.on { background: var(--accent-soft); color: var(--text); }
+.lang-switch a:hover { color: var(--text); }

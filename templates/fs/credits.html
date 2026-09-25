@@ -1,42 +1,42 @@
 {% extends "fs/base.html" %}
-{% block title %}Crédits & factures{% endblock %}
+{% block title %}{{ t("Crédits & factures") }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Crédits &amp; factures</h1>
-    <p>1 crédit = {{ '%.2f'|format(prix_credit)|replace('.', ',') }} € HT{% if not autoliquidation %} ({{ '%.2f'|format(prix_credit * (1 + tva))|replace('.', ',') }} € TTC){% endif %}. Les crédits n'expirent pas ; les packs les plus gros donnent des crédits offerts.</p>
+    <h1>{{ t("Crédits & factures") }}</h1>
+    <p>{% set ht = '%.2f'|format(prix_credit)|replace('.', ',') %}{% set ttc = '%.2f'|format(prix_credit * (1 + tva))|replace('.', ',') %}{{ (t('1 crédit = {ht} € HT.') if autoliquidation else t('1 crédit = {ht} € HT ({ttc} € TTC).')).format(ht=ht, ttc=ttc) }} {{ t("Les crédits n'expirent pas ; les packs les plus gros donnent des crédits offerts.") }}</p>
   </div>
   <div class="card kpi hero" style="min-width: 240px">
-    <div class="kpi-label">{{ icon('coins', 'icon-sm') }} Solde disponible</div>
-    <div class="kpi-value">{{ user.credits }}<small>crédits</small></div>
+    <div class="kpi-label">{{ icon('coins', 'icon-sm') }} {{ t("Solde disponible") }}</div>
+    <div class="kpi-value">{{ user.credits }}<small>{{ t("crédits") }}</small></div>
   </div>
 </div>
 
 {% if autoliquidation %}
-<div class="note" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>Client professionnel UE hors France : facturation <strong>HT, TVA autoliquidée</strong>.</span></div>
+<div class="note" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>{{ t('Client professionnel UE hors France : facturation HT, TVA autoliquidée.') }}</span></div>
 {% endif %}
 {% if not paiement_en_ligne %}
-<div class="note warn" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>Paiement en ligne bientôt disponible. En attendant, commandez votre pack auprès de l'atelier{% if shop.email or shop.tel %} ({{ [shop.email, shop.tel]|select|join(' · ') }}){% endif %} : les crédits et la facture sont ajoutés à réception du virement.</span></div>
+<div class="note warn" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>{{ t("Paiement en ligne bientôt disponible. En attendant, commandez votre pack auprès de l'atelier : les crédits et la facture sont ajoutés à réception du virement.") }}{% if shop.email or shop.tel %} ({{ [shop.email, shop.tel]|select|join(' · ') }}){% endif %}</span></div>
 {% endif %}
 
-<h2 style="margin-bottom: 18px">Recharger</h2>
+<h2 style="margin-bottom: 18px">{{ t("Recharger") }}</h2>
 <div class="packs">
   {% for p in packs %}
   <div class="card pack {{ 'featured' if p.vedette }}">
-    {% if p.vedette %}<span class="ribbon">LE PLUS CHOISI</span>{% endif %}
-    <span class="muted small">Pack</span>
-    <span class="qty">{{ p.credits }} <small>crédits</small></span>
+    {% if p.vedette %}<span class="ribbon">{{ t("LE PLUS CHOISI") }}</span>{% endif %}
+    <span class="muted small">{{ t("Pack") }}</span>
+    <span class="qty">{{ p.credits }} <small>{{ t("crédits") }}</small></span>
     {% if p.bonus %}<span class="amount-plus small">+ {{ p.bonus }} offerts · {{ ((p.bonus / p.credits) * 100)|round|int }} % de bonus</span>{% else %}<span class="muted small">&nbsp;</span>{% endif %}
-    <span class="price">{{ p.prix_eur|euros }} HT</span>
-    <span class="muted small">{% if autoliquidation %}TVA autoliquidée{% else %}{{ (p.prix_eur * (1 + tva))|euros }} TTC{% endif %}</span>
-    <span class="unit">soit {{ '%.2f'|format(p.prix_eur / (p.credits + p.bonus))|replace('.', ',') }} € HT / crédit reçu</span>
+    <span class="price">{{ p.prix_eur|euros }} {{ t("HT") }}</span>
+    <span class="muted small">{% if autoliquidation %}{{ t("TVA autoliquidée") }}{% else %}{{ (p.prix_eur * (1 + tva))|euros }} {{ t("TTC") }}{% endif %}</span>
+    <span class="unit">{{ t('soit {prix} € HT / crédit reçu').format(prix='%.2f'|format(p.prix_eur / (p.credits + p.bonus))|replace('.', ',')) }}</span>
     {% if paiement_en_ligne %}
     <form method="post" action="{{ url_for('fs.buy', index=loop.index0) }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-      <button class="btn {{ 'btn-primary' if p.vedette }} btn-block" type="submit">Acheter</button>
+      <button class="btn {{ 'btn-primary' if p.vedette }} btn-block" type="submit">{{ t("Acheter") }}</button>
     </form>
     {% else %}
-    <span class="btn btn-block" aria-disabled="true" style="opacity: .55; cursor: default">Par virement</span>
+    <span class="btn btn-block" aria-disabled="true" style="opacity: .55; cursor: default">{{ t("Par virement") }}</span>
     {% endif %}
   </div>
   {% endfor %}
@@ -44,19 +44,19 @@
 
 <div class="split" style="margin-top: 32px">
   <section class="card">
-    <div class="card-head"><div><h2>Mouvements</h2><p class="sub">Achats, débits et remboursements</p></div></div>
+    <div class="card-head"><div><h2>{{ t("Mouvements") }}</h2><p class="sub">{{ t("Achats, débits et remboursements") }}</p></div></div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Date</th><th>Libellé</th><th class="right">Crédits</th></tr></thead>
+        <thead><tr><th>{{ t("Date") }}</th><th>{{ t("Libellé") }}</th><th class="right">{{ t("Crédits") }}</th></tr></thead>
         <tbody>
-        {% for t in transactions %}
+        {% for mvt in transactions %}
           <tr>
-            <td class="muted num" style="white-space: nowrap">{{ t.date|date_fr(false) }}</td>
-            <td>{{ t.libelle }}</td>
-            <td class="right num {{ 'amount-plus' if t.montant > 0 else 'amount-minus' }}">{{ t.montant|credits }}</td>
+            <td class="muted num" style="white-space: nowrap">{{ mvt.date|date_fr(false) }}</td>
+            <td>{{ mvt.libelle|libelle }}</td>
+            <td class="right num {{ 'amount-plus' if mvt.montant > 0 else 'amount-minus' }}">{{ mvt.montant|credits }}</td>
           </tr>
         {% else %}
-          <tr><td colspan="3" class="empty">Aucun mouvement pour l'instant. Rechargez des crédits pour envoyer votre premier fichier.</td></tr>
+          <tr><td colspan="3" class="empty">{{ t("Aucun mouvement pour l'instant. Rechargez des crédits pour envoyer votre premier fichier.") }}</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -64,15 +64,15 @@
   </section>
 
   <section class="card">
-    <div class="card-head"><div><h2>Factures</h2><p class="sub">Ouvrez-les pour les imprimer ou les enregistrer en PDF</p></div></div>
+    <div class="card-head"><div><h2>{{ t("Factures") }}</h2><p class="sub">{{ t("Ouvrez-les pour les imprimer ou les enregistrer en PDF") }}</p></div></div>
     {% for fa in factures %}
     <div class="file-row">
       <span class="file-ic">{{ icon('receipt') }}</span>
-      <div class="grow"><div class="name mono">{{ fa.numero }}</div><div class="muted small">{{ fa.date|date_fr(false) }} · {{ fa.ht|euros }} HT · {{ fa.ttc|euros }} TTC</div></div>
+      <div class="grow"><div class="name mono">{{ fa.numero }}</div><div class="muted small">{{ fa.date|date_fr(false) }} · {{ fa.ht|euros }} {{ t('HT') }} · {{ fa.ttc|euros }} {{ t('TTC') }}</div></div>
       <a class="icon-btn" href="{{ url_for('fs.invoice', numero=fa.numero) }}" target="_blank" rel="noopener" aria-label="Ouvrir {{ fa.numero }}">{{ icon('download', 'icon-sm') }}</a>
     </div>
     {% else %}
-    <p class="empty">Aucune facture pour l'instant.</p>
+    <p class="empty">{{ t("Aucune facture pour l'instant.") }}</p>
     {% endfor %}
   </section>
 </div>

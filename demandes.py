@@ -194,7 +194,7 @@ def creer(db_path, files_dir, client_id, *, categorie, prestations, siege=False,
 # --- Lecture -----------------------------------------------------------------
 
 def get(db_path, demande_id, client_id=None):
-    sql = ("SELECT d.*, c.societe, c.email, c.contact, c.tel FROM demandes d"
+    sql = ("SELECT d.*, c.societe, c.email, c.contact, c.tel, c.langue FROM demandes d"
            " JOIN clients c ON c.id = d.client_id WHERE d.id = ?")
     args = [demande_id]
     if client_id is not None:
@@ -211,7 +211,7 @@ def get_par_numero(db_path, numero, client_id=None):
 
 
 def lister(db_path, client_id=None, statut=None, limite=500):
-    sql = ("SELECT d.*, c.societe, c.email, c.contact, c.tel,"
+    sql = ("SELECT d.*, c.societe, c.email, c.contact, c.tel, c.langue,"
            " (SELECT COUNT(*) FROM messages m WHERE m.demande_id = d.id AND m.lu = 0 AND m.auteur = ?) AS non_lus"
            " FROM demandes d JOIN clients c ON c.id = d.client_id WHERE 1 = 1")
     # messages non lus : ceux de l'atelier pour le client, ceux du client pour l'atelier

@@ -652,6 +652,38 @@ Le client télécharge ses données depuis *Paramètres → Mes données*. Sur d
 onglet Clients → *Supprimer le compte* (tape SUPPRIMER) : coordonnées, véhicules, messages et
 fichiers sont effacés ; les factures restent (obligation de conservation de 10 ans).
 
+### Livraison en un clic
+Sur une demande, **⚡ Livrer en un clic** prépare le fichier à partir de la bibliothèque et le livre
+après confirmation. C'est proposé uniquement si chaque prestation commandée a une fiche de **même
+stock**, sans prestation en trop, avec un patch « propre » et des checksums prêts ; sinon la raison
+s'affiche et tu traites à la main (Auto-patch). Les prestations reliées à la bibliothèque sont
+indiquées par le champ `type` dans `catalogue.py` (Stage 1, E85 / Flexfuel, DTC off, Vmax off).
+Réglages → *Livraison automatique* : même logique, dès la réception du fichier (désactivée par défaut).
+
+### Comptes atelier et journal
+Fileservice → *Équipe de l'atelier* : crée ton compte administrateur, puis ceux des techniciens.
+Dès le premier compte, l'outil demande un identifiant ; les messages sont signés automatiquement et
+chaque action est tracée dans le *Journal des actions*. Les techniciens ne peuvent pas toucher aux
+crédits, factures, suppressions ni réglages.
+
+### Alertes
+Bouton **🔔 Alertes** (onglet Fileservice) : autorise les notifications Windows. Son + notification à
+chaque nouveau fichier, message client ou inscription. Sur le réseau atelier (adresse IP, sans
+HTTPS), le navigateur n'autorise que le son.
+
+### Remises et relances
+Réglages → *Remises par niveau* (le niveau d'un client se choisit dans l'onglet Clients) et
+*Relances automatiques* (solde bas, fichier non téléchargé), vérifiées toutes les heures.
+
+### API revendeurs
+Réglages → *API revendeurs* pour l'activer. Chaque client génère ses clés dans *Paramètres → API
+revendeur*, où il trouve aussi la documentation (exemples `curl`). Même règles que le site : prix
+recalculé, remise, crédits débités, livraison automatique éventuelle.
+
+### Langue
+L'espace client existe en français et en anglais (sélecteur FR / EN en haut de page). La langue est
+mémorisée par client et ses e-mails partent dans cette langue. Les textes sont dans `traductions.py`.
+
 ### Tarifs
 Catalogue, packs, garanties et prix des packs de crédits : `catalogue.py` (prix en crédits,
 1 crédit = 2,50 € HT, TVA 20 %). Le prix de chaque demande est toujours recalculé par le serveur.

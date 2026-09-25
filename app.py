@@ -32,12 +32,13 @@ import mailer
 import pages_legales
 import relances
 import stripe_api
+import traductions
 
 app = Flask(__name__)
 # Filtres d'affichage partagés avec l'espace client (facture vue par l'atelier)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits)
-APP_VERSION = "1.54.1"
+APP_VERSION = "1.55.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -742,13 +743,11 @@ def clients_statut():
     if b.get("statut") == "actif" and avant["statut"] == "en_attente":
         cfg = load_portal_config()
         base = (cfg.get("public_url") or "").rstrip("/")
-        acces = (f"Connectez-vous avec votre e-mail et le mot de passe choisi à l'inscription :\n"
-                 f"{base}/connexion" if base else
-                 "Connectez-vous à votre espace client avec votre e-mail et le mot de passe choisi à l'inscription.")
-        ok, err = _mail_client(
-            avant["email"], f"{cfg.get('shop_name') or 'E85-FRANCE'} — votre compte est ouvert",
-            f"Bonjour,\n\nVotre compte fileservice pour {avant['societe']} est maintenant actif.\n"
-            f"{acces}\n\n{cfg.get('shop_name') or 'E85-FRANCE'}")
+        lg = avant.get("langue")
+        acces = (traductions.mail("acces_lien", lg, lien=f"{base}/connexion")[1] if base
+                 else traductions.mail("acces_sans_lien", lg)[1])
+        ok, err = _mail_client(avant["email"], *traductions.mail(
+            "compte_ouvert", lg, atelier=cfg.get("shop_name") or "E85-FRANCE", societe=avant["societe"], acces=acces))
         mail = "E-mail d'activation envoyé." if ok else err
         if not base:
             mail += " (Adresse publique du portail non renseignée : l'e-mail ne contient pas de lien.)"
@@ -1021,11 +1020,11 @@ def _fs_lien(numero):
     return f"\n{base}/fichiers/{numero}" if base else ""
 
 
-def _fs_prevenir(d, sujet, texte):
-    """E-mail au client ; renvoie un message à afficher à l'atelier."""
+def _fs_prevenir(d, cle, **champs):
+    """E-mail au client, dans sa langue ; renvoie un message à afficher à l'atelier."""
     nom = load_portal_config().get("shop_name") or "E85-FRANCE"
-    ok, err = _mail_client(d["email"], f"{nom} — {d['numero']} : {sujet}",
-                           f"Bonjour,\n\n{texte}{_fs_lien(d['numero'])}\n\n{nom}")
+    ok, err = _mail_client(d["email"], *traductions.mail(cle, d.get("langue"), atelier=nom, numero=d["numero"],
+                                                         lien=_fs_lien(d["numero"]).strip(), **champs))
     return "Client prévenu par e-mail." if ok else err
 
 
@@ -1132,9 +1131,9 @@ def fs_livrer_auto(did):
     version = demandes.livrer(FS_DB, FS_FILES, did, livraison_auto.nom_fichier(d), prep["patched"],
                               f"{' + '.join(cr['types'])} · checksum {cr['checksum'] or 'OK'}")
     livraison_auto.journaliser(DB_PATH, d, prep, auteur)
-    txt = (f"Votre fichier {d['numero']} est prêt" + (f" (version {version})" if version > 1 else "") +
-           ". Téléchargez-le depuis votre espace client :")
-    return jsonify({"ok": True, "version": version, "compte_rendu": cr, "mail": _fs_prevenir(d, "fichier prêt", txt)})
+    vtxt = f" (version {version})" if version > 1 else ""
+    return jsonify({"ok": True, "version": version, "compte_rendu": cr,
+                    "mail": _fs_prevenir(d, "fichier_pret", version=vtxt)})
 
 
 @app.route("/fs/demandes/<int:did>/statut", methods=["POST"])
@@ -1163,9 +1162,7 @@ def fs_message(did):
             demandes.changer_statut(FS_DB, did, "attente")
     except comptes.ErreurCompte as e:
         return jsonify({"error": str(e)}), 400
-    info = _fs_prevenir(d, "message de l'atelier" if not request.form.get("attente") else "information requise",
-                        f"L'atelier vous a écrit au sujet de votre fichier {d['numero']} :\n\n{texte}\n\n"
-                        "Répondez depuis votre espace client :")
+    info = _fs_prevenir(d, "info_requise" if request.form.get("attente") else "message", texte=texte)
     return jsonify({"ok": True, "mail": info})
 
 
@@ -1181,9 +1178,8 @@ def fs_livrer(did):
         version = demandes.livrer(FS_DB, FS_FILES, did, f.filename, f.read(), request.form.get("note", ""))
     except comptes.ErreurCompte as e:
         return jsonify({"error": str(e)}), 400
-    txt = (f"Votre fichier {d['numero']} est prêt" + (f" (version {version})" if version > 1 else "") +
-           ". Téléchargez-le depuis votre espace client :")
-    return jsonify({"ok": True, "version": version, "mail": _fs_prevenir(d, "fichier prêt", txt)})
+    vtxt = f" (version {version})" if version > 1 else ""
+    return jsonify({"ok": True, "version": version, "mail": _fs_prevenir(d, "fichier_pret", version=vtxt)})
 
 
 @app.route("/fs/demandes/<int:did>/refuser", methods=["POST"])
@@ -1196,9 +1192,7 @@ def fs_refuser(did):
         montant = demandes.refuser(FS_DB, did, motif)
     except comptes.ErreurCompte as e:
         return jsonify({"error": str(e)}), 400
-    info = _fs_prevenir(d, "fichier refusé",
-                        f"Nous ne pouvons pas traiter votre fichier {d['numero']} : {motif.strip()}\n"
-                        f"Vos {montant} crédits ont été remboursés sur votre compte. Détails :")
+    info = _fs_prevenir(d, "refus", motif=motif.strip(), credits=montant)
     return jsonify({"ok": True, "mail": info})
 
 

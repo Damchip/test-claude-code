@@ -1,10 +1,10 @@
 {% extends "fs/base.html" %}
-{% block title %}Nouveau fichier{% endblock %}
+{% block title %}{{ t("Nouveau fichier") }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Envoyer un fichier</h1>
-    <p>Renseignez le véhicule et la lecture, choisissez vos prestations. Les crédits sont débités à l'envoi et remboursés si le fichier ne peut pas être traité.</p>
+    <h1>{{ t("Envoyer un fichier") }}</h1>
+    <p>{{ t("Renseignez le véhicule et la lecture, choisissez vos prestations. Les crédits sont débités à l'envoi et remboursés si le fichier ne peut pas être traité.") }}</p>
   </div>
 </div>
 
@@ -12,41 +12,41 @@
   <input type="hidden" name="csrf" value="{{ csrf_token() }}">
   <div class="stack">
     <section class="card">
-      <div class="card-head"><div class="step-head"><span class="step-num">1</span><h2>Véhicule</h2></div></div>
+      <div class="card-head"><div class="step-head"><span class="step-num">1</span><h2>{{ t("Véhicule") }}</h2></div></div>
       <div class="card-body form-grid">
         <div class="field full">
-          <span class="label">Type de véhicule</span>
+          <span class="label">{{ t("Type de véhicule") }}</span>
           <div class="chips" role="radiogroup">
             {% for c in categories %}
-            <label class="chip"><input type="radio" name="categorie" value="{{ c.code }}" {{ 'checked' if loop.first }}><span>{{ c.nom }}</span></label>
+            <label class="chip"><input type="radio" name="categorie" value="{{ c.code }}" {{ 'checked' if loop.first }}><span>{{ t(c.nom) }}</span></label>
             {% endfor %}
           </div>
         </div>
-        <div class="field"><label for="marque">Marque</label><input class="input" id="marque" name="marque" placeholder="Volkswagen" required></div>
-        <div class="field"><label for="modele">Modèle</label><input class="input" id="modele" name="modele" placeholder="Golf VII" required></div>
-        <div class="field"><label for="moteur">Motorisation</label><input class="input" id="moteur" name="moteur" placeholder="2.0 TDI 150 ch" required></div>
-        <div class="field"><label for="annee">Année</label><input class="input" id="annee" name="annee" inputmode="numeric" placeholder="2016"></div>
-        <div class="field"><label for="boite">Boîte</label>
-          <select class="select" id="boite" name="boite"><option>Manuelle</option><option>Automatique</option><option>Double embrayage</option></select></div>
-        <div class="field"><label for="km">Kilométrage</label><input class="input" id="km" name="km" inputmode="numeric" placeholder="128 400"></div>
-        <div class="field"><label for="vin">VIN</label><input class="input mono" id="vin" name="vin" maxlength="17" placeholder="17 caractères" autocomplete="off"></div>
-        <div class="field"><label for="immat">Immatriculation</label><input class="input mono" id="immat" name="immat" maxlength="12" placeholder="AB-123-CD" autocomplete="off"></div>
+        <div class="field"><label for="marque">{{ t("Marque") }}</label><input class="input" id="marque" name="marque" placeholder="Volkswagen" required></div>
+        <div class="field"><label for="modele">{{ t("Modèle") }}</label><input class="input" id="modele" name="modele" placeholder="Golf VII" required></div>
+        <div class="field"><label for="moteur">{{ t("Motorisation") }}</label><input class="input" id="moteur" name="moteur" placeholder="2.0 TDI 150 ch" required></div>
+        <div class="field"><label for="annee">{{ t("Année") }}</label><input class="input" id="annee" name="annee" inputmode="numeric" placeholder="2016"></div>
+        <div class="field"><label for="boite">{{ t("Boîte") }}</label>
+          <select class="select" id="boite" name="boite">{% for b in ["Manuelle", "Automatique", "Double embrayage"] %}<option value="{{ b }}">{{ t(b) }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="km">{{ t("Kilométrage") }}</label><input class="input" id="km" name="km" inputmode="numeric" placeholder="128 400"></div>
+        <div class="field"><label for="vin">VIN</label><input class="input mono" id="vin" name="vin" maxlength="17" placeholder="{{ t('17 caractères') }}" autocomplete="off"></div>
+        <div class="field"><label for="immat">{{ t("Immatriculation") }}</label><input class="input mono" id="immat" name="immat" maxlength="12" placeholder="AB-123-CD" autocomplete="off"></div>
       </div>
     </section>
 
     <section class="card">
-      <div class="card-head"><div class="step-head"><span class="step-num">2</span><h2>Lecture</h2></div></div>
+      <div class="card-head"><div class="step-head"><span class="step-num">2</span><h2>{{ t("Lecture") }}</h2></div></div>
       <div class="card-body stack" style="gap: 18px">
         <div class="form-grid">
-          <div class="field"><label for="outil">Outil de lecture</label>
-            <select class="select" id="outil" name="outil">{% for t in tools %}<option>{{ t }}</option>{% endfor %}</select></div>
-          <div class="field"><label for="ecu">Calculateur</label><input class="input" id="ecu" name="ecu" placeholder="Détecté automatiquement si vide"></div>
+          <div class="field"><label for="outil">{{ t("Outil de lecture") }}</label>
+            <select class="select" id="outil" name="outil">{% for outil in tools %}<option>{{ outil }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="ecu">{{ t("Calculateur") }}</label><input class="input" id="ecu" name="ecu" placeholder="{{ t('Détecté automatiquement si vide') }}"></div>
         </div>
         <div class="field">
-          <span class="label">Méthode</span>
+          <span class="label">{{ t("Méthode") }}</span>
           <div class="chips" role="radiogroup">
             {% for m in ['OBD', 'Banc', 'Boot'] %}
-            <label class="chip"><input type="radio" name="methode" value="{{ m }}" {{ 'checked' if loop.first }}><span>{{ m }}</span></label>
+            <label class="chip"><input type="radio" name="methode" value="{{ m }}" {{ 'checked' if loop.first }}><span>{{ t(m) }}</span></label>
             {% endfor %}
           </div>
         </div>
@@ -54,20 +54,20 @@
           <input type="file" name="file" id="fileInput" hidden>
           <span class="drop-empty">
             <span class="drop-icon">{{ icon('upload', 'icon-lg') }}</span>
-            <span class="drop-title">Déposez la lecture d'origine</span>
-            <span class="muted small">ou cliquez pour parcourir · .bin, .ori, .slave… · 64 Mo max</span>
+            <span class="drop-title">{{ t("Déposez la lecture d'origine") }}</span>
+            <span class="muted small">{{ t("ou cliquez pour parcourir · .bin, .ori, .slave… · 64 Mo max") }}</span>
           </span>
           <span class="drop-file">
             <span class="file-ic mod">{{ icon('file-bin') }}</span>
             <span class="grow"><span class="name" id="fileName"></span><span class="muted small" id="fileSize"></span></span>
-            <span class="btn btn-sm btn-ghost">Changer</span>
+            <span class="btn btn-sm btn-ghost">{{ t("Changer") }}</span>
           </span>
         </label>
       </div>
     </section>
 
     <section class="card">
-      <div class="card-head"><div class="step-head"><span class="step-num">3</span><h2>Prestations</h2></div></div>
+      <div class="card-head"><div class="step-head"><span class="step-num">3</span><h2>{{ t("Prestations") }}</h2></div></div>
       <div class="card-body stack" style="gap: 18px">
         <div class="options">
           {% for cat_code, items in prestations.items() %}{% for p in items %}
@@ -75,69 +75,69 @@
             <input type="checkbox" name="prestas" value="{{ p.code }}">
             <span class="box">
               <span class="check">{{ icon('check') }}</span>
-              <span><span class="title">{{ p.nom }}</span><span class="desc" style="display:block">{{ p.desc }}</span></span>
-              <span class="cost">{{ p.prix }} <small>cr.</small>{% if p.prix_siege %}<small style="display:block;text-align:right">{{ p.prix_siege }} au siège</small>{% endif %}</span>
+              <span><span class="title">{{ t(p.nom) }}</span><span class="desc" style="display:block">{{ t(p.desc) }}</span></span>
+              <span class="cost">{{ p.prix }} <small>cr.</small>{% if p.prix_siege %}<small style="display:block;text-align:right">{{ p.prix_siege }} {{ t('au siège') }}</small>{% endif %}</span>
             </span>
           </label>
           {% endfor %}{% endfor %}
         </div>
-        <p class="label" style="margin-top: 4px">Services</p>
+        <p class="label" style="margin-top: 4px">{{ t("Services") }}</p>
         <div class="options">
           {% for p in services %}
           <label class="option">
             <input type="checkbox" name="prestas" value="{{ p.code }}">
             <span class="box">
               <span class="check">{{ icon('check') }}</span>
-              <span><span class="title">{{ p.nom }}</span><span class="desc" style="display:block">{{ p.desc }}</span></span>
+              <span><span class="title">{{ t(p.nom) }}</span><span class="desc" style="display:block">{{ t(p.desc) }}</span></span>
               <span class="cost">{{ p.prix }} <small>cr.</small></span>
             </span>
           </label>
           {% endfor %}
         </div>
         <div class="field">
-          <label for="comment">Commentaire pour l'atelier</label>
-          <textarea class="textarea" id="comment" name="comment" placeholder="Modifications mécaniques, codes défaut à traiter, carburant utilisé…"></textarea>
+          <label for="comment">{{ t("Commentaire pour l'atelier") }}</label>
+          <textarea class="textarea" id="comment" name="comment" placeholder="{{ t('Modifications mécaniques, codes défaut à traiter, carburant utilisé…') }}"></textarea>
         </div>
       </div>
     </section>
   </div>
 
   <aside class="card card-pad sticky" id="summary" data-balance="{{ user.credits }}" data-url="{{ url_for('fs.tarif') }}">
-    <h2>Récapitulatif</h2>
-    <div style="margin-top: 14px" id="sumLines"><p class="summary-empty">Aucune prestation sélectionnée.</p></div>
+    <h2>{{ t("Récapitulatif") }}</h2>
+    <div style="margin-top: 14px" id="sumLines"><p class="summary-empty">{{ t("Aucune prestation sélectionnée.") }}</p></div>
     <p class="small" id="sumSaving" style="color: var(--ok); font-weight: 600" hidden></p>
 
     <div class="stack" style="gap: 14px; margin: 14px 0; padding: 14px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft)">
       <div id="siegeBox" hidden>
         <label class="switch">
-          <span><strong>Ouverture du boîtier au siège</strong><span class="muted small" style="display:block">Vous nous envoyez le calculateur</span></span>
+          <span><strong>{{ t("Ouverture du boîtier au siège") }}</strong><span class="muted small" style="display:block">{{ t("Vous nous envoyez le calculateur") }}</span></span>
           <input type="checkbox" name="siege" id="siege"><span class="track"></span>
         </label>
         <div class="field" id="retourBox" style="margin-top: 12px" hidden>
-          <label for="retour">Retour du boîtier</label>
+          <label for="retour">{{ t("Retour du boîtier") }}</label>
           <select class="select" id="retour" name="retour">
-            {% for r in retours %}<option value="{{ r.code }}">{{ r.nom }} · {{ r.prix_eur }} € (hors crédits)</option>{% endfor %}
+            {% for r in retours %}<option value="{{ r.code }}">{{ r.nom }} · {{ r.prix_eur }} € {{ t('(hors crédits)') }}</option>{% endfor %}
           </select>
         </div>
       </div>
       <div class="field">
-        <span class="label">Garantie</span>
+        <span class="label">{{ t("Garantie") }}</span>
         <div class="chips" role="radiogroup">
-          <label class="chip"><input type="radio" name="garantie" value="" checked><span>Aucune</span></label>
+          <label class="chip"><input type="radio" name="garantie" value="" checked><span>{{ t("Aucune") }}</span></label>
           {% for g in garanties %}
-          <label class="chip"><input type="radio" name="garantie" value="{{ g.code }}"><span>{{ g.nom.replace('Garantie Sérénité ', '') }} · {{ g.prix }} cr.</span></label>
+          <label class="chip"><input type="radio" name="garantie" value="{{ g.code }}"><span>{{ t(g.nom.replace('Garantie Sérénité ', '')) }} · {{ g.prix }} cr.</span></label>
           {% endfor %}
         </div>
-        <span class="hint">Garantie Sérénité sur le fichier livré.</span>
+        <span class="hint">{{ t("Garantie Sérénité sur le fichier livré.") }}</span>
       </div>
     </div>
 
-    <div class="summary-line"><span>Solde actuel</span><span class="num">{{ user.credits }} cr.</span></div>
-    <div class="summary-total"><span>Total</span><span class="num" id="sumTotal">0 cr.</span></div>
-    <div class="summary-line"><span>Solde après envoi</span><span class="num" id="sumAfter">{{ user.credits }} cr.</span></div>
+    <div class="summary-line"><span>{{ t("Solde actuel") }}</span><span class="num">{{ user.credits }} cr.</span></div>
+    <div class="summary-total"><span>{{ t("Total") }}</span><span class="num" id="sumTotal">0 cr.</span></div>
+    <div class="summary-line"><span>{{ t("Solde après envoi") }}</span><span class="num" id="sumAfter">{{ user.credits }} cr.</span></div>
     <p class="small" id="sumError" style="color: var(--danger)" hidden></p>
-    <button class="btn btn-primary btn-lg btn-block" type="submit" id="submitBtn" style="margin-top: 18px" disabled>{{ icon('send') }} Envoyer la demande</button>
-    <div class="note" style="margin-top: 14px">{{ icon('shield', 'icon-sm') }}<span>Le tarif pack s'applique automatiquement. Crédits remboursés si le fichier est refusé.</span></div>
+    <button class="btn btn-primary btn-lg btn-block" type="submit" id="submitBtn" style="margin-top: 18px" disabled>{{ icon('send') }} {{ t("Envoyer la demande") }}</button>
+    <div class="note" style="margin-top: 14px">{{ icon('shield', 'icon-sm') }}<span>{{ t("Le tarif pack s'applique automatiquement. Crédits remboursés si le fichier est refusé.") }}</span></div>
   </aside>
 </form>
 {% endblock %}

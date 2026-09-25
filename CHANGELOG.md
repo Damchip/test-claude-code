@@ -3,6 +3,31 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.55.0
+Productivité de l'atelier et développement commercial.
+
+**Atelier**
+- **Livraison en un clic** (« ⚡ Livrer en un clic » sur chaque demande) : le fichier est préparé depuis
+  la bibliothèque et livré quand chaque prestation a une fiche de même stock, qu'aucune fiche n'ajoute
+  de prestation non commandée, que le patch est « propre » et les checksums prêts (pas de RSA).
+  Sinon, la raison est affichée et la demande se traite à la main. Option **livraison automatique
+  dès la réception** (désactivée par défaut).
+- **Alertes en direct** : son, notification Windows, compteurs d'onglets et titre de page à chaque
+  nouveau fichier, message client ou inscription (vérification toutes les 20 s).
+- **Comptes atelier** : un identifiant par technicien (administrateur / technicien), signature
+  automatique des messages, actions sensibles (crédits, factures, suppressions, réglages) réservées
+  aux administrateurs, **journal des actions** consultable. Sans compte créé, l'outil fonctionne
+  comme avant.
+
+**Commercial**
+- **Remises par niveau de client** (Standard, Partenaire, VIP… réglables) appliquées côté serveur sur
+  les prestations, affichées au client.
+- **Relances automatiques** : solde bas, fichier prêt non téléchargé (une fois par événement).
+- **API revendeurs** (`/api/v1`) : clés générées par le client, catalogue, devis, envoi de fichier,
+  suivi, téléchargement, messages ; activée par l'atelier, documentée dans l'espace client.
+- **Espace client en anglais** : sélecteur FR / EN, langue mémorisée, e-mails envoyés dans la langue
+  du client. Les pages légales restent dans la langue saisie par l'atelier.
+
 ## v1.54.1
 - **L'espace client est à la racine du portail** : `https://portail.ton-domaine.fr/` ouvre directement
   la connexion / le tableau de bord (fini le `/espace`). Les anciens liens `/espace/…` (e-mails déjà

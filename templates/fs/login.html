@@ -6,28 +6,29 @@
     <img class="auth-logo" src="{{ url_for('static', filename='brand/logo-sombre.webp') }}" alt="{{ shop.name }} — Superéthanol E85" width="1000" height="320">
 
     <div class="auth-pitch">
-      <h1>Vos fichiers moteur,<br><em>préparés par des spécialistes.</em></h1>
-      <p>Déposez votre lecture, choisissez vos prestations, récupérez un fichier testé et prêt à écrire.</p>
+      <h1>{{ t('Vos fichiers moteur,') }}<br><em>{{ t('préparés par des spécialistes.') }}</em></h1>
+      <p>{{ t('Déposez votre lecture, choisissez vos prestations, récupérez un fichier testé et prêt à écrire.') }}</p>
       <div class="auth-points">
         <div class="auth-point">
           <span class="ic">{{ icon('zap-fast') }}</span>
-          <div><strong>Livraison rapide</strong><span>La plupart des fichiers sont prêts en moins de 30 minutes.</span></div>
+          <div><strong>{{ t('Livraison rapide') }}</strong><span>{{ t('La plupart des fichiers sont prêts en moins de 30 minutes.') }}</span></div>
         </div>
         <div class="auth-point">
           <span class="ic">{{ icon('shield') }}</span>
-          <div><strong>Checksums corrigés</strong><span>Chaque fichier est vérifié avant de vous être livré.</span></div>
+          <div><strong>{{ t('Checksums corrigés') }}</strong><span>{{ t('Chaque fichier est vérifié avant de vous être livré.') }}</span></div>
         </div>
         <div class="auth-point">
           <span class="ic">{{ icon('message') }}</span>
-          <div><strong>Un technicien dédié</strong><span>Une question sur un fichier ? Réponse directe dans la demande.</span></div>
+          <div><strong>{{ t('Un technicien dédié') }}</strong><span>{{ t('Une question sur un fichier ? Réponse directe dans la demande.') }}</span></div>
         </div>
       </div>
     </div>
 
-    <p class="auth-foot">© {{ shop.name }} · Accès réservé aux professionnels ·
-      <a href="{{ url_for('fs.legal', cle='cgv') }}">CGV</a> ·
-      <a href="{{ url_for('fs.legal', cle='mentions-legales') }}">Mentions légales</a> ·
-      <a href="{{ url_for('fs.legal', cle='confidentialite') }}">Confidentialité</a></p>
+    <div class="lang-switch" style="position:absolute;top:24px;right:24px">{% for code, nom in langues.items() %}<a href="{{ url_for('fs.set_langue', code=code, next=request.full_path) }}" class="{{ 'on' if code == langue }}">{{ code|upper }}</a>{% endfor %}</div>
+    <p class="auth-foot">© {{ shop.name }} · {{ t('Accès réservé aux professionnels') }} ·
+      <a href="{{ url_for('fs.legal', cle='cgv') }}">{{ t('CGV') }}</a> ·
+      <a href="{{ url_for('fs.legal', cle='mentions-legales') }}">{{ t('Mentions légales') }}</a> ·
+      <a href="{{ url_for('fs.legal', cle='confidentialite') }}">{{ t('Confidentialité') }}</a></p>
   </section>
 
   <section class="auth-form">
@@ -36,83 +37,83 @@
       {% if erreur %}<div class="note warn" style="margin-bottom: 18px">{{ icon('info') }}<span>{{ erreur }}</span></div>{% endif %}
 
       {% if mode == 'register' %}
-      <h2>Créer un compte pro</h2>
-      <p class="lead">Votre compte est validé par l'atelier sous 24 h ouvrées.</p>
+      <h2>{{ t('Créer un compte pro') }}</h2>
+      <p class="lead">{{ t("Votre compte est validé par l'atelier sous 24 h ouvrées.") }}</p>
       <form method="post" class="stack">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
         <div class="form-grid">
-          <div class="field full"><label for="societe">Société</label><input class="input" id="societe" name="societe" value="{{ form.societe }}" autocomplete="organization" required></div>
+          <div class="field full"><label for="societe">{{ t('Société') }}</label><input class="input" id="societe" name="societe" value="{{ form.societe }}" autocomplete="organization" required></div>
           <div class="field"><label for="siret">SIRET</label><input class="input" id="siret" name="siret" value="{{ form.siret }}" inputmode="numeric" maxlength="20" required></div>
           <div class="field"><label for="tva">N° TVA</label><input class="input" id="tva" name="tva" value="{{ form.tva }}" placeholder="FR…"></div>
-          <div class="field"><label for="contact">Nom et prénom</label><input class="input" id="contact" name="contact" value="{{ form.contact }}" autocomplete="name"></div>
-          <div class="field"><label for="tel">Téléphone</label><input class="input" type="tel" id="tel" name="tel" value="{{ form.tel }}" autocomplete="tel"></div>
-          <div class="field full"><label for="adresse">Adresse</label><input class="input" id="adresse" name="adresse" value="{{ form.adresse }}" autocomplete="street-address" required></div>
-          <div class="field"><label for="code_postal">Code postal</label><input class="input" id="code_postal" name="code_postal" value="{{ form.code_postal }}" autocomplete="postal-code" required></div>
-          <div class="field"><label for="ville">Ville</label><input class="input" id="ville" name="ville" value="{{ form.ville }}" autocomplete="address-level2" required></div>
-          <div class="field full"><label for="pays">Pays</label><input class="input" id="pays" name="pays" value="{{ form.pays or 'France' }}" autocomplete="country-name"></div>
-          <div class="field full"><label for="email">E-mail professionnel</label><input class="input" type="email" id="email" name="email" value="{{ form.email }}" autocomplete="email" required></div>
-          <div class="field full"><label for="pw">Mot de passe</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required><span class="hint">10 caractères minimum.</span></div>
+          <div class="field"><label for="contact">{{ t('Nom et prénom') }}</label><input class="input" id="contact" name="contact" value="{{ form.contact }}" autocomplete="name"></div>
+          <div class="field"><label for="tel">{{ t('Téléphone') }}</label><input class="input" type="tel" id="tel" name="tel" value="{{ form.tel }}" autocomplete="tel"></div>
+          <div class="field full"><label for="adresse">{{ t('Adresse') }}</label><input class="input" id="adresse" name="adresse" value="{{ form.adresse }}" autocomplete="street-address" required></div>
+          <div class="field"><label for="code_postal">{{ t('Code postal') }}</label><input class="input" id="code_postal" name="code_postal" value="{{ form.code_postal }}" autocomplete="postal-code" required></div>
+          <div class="field"><label for="ville">{{ t('Ville') }}</label><input class="input" id="ville" name="ville" value="{{ form.ville }}" autocomplete="address-level2" required></div>
+          <div class="field full"><label for="pays">{{ t('Pays') }}</label><input class="input" id="pays" name="pays" value="{{ form.pays or 'France' }}" autocomplete="country-name"></div>
+          <div class="field full"><label for="email">{{ t('E-mail professionnel') }}</label><input class="input" type="email" id="email" name="email" value="{{ form.email }}" autocomplete="email" required></div>
+          <div class="field full"><label for="pw">Mot de passe</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required><span class="hint">{{ t('10 caractères minimum.') }}</span></div>
         </div>
-        <label class="checkbox"><input type="checkbox" name="cgv" required> J'accepte les <a class="link" href="{{ url_for('fs.legal', cle='cgv') }}" target="_blank" rel="noopener">conditions générales de vente</a></label>
-        <button class="btn btn-primary btn-lg btn-block" type="submit">Demander l'ouverture du compte</button>
+        <label class="checkbox"><input type="checkbox" name="cgv" required> {{ t("J'accepte les") }} <a class="link" href="{{ url_for('fs.legal', cle='cgv') }}" target="_blank" rel="noopener">{{ t('conditions générales de vente') }}</a></label>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">{{ t("Demander l'ouverture du compte") }}</button>
       </form>
-      <p class="auth-alt">Déjà client ? <a class="link" href="{{ url_for('fs.login') }}">Se connecter</a></p>
+      <p class="auth-alt">{{ t('Déjà client ?') }} <a class="link" href="{{ url_for('fs.login') }}">{{ t('Se connecter') }}</a></p>
 
       {% elif mode == 'registered' %}
-      <h2>Demande envoyée</h2>
-      <p class="lead">Merci, la demande pour <strong>{{ societe }}</strong> est bien reçue. L'atelier la vérifie sous 24 h ouvrées ; vous recevrez un e-mail dès que votre compte sera actif.</p>
-      <a class="btn btn-block btn-lg" href="{{ url_for('fs.login') }}">Retour à la connexion</a>
+      <h2>{{ t('Demande envoyée') }}</h2>
+      <p class="lead">{{ t("Merci, la demande pour {societe} est bien reçue. L'atelier la vérifie sous 24 h ouvrées ; vous recevrez un e-mail dès que votre compte sera actif.").format(societe=societe) }}</p>
+      <a class="btn btn-block btn-lg" href="{{ url_for('fs.login') }}">{{ t('Retour à la connexion') }}</a>
 
       {% elif mode == 'forgot' %}
-      <h2>Mot de passe oublié</h2>
+      <h2>{{ t('Mot de passe oublié') }}</h2>
       {% if envoye %}
-      <p class="lead">Si un compte existe pour cette adresse, un e-mail vient de partir avec un lien valable 1 heure. Pensez à vérifier les indésirables.</p>
-      <a class="btn btn-block btn-lg" href="{{ url_for('fs.login') }}">Retour à la connexion</a>
+      <p class="lead">{{ t('Si un compte existe pour cette adresse, un e-mail vient de partir avec un lien valable 1 heure. Pensez à vérifier les indésirables.') }}</p>
+      <a class="btn btn-block btn-lg" href="{{ url_for('fs.login') }}">{{ t('Retour à la connexion') }}</a>
       {% else %}
-      <p class="lead">Indiquez l'e-mail de votre compte, nous vous envoyons un lien pour choisir un nouveau mot de passe.</p>
+      <p class="lead">{{ t("Indiquez l'e-mail de votre compte, nous vous envoyons un lien pour choisir un nouveau mot de passe.") }}</p>
       <form method="post" class="stack">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
         <div class="field">
-          <label for="email">E-mail</label>
+          <label for="email">{{ t('E-mail') }}</label>
           <div class="input-icon">{{ icon('mail') }}<input class="input" type="email" id="email" name="email" autocomplete="username" required></div>
         </div>
-        <button class="btn btn-primary btn-lg btn-block" type="submit">Envoyer le lien</button>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">{{ t('Envoyer le lien') }}</button>
       </form>
-      <p class="auth-alt"><a class="link" href="{{ url_for('fs.login') }}">Retour à la connexion</a></p>
+      <p class="auth-alt"><a class="link" href="{{ url_for('fs.login') }}">{{ t('Retour à la connexion') }}</a></p>
       {% endif %}
 
       {% elif mode == 'reset' %}
-      <h2>Nouveau mot de passe</h2>
+      <h2>{{ t('Nouveau mot de passe') }}</h2>
       {% if invalide %}
-      <p class="lead">Ce lien a expiré ou a déjà servi.</p>
-      <a class="btn btn-primary btn-block btn-lg" href="{{ url_for('fs.forgot') }}">Refaire une demande</a>
+      <p class="lead">{{ t('Ce lien a expiré ou a déjà servi.') }}</p>
+      <a class="btn btn-primary btn-block btn-lg" href="{{ url_for('fs.forgot') }}">{{ t('Refaire une demande') }}</a>
       {% else %}
-      <p class="lead">Choisissez un nouveau mot de passe (10 caractères minimum).</p>
+      <p class="lead">{{ t('Choisissez un nouveau mot de passe (10 caractères minimum).') }}</p>
       <form method="post" class="stack">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-        <div class="field"><label for="pw">Nouveau mot de passe</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required></div>
-        <div class="field"><label for="pw2">Confirmation</label><input class="input" type="password" id="pw2" name="password2" minlength="10" autocomplete="new-password" required></div>
-        <button class="btn btn-primary btn-lg btn-block" type="submit">Enregistrer</button>
+        <div class="field"><label for="pw">{{ t('Nouveau mot de passe') }}</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required></div>
+        <div class="field"><label for="pw2">{{ t('Confirmation') }}</label><input class="input" type="password" id="pw2" name="password2" minlength="10" autocomplete="new-password" required></div>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">{{ t('Enregistrer') }}</button>
       </form>
       {% endif %}
 
       {% else %}
-      <h2>Bon retour</h2>
-      <p class="lead">Connectez-vous à votre espace client.</p>
+      <h2>{{ t('Bon retour') }}</h2>
+      <p class="lead">{{ t('Connectez-vous à votre espace client.') }}</p>
       <form method="post" class="stack">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
         <div class="field">
-          <label for="email">E-mail</label>
+          <label for="email">{{ t('E-mail') }}</label>
           <div class="input-icon">{{ icon('mail') }}<input class="input" type="email" id="email" name="email" value="{{ email }}" autocomplete="username" required></div>
         </div>
         <div class="field">
-          <div class="row-between"><label for="pw">Mot de passe</label><a class="link small" href="{{ url_for('fs.forgot') }}">Oublié ?</a></div>
+          <div class="row-between"><label for="pw">{{ t('Mot de passe') }}</label><a class="link small" href="{{ url_for('fs.forgot') }}">{{ t('Oublié ?') }}</a></div>
           <div class="input-icon">{{ icon('lock') }}<input class="input" type="password" id="pw" name="password" autocomplete="current-password" required></div>
         </div>
-        <label class="checkbox"><input type="checkbox" name="remember" value="1"> Rester connecté sur cet appareil</label>
-        <button class="btn btn-primary btn-lg btn-block" type="submit">Se connecter</button>
+        <label class="checkbox"><input type="checkbox" name="remember" value="1"> {{ t('Rester connecté sur cet appareil') }}</label>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">{{ t('Se connecter') }}</button>
       </form>
-      <p class="auth-alt">Pas encore de compte ? <a class="link" href="{{ url_for('fs.register') }}">Créer un compte pro</a></p>
+      <p class="auth-alt">{{ t('Pas encore de compte ?') }} <a class="link" href="{{ url_for('fs.register') }}">{{ t('Créer un compte pro') }}</a></p>
       {% endif %}
     </div>
   </section>

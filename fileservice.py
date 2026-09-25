@@ -27,6 +27,7 @@ import mailer
 import pages_legales
 import relances
 import stripe_api
+import traductions
 
 bp = Blueprint("fs", __name__)
 
@@ -35,7 +36,7 @@ DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Diman
 # Horaires par défaut (jour 0 = lundi) ; remplacés par « horaires » de portal_config.json
 HOURS_DEFAUT = {0: (8, 19), 1: (8, 19), 2: (8, 19), 3: (8, 19), 4: (8, 19), 5: (9, 13)}
 TOOLS = ["KESS3", "Autotuner", "Flex", "CMD Flash", "MagicMotorsport", "KTAG", "PCMFlash", "Autre"]
-PUBLIC_ENDPOINTS = {"fs.login", "fs.register", "fs.forgot", "fs.reset", "fs.stripe_webhook", "fs.legal"}
+PUBLIC_ENDPOINTS = {"fs.login", "fs.register", "fs.forgot", "fs.reset", "fs.stripe_webhook", "fs.legal", "fs.set_langue"}
 LIMITEUR = comptes.Limiteur(max_echecs=5, fenetre=900)
 
 
@@ -102,6 +103,12 @@ def _smtp():
     return reglages().get("smtp") or {}
 
 
+def _mail_client_lang(cle_sujet, cle_texte, **fmt):
+    """(sujet, texte) traduits dans la langue préférée du client connecté, pour ses e-mails."""
+    lg = langue()
+    return traductions.traduire(cle_sujet, lg).format(**fmt), traductions.traduire(cle_texte, lg).format(**fmt)
+
+
 def _mail(a, sujet, texte):
     ok, err = mailer.envoyer(_smtp(), a, sujet, texte, nom_expediteur=shop()["name"],
                              journal_dir=current_app.config["FS_DATA_DIR"])
@@ -148,6 +155,21 @@ def _nom_client():
 def _fmt_euros(v):
     """1234.5 -> « 1 234,50 € » (espace fine insécable pour les milliers)."""
     return f"{v:,.2f}".replace(",", " ").replace(".", ",") + " €"
+
+
+MVT_EN = [("Fichier ", "File "), ("Remboursement ", "Refund "), ("Solde annulé (compte supprimé)", "Balance cancelled"),
+          ("crédits fileservice", "file service credits"), ("crédits offerts", "bonus credits"), (" facture ", " invoice "),
+          ("Ajustement par l'atelier", "Adjustment by the shop")]
+
+
+@bp.app_template_filter("libelle")
+def _fmt_libelle(txt):
+    """Libellé d'un mouvement de crédits, traduit pour les préfixes générés par le logiciel."""
+    if langue() == "fr":
+        return txt
+    for fr, en in MVT_EN:
+        txt = txt.replace(fr, en)
+    return txt
 
 
 @bp.app_template_filter("credits")
@@ -198,6 +220,25 @@ def _securite():
     return None
 
 
+def langue():
+    return traductions.normaliser(request.cookies.get("lang", traductions.DEFAUT))
+
+
+def t(texte):
+    return traductions.traduire(texte, langue())
+
+
+@bp.route("/langue/<code>")
+def set_langue(code):
+    code = traductions.normaliser(code)
+    cible = _safe_next(request.args.get("next"))
+    resp = redirect(cible)
+    resp.set_cookie("lang", code, max_age=31536000, samesite="Lax")
+    if g.client:
+        comptes.changer_langue(_db(), g.client["id"], code)   # ses e-mails suivront cette langue
+    return resp
+
+
 @bp.context_processor
 def _inject():
     user = None
@@ -208,7 +249,7 @@ def _inject():
                 "initials": _initiales(c["contact"] or c["societe"]), "credits": c["credits"],
                 "level": c["niveau"], "open_count": st["ouverts"]}
     return {"shop": shop(), "user": user, "service": service_status(), "statuses": demandes.STATUTS,
-            "csrf_token": csrf_token}
+            "csrf_token": csrf_token, "t": t, "langue": langue(), "langues": traductions.LANGUES}
 
 
 def _safe_next(raw):
@@ -264,16 +305,14 @@ def register():
             erreur = "Trop de demandes depuis votre connexion. Réessayez plus tard."
         else:
             try:
-                comptes.creer_client(_db(), mdp=request.form.get("password", ""), **form)
+                cid = comptes.creer_client(_db(), mdp=request.form.get("password", ""), **form)
+                comptes.changer_langue(_db(), cid, langue())
             except comptes.ErreurCompte as e:
                 erreur = str(e)
             else:
                 LIMITEUR.echec("inscription:" + _ip())   # compte les inscriptions, pas seulement les erreurs
-                nom = shop()["name"]
-                _mail(form["email"], f"{nom} — demande d'ouverture de compte reçue",
-                      f"Bonjour,\n\nNous avons bien reçu la demande d'ouverture de compte pour "
-                      f"{form['societe']}.\nL'atelier la vérifie sous 24 h ouvrées ; vous recevrez un "
-                      f"e-mail dès que votre compte sera actif.\n\n{nom}")
+                _mail(form["email"], *traductions.mail("inscription", langue(), atelier=shop()["name"],
+                                                       societe=form["societe"]))
                 _mail_atelier(f"Nouvelle inscription fileservice : {form['societe']}",
                               f"Société : {form['societe']}\nSIRET : {form['siret']}\nTVA : {form['tva'] or '—'}\n"
                               f"Contact : {form['contact'] or '—'}\nE-mail : {form['email']}\nTél. : {form['tel'] or '—'}\n"
@@ -293,10 +332,7 @@ def forgot():
             c = comptes.client_par_email(_db(), email)
             if c and c["statut"] != "bloque":
                 lien = _url_publique("fs.reset", jeton=comptes.creer_jeton(_db(), c["id"]))
-                nom = shop()["name"]
-                _mail(c["email"], f"{nom} — réinitialisation du mot de passe",
-                      f"Bonjour,\n\nPour choisir un nouveau mot de passe, ouvrez ce lien (valable 1 heure) :\n"
-                      f"{lien}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.\n\n{nom}")
+                _mail(c["email"], *traductions.mail("reset", c.get("langue"), atelier=shop()["name"], lien=lien))
         envoye = True   # même réponse que le compte existe ou non
     return render_template("fs/login.html", mode="forgot", envoye=envoye)
 
@@ -410,9 +446,8 @@ def _livraison_auto_reception(d, contenu):
         demandes.livrer(_db(), _files(), d["id"], livraison_auto.nom_fichier(d), prep["patched"],
                         f"{' + '.join(cr['types'])} · checksum {cr['checksum'] or 'OK'}")
         livraison_auto.journaliser(current_app.config["FS_SOLUTIONS_DB"], d, prep, "automatique")
-        _mail(d["email"], f"{shop()['name']} — {d['numero']} : fichier prêt",
-              f"Bonjour,\n\nVotre fichier {d['numero']} est prêt. Téléchargez-le depuis votre espace client :\n"
-              f"{_url_publique('fs.file_detail', numero=d['numero'])}\n\n{shop()['name']}")
+        _mail(d["email"], *traductions.mail("fichier_pret", d.get("langue"), atelier=shop()["name"],
+                                            numero=d["numero"], lien=_url_publique("fs.file_detail", numero=d["numero"])))
         return True
     except Exception:
         current_app.logger.exception("Livraison automatique impossible pour %s", d["numero"])
@@ -428,9 +463,12 @@ def tarif():
     codes = data.get("prestations") or []
     if not isinstance(codes, list):
         codes = []
-    return jsonify(catalogue.devis(str(data.get("categorie", "")), [str(c) for c in codes][:20],
-                                   siege=bool(data.get("siege")), garantie=str(data.get("garantie") or ""),
-                                   **_remise_client()))
+    d = catalogue.devis(str(data.get("categorie", "")), [str(c) for c in codes][:20],
+                        siege=bool(data.get("siege")), garantie=str(data.get("garantie") or ""), **_remise_client())
+    for ligne in d["lignes"]:
+        ligne["nom"] = t(ligne["nom"]) if not ligne["nom"].startswith("Remise ") else \
+            ligne["nom"].replace("Remise ", t("Remise") + " ", 1)
+    return jsonify(d)
 
 
 def _remise_client():
@@ -595,10 +633,8 @@ def _crediter_session(sess):
                       f"Session {sess.get('id')} ({client['societe']}) : {e}\nCrédits NON ajoutés : à traiter à la main.")
         return None
     if fac and fac.get("nouvelle"):
-        _mail(client["email"], f"{shop()['name']} — facture {fac['numero']}",
-              f"Bonjour,\n\nMerci pour votre achat : {pack['credits'] + pack['bonus']} crédits ont été ajoutés "
-              f"à votre compte.\nVotre facture {fac['numero']} est disponible dans votre espace client, "
-              f"rubrique Crédits & factures.\n\n{shop()['name']}")
+        _mail(client["email"], *traductions.mail("facture", client.get("langue"), atelier=shop()["name"],
+                                                 numero=fac["numero"], credits=pack["credits"] + pack["bonus"]))
     return fac
 
 
@@ -675,6 +711,7 @@ def settings_export():
 def settings_api():
     """Clés d'API revendeur du client (création : la clé n'est affichée qu'une fois)."""
     import api
+    api.init_db(_db())
     api_active = bool(reglages().get("api_active"))
     nouvelle = None
     if request.method == "POST":

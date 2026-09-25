@@ -1,32 +1,32 @@
 {% extends "fs/base.html" %}
-{% from "fs/_macros.html" import vehicule, sous_titre, calculateur, prestas, badge %}
-{% block title %}Mes fichiers{% endblock %}
+{% from "fs/_macros.html" import vehicule, sous_titre, calculateur, prestas, badge with context %}
+{% block title %}{{ t("Mes fichiers") }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Mes fichiers</h1>
-    <p>Toutes vos demandes, leur statut et les fichiers livrés.</p>
+    <h1>{{ t("Mes fichiers") }}</h1>
+    <p>{{ t("Toutes vos demandes, leur statut et les fichiers livrés.") }}</p>
   </div>
-  <a class="btn btn-primary" href="{{ url_for('fs.new_file') }}">{{ icon('upload') }} Nouveau fichier</a>
+  <a class="btn btn-primary" href="{{ url_for('fs.new_file') }}">{{ icon('upload') }} {{ t("Nouveau fichier") }}</a>
 </div>
 
 <section class="card" data-filter-root>
   <div class="toolbar">
     <div class="tabs" role="tablist">
-      <button type="button" class="active" data-filter="all">Tous<span class="n">{{ files|length }}</span></button>
-      <button type="button" data-filter="en_cours recu">En cours<span class="n">{{ counts.en_cours + counts.recu }}</span></button>
-      <button type="button" data-filter="attente">Info requise<span class="n">{{ counts.attente }}</span></button>
-      <button type="button" data-filter="pret">Prêts<span class="n">{{ counts.pret }}</span></button>
-      <button type="button" data-filter="refuse">Refusés<span class="n">{{ counts.refuse }}</span></button>
+      <button type="button" class="active" data-filter="all">{{ t("Tous") }}<span class="n">{{ files|length }}</span></button>
+      <button type="button" data-filter="en_cours recu">{{ t("En cours") }}<span class="n">{{ counts.en_cours + counts.recu }}</span></button>
+      <button type="button" data-filter="attente">{{ t("Info requise") }}<span class="n">{{ counts.attente }}</span></button>
+      <button type="button" data-filter="pret">{{ t("Prêts") }}<span class="n">{{ counts.pret }}</span></button>
+      <button type="button" data-filter="refuse">{{ t("Refusés") }}<span class="n">{{ counts.refuse }}</span></button>
     </div>
     <div class="input-icon" style="width: 280px; max-width: 100%">
-      {{ icon('search') }}<input class="input" type="search" placeholder="Véhicule, calculateur, n°…" data-search aria-label="Rechercher">
+      {{ icon('search') }}<input class="input" type="search" placeholder="{{ t('Véhicule, calculateur, n°…') }}" data-search aria-label="{{ t('Rechercher') }}">
     </div>
   </div>
   <div class="table-wrap">
     <table class="table">
       <thead>
-        <tr><th>N°</th><th>Véhicule</th><th class="hide-sm">Calculateur</th><th class="hide-sm">Prestations</th><th class="right hide-sm">Crédits</th><th>Statut</th><th class="right hide-sm">Date</th></tr>
+        <tr><th>{{ t("N°") }}</th><th>{{ t("Véhicule") }}</th><th class="hide-sm">{{ t("Calculateur") }}</th><th class="hide-sm">{{ t("Prestations") }}</th><th class="right hide-sm">{{ t("Crédits") }}</th><th>{{ t("Statut") }}</th><th class="right hide-sm">{{ t("Date") }}</th></tr>
       </thead>
       <tbody>
       {% for f in files %}
@@ -43,7 +43,7 @@
       {% endfor %}
       </tbody>
     </table>
-    <p class="empty" data-empty {{ 'hidden' if files }}>{{ 'Aucun fichier ne correspond.' if files else "Vous n'avez encore envoyé aucun fichier." }}</p>
+    <p class="empty" data-empty {{ 'hidden' if files }}>{{ t('Aucun fichier ne correspond.') if files else t("Vous n'avez encore envoyé aucun fichier.") }}</p>
   </div>
 </section>
 {% endblock %}

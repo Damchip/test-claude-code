@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   const $ = (s, r = document) => r.querySelector(s);
+  const T = window.FS_T || { vide: 'Aucune prestation sélectionnée.', eco: 'Tarif pack appliqué : {n} crédits économisés',
+                            indispo: 'Tarif indisponible, réessayez.', cr: 'cr.', pj: 'Pièce jointe : ' };
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   // Thème clair / sombre, mémorisé sur l'appareil
@@ -22,7 +24,7 @@
     const out = $('[data-pj-name]');
     if (!out) return;
     out.hidden = !inp.files.length;
-    out.textContent = inp.files.length ? 'Pièce jointe : ' + inp.files[0].name : '';
+    out.textContent = inp.files.length ? T.pj + inp.files[0].name : '';
   }));
 
   // Lignes de tableau cliquables
@@ -115,25 +117,25 @@
         });
         d = await r.json();
       } catch (e) {
-        d = { lignes: [], total: 0, economie: 0, siege_possible: false, erreur: 'Tarif indisponible, réessayez.' };
+        d = { lignes: [], total: 0, economie: 0, siege_possible: false, erreur: T.indispo };
       }
       if (mine !== seq) return;   // une réponse plus récente est déjà arrivée
 
       $('#siegeBox').hidden = !d.siege_possible;
       $('#retourBox').hidden = !(d.siege_possible && $('#siege').checked);
       $('#sumLines').innerHTML = d.lignes.length
-        ? d.lignes.map(l => `<div class="summary-line"><span>${esc(l.nom)}</span><span class="num">${l.credits} cr.</span></div>`).join('')
-        : '<p class="summary-empty">Aucune prestation sélectionnée.</p>';
+        ? d.lignes.map(l => `<div class="summary-line"><span>${esc(l.nom)}</span><span class="num">${l.credits} ${T.cr}</span></div>`).join('')
+        : `<p class="summary-empty">${esc(T.vide)}</p>`;
       const saving = $('#sumSaving');
       saving.hidden = !(d.economie > 0);
-      saving.textContent = `Tarif pack appliqué : ${d.economie} crédits économisés`;
+      saving.textContent = T.eco.replace('{n}', d.economie);
       const err = $('#sumError');
       err.hidden = !d.erreur;
       err.textContent = d.erreur || '';
-      $('#sumTotal').textContent = d.total + ' cr.';
+      $('#sumTotal').textContent = d.total + ' ' + T.cr;
       const after = balance - d.total;
       const afterEl = $('#sumAfter');
-      afterEl.textContent = after + ' cr.';
+      afterEl.textContent = after + ' ' + T.cr;
       afterEl.style.color = after < 0 ? 'var(--danger)' : '';
       $('#submitBtn').disabled = !codes.length || after < 0 || !!d.erreur || !input.files.length;
     }

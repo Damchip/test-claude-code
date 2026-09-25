@@ -336,3 +336,75 @@ class ApiTests(unittest.TestCase):
         cle_id = self.api.lister_cles(self.db, self.cid)[0]["id"]
         self.api.revoquer_cle(self.db, self.cid, cle_id)
         self.assertEqual(self.c.get("/api/v1/compte", headers=self._h()).status_code, 401)
+
+
+class AnglaisTests(unittest.TestCase):
+    def setUp(self):
+        import portal
+        self.portal = portal
+        self.tmp = tempfile.TemporaryDirectory()
+        t = self.tmp.name
+        app = portal.app
+        self.saved = {k: app.config.get(k) for k in ("FS_DB", "FS_FILES", "FS_DATA_DIR", "FS_CONFIG")}
+        app.config.update(FS_DB=_base(t), FS_FILES=os.path.join(t, "f"), FS_DATA_DIR=t,
+                          FS_CONFIG=os.path.join(t, "c.json"))
+        portal.fileservice.LIMITEUR._echecs.clear()
+        self.db = app.config["FS_DB"]
+
+    def tearDown(self):
+        self.portal.app.config.update(self.saved)
+        self.tmp.cleanup()
+
+    def _mails(self):
+        p = os.path.join(self.tmp.name, "mails_non_envoyes.log")
+        if not os.path.exists(p):
+            return ""
+        with open(p, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_bascule_et_e_mails(self):
+        c = self.portal.app.test_client()
+        self.assertIn("Bon retour", c.get("/connexion").get_data(as_text=True))       # français par défaut
+        r = c.get("/langue/en?next=/connexion")
+        self.assertEqual(r.headers["Location"], "/connexion")
+        html = c.get("/connexion").get_data(as_text=True)
+        self.assertIn("Welcome back", html)
+        self.assertIn('lang="en"', html)
+        self.assertNotIn("Bon retour", html)
+        tok = re.search(r'name="csrf" value="([^"]+)"', c.get("/inscription").get_data(as_text=True)).group(1)
+        c.post("/inscription", data={"csrf": tok, "societe": "Garage UK", "siret": "73282932000074",
+                                     "email": "uk@garage.co.uk", "password": "motdepasse-solide", "cgv": "1"})
+        self.assertIn("account request received", self._mails())
+        self.assertEqual(comptes.client_par_email(self.db, "uk@garage.co.uk")["langue"], "en")
+        self.assertEqual(c.get("/langue/xx").status_code, 302)                         # langue inconnue -> français
+
+    def test_pages_connectees_en_anglais(self):
+        cid = _client(self.db)
+        comptes.changer_langue(self.db, cid, "en")
+        c = self.portal.app.test_client()
+        c.set_cookie("lang", "en")
+        tok = re.search(r'name="csrf" value="([^"]+)"', c.get("/connexion").get_data(as_text=True)).group(1)
+        c.post("/connexion", data={"csrf": tok, "email": "jean@garage.fr", "password": "motdepasse-solide"})
+        pages = {"/": "Dashboard", "/fichiers": "My files", "/nouveau": "Submit request", "/credits": "Transactions",
+                 "/parametres": "Change password", "/support": "Frequently asked questions"}
+        for url, attendu in pages.items():
+            self.assertIn(attendu, c.get(url).get_data(as_text=True), url)
+        _creer(self.db, self.portal.app.config["FS_FILES"], cid)
+        self.assertIn("Received", c.get("/fichiers").get_data(as_text=True))        # libellé de statut traduit
+
+    def test_e_mail_atelier_dans_la_langue_du_client(self):
+        import app as outil
+        saved = (outil.FS_DB, outil.FS_FILES, outil.PORTAL_CONFIG_PATH, outil.DATA_DIR)
+        outil.FS_DB, outil.FS_FILES = self.db, os.path.join(self.tmp.name, "f")
+        outil.PORTAL_CONFIG_PATH, outil.DATA_DIR = os.path.join(self.tmp.name, "c.json"), self.tmp.name
+        try:
+            cid = _client(self.db)
+            comptes.changer_langue(self.db, cid, "en")
+            did = _creer(self.db, outil.FS_FILES, cid)
+            o = outil.app.test_client()
+            o.post(f"/fs/demandes/{did}/message", data={"texte": "Please send the EEPROM", "attente": "1"})
+            self.assertIn("information needed", self._mails())
+            o.post(f"/fs/demandes/{did}/refuser", json={"motif": "unreadable"})
+            self.assertIn("file declined", self._mails())
+        finally:
+            outil.FS_DB, outil.FS_FILES, outil.PORTAL_CONFIG_PATH, outil.DATA_DIR = saved
