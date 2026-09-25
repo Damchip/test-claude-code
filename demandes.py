@@ -16,7 +16,10 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
+
+from werkzeug.security import generate_password_hash
 
 import catalogue
 import comptes
@@ -378,3 +381,56 @@ def demander_revision(db_path, files_dir, demande_id, client_id, auteur_nom, tex
     ajouter_message(db_path, files_dir, demande_id, "client", auteur_nom, "Demande de révision : " + texte)
     with connect(db_path) as con:
         con.execute("UPDATE demandes SET statut = 'en_cours', maj_le = ? WHERE id = ?", (_now(), demande_id))
+
+
+# --- RGPD --------------------------------------------------------------------
+
+def export_client(db_path, client_id):
+    """Toutes les données d'un client, pour son droit d'accès / de portabilité."""
+    c = comptes.get_client(db_path, client_id)
+    if not c:
+        return None
+    c.pop("mdp_hash", None)
+    with connect(db_path) as con:
+        factures = [dict(r) for r in con.execute(
+            "SELECT numero, date, designation, credits, ht, tva, ttc, paiement FROM factures WHERE client_id = ?"
+            " ORDER BY id", (client_id,))]
+    out = []
+    for d in lister(db_path, client_id, limite=100000):
+        out.append({k: d[k] for k in ("numero", "cree_le", "statut", "categorie", "vehicule", "lecture", "lignes",
+                                       "total", "commentaire", "fichier_nom", "motif_refus", "livre_le")}
+                   | {"messages": [{k: m[k] for k in ("auteur", "texte", "pj_nom", "cree_le")}
+                                   for m in messages(db_path, d["id"])]})
+    return {"export_du": _now(), "compte": c, "mouvements": comptes.mouvements(db_path, client_id, limite=100000),
+            "factures": factures, "demandes": out}
+
+
+def anonymiser_client(db_path, files_dir, client_id):
+    """Droit à l'effacement : supprime les données personnelles et les fichiers du client.
+    Les factures (identité figée) et les montants des demandes sont conservés : obligation
+    comptable de 10 ans."""
+    c = comptes.get_client(db_path, client_id)
+    if not c:
+        raise ErreurCompte("Client introuvable.")
+    ids = [r["id"] for r in lister(db_path, client_id, limite=100000)]
+    with connect(db_path) as con:
+        con.execute("BEGIN IMMEDIATE")
+        if c["credits"]:
+            con.execute("INSERT INTO mouvements (client_id, date, libelle, montant) VALUES (?, ?, ?, ?)",
+                        (client_id, _now(), "Solde annulé (compte supprimé)", -c["credits"]))
+        con.execute(
+            "UPDATE clients SET societe = ?, siret = '', tva = '', contact = '', email = ?, tel = '', adresse = '',"
+            " code_postal = '', ville = '', pays = '', mdp_hash = ?, statut = 'bloque', credits = 0 WHERE id = ?",
+            (f"Compte supprimé n°{client_id}", f"supprime-{client_id}@invalid",
+             generate_password_hash(secrets.token_hex(32)), client_id))
+        con.execute("DELETE FROM jetons WHERE client_id = ?", (client_id,))
+        for did in ids:
+            con.execute("UPDATE demandes SET vehicule = '{}', lecture = '{}', commentaire = '', detection = '{}',"
+                        " fichier_nom = 'supprime.bin' WHERE id = ?", (did,))
+            con.execute("UPDATE messages SET texte = '', pj_nom = '', pj_fichier = '', auteur_nom = '' WHERE demande_id = ?",
+                        (did,))
+            con.execute("UPDATE livrables SET nom = 'supprime.bin', fichier = '', note = '' WHERE demande_id = ?", (did,))
+    for did in ids:
+        shutil.rmtree(os.path.join(files_dir, str(int(did))), ignore_errors=True)
+    return len(ids)
+

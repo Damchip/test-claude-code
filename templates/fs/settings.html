@@ -41,6 +41,11 @@
       <div class="field"><label for="nouveau2">Confirmation</label><input class="input" type="password" id="nouveau2" name="nouveau2" minlength="10" autocomplete="new-password" required></div>
       <button class="btn btn-block" type="submit">Changer le mot de passe</button>
     </form>
+    <div class="card-body" style="border-top: 1px solid var(--line-soft)">
+      <h3>Mes données</h3>
+      <p class="muted small" style="margin: 6px 0 12px">Téléchargez toutes les données de votre compte (coordonnées, demandes, messages, crédits, factures). Pour supprimer votre compte, écrivez à l'atelier{% if shop.email %} ({{ shop.email }}){% endif %}.</p>
+      <a class="btn btn-block" href="{{ url_for('fs.settings_export') }}">{{ icon('download', 'icon-sm') }} Télécharger mes données</a>
+    </div>
   </aside>
 </div>
 {% endblock %}

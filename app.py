@@ -27,13 +27,14 @@ import comptes
 import demandes
 import factures
 import mailer
+import pages_legales
 import stripe_api
 
 app = Flask(__name__)
 # Filtres d'affichage partagés avec l'espace client (facture vue par l'atelier)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits)
-APP_VERSION = "1.53.0"
+APP_VERSION = "1.54.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -92,6 +93,26 @@ def _safe_next(raw, fallback):
     if not raw.startswith("/") or raw.startswith("//") or "\\" in raw or ":" in raw:
         return fallback
     return raw
+
+
+@app.before_request
+def _refuser_requetes_inter_sites():
+    """Anti-CSRF de l'outil interne : une page d'un autre site ouverte sur le poste de l'atelier
+    ne doit pas pouvoir envoyer de formulaire ici (livrer un fichier, créditer un client…).
+    Les navigateurs indiquent l'origine d'une requête (Sec-Fetch-Site / Origin) : on refuse toute
+    écriture qui ne vient pas de l'outil lui-même."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    if request.headers.get("Sec-Fetch-Site", "") == "cross-site":
+        return jsonify({"error": "Requête refusée (origine externe)."}), 403
+    origin = request.headers.get("Origin")
+    if origin and origin != "null":
+        from urllib.parse import urlsplit
+        if urlsplit(origin).netloc != request.host:
+            return jsonify({"error": "Requête refusée (origine externe)."}), 403
+    elif origin == "null":
+        return jsonify({"error": "Requête refusée (origine externe)."}), 403
+    return None
 
 
 @app.before_request
@@ -597,6 +618,20 @@ def clients_statut():
     return jsonify({"ok": True, "mail": mail})
 
 
+@app.route("/clients/supprimer", methods=["POST"])
+def clients_supprimer():
+    """Droit à l'effacement : anonymise le compte et supprime ses fichiers (factures conservées)."""
+    b = request.json or {}
+    if b.get("confirmation") != "SUPPRIMER":
+        return jsonify({"error": "Confirmation manquante."}), 400
+    _fs_init()
+    try:
+        n = demandes.anonymiser_client(FS_DB, FS_FILES, int(b.get("id") or 0))
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "demandes": n})
+
+
 @app.route("/clients/niveau", methods=["POST"])
 def clients_niveau():
     b = request.json or {}
@@ -658,8 +693,34 @@ def fs_facture(numero):
     return render_template("fs/facture.html", fac=fac, shop={"name": load_portal_config().get("shop_name") or "E85-FRANCE"})
 
 
-CHAMPS_SOCIETE = ("raison_sociale", "forme", "capital", "adresse", "code_postal", "ville", "siret", "rcs",
-                  "tva", "email", "tel")
+CHAMPS_SOCIETE = pages_legales.CHAMPS
+
+
+@app.route("/fs/synthese")
+def fs_synthese():
+    _fs_init()
+    return jsonify(factures.synthese(FS_DB))
+
+
+@app.route("/fs/factures.csv")
+def fs_factures_csv():
+    _fs_init()
+    debut, fin = request.args.get("debut", ""), request.args.get("fin", "")
+    nom = "factures" + (f"_{debut}" if debut else "") + (f"_{fin}" if fin and fin != debut else "") + ".csv"
+    return Response(factures.export_csv(FS_DB, debut, fin), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nom}"'})
+
+
+@app.route("/fs/sauvegarde", methods=["GET", "POST"])
+def fs_sauvegarde():
+    _fs_init()
+    if request.method == "POST":
+        try:
+            comptes.sauvegarder(FS_DB)
+        except Exception as e:
+            return jsonify({"error": f"Sauvegarde impossible : {e}"}), 500
+    return jsonify({"sauvegardes": comptes.dernieres_sauvegardes(FS_DB),
+                    "dossier_fichiers": FS_FILES})
 
 
 @app.route("/fs/reglages", methods=["GET"])
@@ -674,7 +735,10 @@ def fs_reglages_get():
                                "mode": "test" if str(stripe.get("secret_key", "")).startswith(("sk_test", "rk_test")) else
                                        ("live" if stripe.get("secret_key") else ""),
                                "webhook_secret_set": bool(stripe.get("webhook_secret"))},
-                    "public_url": cfg.get("public_url", "")})
+                    "public_url": cfg.get("public_url", ""),
+                    "pages": {k: {"titre": t, "texte": pages_legales.texte(cfg, k),
+                                  "a_completer": pages_legales.a_completer(cfg, k)}
+                              for k, t in pages_legales.PAGES.items()}})
 
 
 @app.route("/fs/reglages", methods=["POST"])
@@ -709,6 +773,18 @@ def fs_reglages_set():
         if stripe.get("secret_key") and not stripe_api.configure(stripe):
             return jsonify({"error": "Clé secrète Stripe invalide (elle commence par sk_live_ ou sk_test_)."}), 400
         cfg["stripe"] = stripe
+    if isinstance(b.get("pages"), dict):
+        pages = dict(cfg.get("pages") or {})
+        for k in pages_legales.PAGES:
+            if k not in b["pages"]:
+                continue
+            txt = str(b["pages"][k] or "").strip()[:60000]
+            # vide ou identique au modèle : on revient au modèle (qui suivra ses mises à jour)
+            if not txt or txt == pages_legales.MODELES[k].strip():
+                pages.pop(k, None)
+            else:
+                pages[k] = txt
+        cfg["pages"] = pages
     _save_portal_config(cfg)
     return jsonify({"ok": True})
 

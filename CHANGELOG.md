@@ -3,6 +3,21 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.54.0
+Mise en conformité et exploitation du fileservice.
+
+- **Pages légales** : CGV, mentions légales, politique de confidentialité, publiques sur
+  `/espace/legal/…`, liées depuis l'inscription et le menu. Modèles pré-remplis avec l'identité
+  légale, modifiables dans Fileservice → Réglages (à faire relire par un juriste).
+- **Sauvegardes** de `data/fileservice.db` au démarrage du portail puis chaque jour (copie à chaud
+  SQLite, 30 gardées dans `data/backups/`), bouton « Sauvegarder maintenant ».
+- **Comptabilité** : synthèse mensuelle (factures, CA HT/TVA/TTC, crédits vendus et consommés,
+  crédits en circulation) et **export CSV des factures** pour le comptable (Excel : « ; » et virgule).
+- **RGPD** : le client télécharge ses données (Paramètres) ; l'atelier peut supprimer un compte
+  (données personnelles et fichiers effacés, factures conservées 10 ans).
+- **Sécurité** : l'outil interne refuse les écritures venant d'un autre site (une page piégée ne peut
+  plus livrer un fichier ou créditer un client) ; en-têtes d'e-mail nettoyés.
+
 ## v1.53.0
 Fileservice complet : espace client, traitement atelier, paiement et factures.
 

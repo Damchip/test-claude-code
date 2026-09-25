@@ -24,7 +24,10 @@
       </div>
     </div>
 
-    <p class="auth-foot">© {{ shop.name }} · Accès réservé aux professionnels</p>
+    <p class="auth-foot">© {{ shop.name }} · Accès réservé aux professionnels ·
+      <a href="{{ url_for('fs.legal', cle='cgv') }}">CGV</a> ·
+      <a href="{{ url_for('fs.legal', cle='mentions-legales') }}">Mentions légales</a> ·
+      <a href="{{ url_for('fs.legal', cle='confidentialite') }}">Confidentialité</a></p>
   </section>
 
   <section class="auth-form">
@@ -50,7 +53,7 @@
           <div class="field full"><label for="email">E-mail professionnel</label><input class="input" type="email" id="email" name="email" value="{{ form.email }}" autocomplete="email" required></div>
           <div class="field full"><label for="pw">Mot de passe</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required><span class="hint">10 caractères minimum.</span></div>
         </div>
-        <label class="checkbox"><input type="checkbox" name="cgv" required> J'accepte les conditions générales de vente</label>
+        <label class="checkbox"><input type="checkbox" name="cgv" required> J'accepte les <a class="link" href="{{ url_for('fs.legal', cle='cgv') }}" target="_blank" rel="noopener">conditions générales de vente</a></label>
         <button class="btn btn-primary btn-lg btn-block" type="submit">Demander l'ouverture du compte</button>
       </form>
       <p class="auth-alt">Déjà client ? <a class="link" href="{{ url_for('fs.login') }}">Se connecter</a></p>

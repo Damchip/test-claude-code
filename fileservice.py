@@ -11,6 +11,7 @@ modifiables depuis l'outil interne.
 """
 import datetime as dt
 import hmac
+import json
 import secrets
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,7 @@ import comptes
 import demandes
 import factures
 import mailer
+import pages_legales
 import stripe_api
 
 bp = Blueprint("fs", __name__, url_prefix="/espace")
@@ -31,7 +33,7 @@ DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Diman
 # Horaires par défaut (jour 0 = lundi) ; remplacés par « horaires » de portal_config.json
 HOURS_DEFAUT = {0: (8, 19), 1: (8, 19), 2: (8, 19), 3: (8, 19), 4: (8, 19), 5: (9, 13)}
 TOOLS = ["KESS3", "Autotuner", "Flex", "CMD Flash", "MagicMotorsport", "KTAG", "PCMFlash", "Autre"]
-PUBLIC_ENDPOINTS = {"fs.login", "fs.register", "fs.forgot", "fs.reset", "fs.stripe_webhook"}
+PUBLIC_ENDPOINTS = {"fs.login", "fs.register", "fs.forgot", "fs.reset", "fs.stripe_webhook", "fs.legal"}
 LIMITEUR = comptes.Limiteur(max_echecs=5, fenetre=900)
 
 
@@ -609,7 +611,25 @@ def settings():
     return render_template("fs/settings.html", nav="settings", c=g.client)
 
 
+@bp.route("/parametres/mes-donnees")
+def settings_export():
+    """Droit d'accès RGPD : toutes les données du compte en JSON."""
+    data = demandes.export_client(_db(), g.client["id"])
+    resp = current_app.response_class(json.dumps(data, ensure_ascii=False, indent=2), mimetype="application/json")
+    resp.headers["Content-Disposition"] = f'attachment; filename="mes-donnees-{dt.date.today():%Y%m%d}.json"'
+    return resp
+
+
 @bp.route("/support")
 def support():
     return render_template("fs/support.html", nav="support", hours=hours_table(),
                            revision_jours=demandes.REVISION_JOURS)
+
+
+@bp.route("/legal/<cle>")
+def legal(cle):
+    if cle not in pages_legales.PAGES:
+        abort(404)
+    return render_template("fs/legal.html", cle=cle, titre=pages_legales.PAGES[cle],
+                           contenu=pages_legales.rendre(reglages(), cle), pages=pages_legales.PAGES)
+

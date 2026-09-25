@@ -36,6 +36,7 @@
         <p>Posez votre question directement dans la demande concernée, ou contactez l'atelier.</p>
         <a class="btn btn-sm btn-block" href="{{ url_for('fs.support') }}">{{ icon('message', 'icon-sm') }} Contacter l'atelier</a>
       </div>
+      <p class="side-legal"><a href="{{ url_for('fs.legal', cle='cgv') }}">CGV</a> · <a href="{{ url_for('fs.legal', cle='mentions-legales') }}">Mentions légales</a> · <a href="{{ url_for('fs.legal', cle='confidentialite') }}">Confidentialité</a></p>
     </div>
   </aside>
   <div class="scrim" data-close-nav></div>

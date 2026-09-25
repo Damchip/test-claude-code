@@ -41,8 +41,12 @@ def configure(cfg):
 
 def envoyer(cfg, a, sujet, texte, nom_expediteur="E85-FRANCE", journal_dir=None):
     """Envoie un e-mail texte. Renvoie (ok, message_erreur)."""
-    if not a:
-        return False, "Destinataire vide."
+    # Pas de retour à la ligne dans les en-têtes (le sujet peut contenir un nom saisi par un client)
+    a = " ".join(str(a or "").split())
+    sujet = " ".join(str(sujet or "").split())[:200]
+    nom_expediteur = " ".join(str(nom_expediteur or "").split())
+    if not a or "," in a or ";" in a:
+        return False, "Destinataire invalide."
     msg = EmailMessage()
     expediteur = cfg.get("from") or cfg.get("user") or "noreply@localhost"
     msg["From"] = formataddr((nom_expediteur, expediteur))

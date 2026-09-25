@@ -244,7 +244,7 @@ function showView(v) {
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
   if (v === "clients") { loadClients(); loadSmtp(); }
-  if (v === "fs") { loadFs(); loadFsReglages(); }
+  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -3178,7 +3178,9 @@ async function loadClients() {
          <button class="ghost sm" data-cstat="bloque" data-id="${c.id}">Refuser</button>`
       : c.statut === "actif"
         ? `<button class="ghost sm" data-cstat="bloque" data-id="${c.id}">Bloquer</button>`
+        : c.email.endsWith("@invalid") ? `<span class="muted small">supprimé</span>`
         : `<button class="ghost sm" data-cstat="actif" data-id="${c.id}">Débloquer</button>`;
+    const suppr = c.email.endsWith("@invalid") ? "" : `<button class="ghost sm" data-csuppr="${c.id}" title="Droit à l'effacement (RGPD)">Supprimer le compte</button>`;
     return `<div class="job-row" data-id="${c.id}">
       <div class="job-main">
         <div class="job-top"><b>${esc(c.societe)}</b> <span class="badge ${cls}">${esc(lbl)}</span>
@@ -3207,7 +3209,7 @@ async function loadClients() {
         </details>
         <div class="c-out muted small"></div>
       </div>
-      <div class="inbox-actions">${actions}</div>
+      <div class="inbox-actions">${actions}${suppr}</div>
     </div>`;
   }).join("");
 }
@@ -3235,6 +3237,15 @@ $("#clientsList").addEventListener("click", async e => {
   if (!row) return;
   const out = row.querySelector(".c-out");
   try {
+    if (e.target.dataset.csuppr) {
+      const ok = prompt("Supprimer définitivement les données personnelles et les fichiers de ce client ?\n"
+        + "Les factures sont conservées (obligation légale de 10 ans). Tape SUPPRIMER pour confirmer.");
+      if (ok !== "SUPPRIMER") return;
+      const d = await postJSON("/clients/supprimer", { id: +e.target.dataset.csuppr, confirmation: "SUPPRIMER" });
+      alert(`Compte anonymisé, fichiers de ${d.demandes} demande(s) supprimés.`);
+      await loadClients();
+      return;
+    }
     if (e.target.dataset.cfac) {
       const cid = e.target.dataset.cfac, i = row.querySelector(".c-pack").value;
       const body = { id: +cid, credits: row.querySelector(".c-fcred").value, ht: row.querySelector(".c-fht").value,
@@ -3499,7 +3510,8 @@ $("#fsDetail").addEventListener("click", async e => {
 /* Réglages du fileservice */
 const FS_SOCIETE = [["raison_sociale", "Raison sociale"], ["forme", "Forme (SAS, SARL…)"], ["capital", "Capital"],
   ["adresse", "Adresse"], ["code_postal", "Code postal"], ["ville", "Ville"], ["siret", "SIRET"], ["rcs", "RCS (ex : RCS Lyon 123 456 789)"],
-  ["tva", "N° TVA"], ["email", "E-mail de contact"], ["tel", "Téléphone"]];
+  ["tva", "N° TVA"], ["email", "E-mail de contact"], ["tel", "Téléphone"],
+  ["directeur_publication", "Directeur de la publication"], ["hebergeur", "Hébergeur (nom, adresse, téléphone)"]];
 const FS_JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 async function loadFsReglages() {
@@ -3511,6 +3523,11 @@ async function loadFsReglages() {
     return `<label>${j} <span><input type="number" min="0" max="24" data-hj="${i}" data-hk="0" value="${h ? h[0] : ""}" style="width:64px"> –
       <input type="number" min="0" max="24" data-hj="${i}" data-hk="1" value="${h ? h[1] : ""}" style="width:64px"> h</span></label>`;
   }).join("");
+  $("#fsPages").innerHTML = Object.entries(d.pages).map(([k, p]) => `<details class="fs-page">
+    <summary><b>${esc(p.titre)}</b> ${p.a_completer ? '<span class="badge warn">informations à compléter</span>' : '<span class="badge ok">complète</span>'}
+      · <a class="fs-link" href="/espace/legal/${k}" target="_blank">voir la page</a> <span class="muted small">(portail)</span></summary>
+    <textarea data-page="${k}" rows="14" style="margin-top:6px;font-family:var(--mono);font-size:12px">${esc(p.texte)}</textarea>
+  </details>`).join("");
   const st = d.stripe;
   $("#fsStripeKey").value = ""; $("#fsStripeWh").value = "";
   $("#fsStripeKey").placeholder = st.secret_key_set ? "enregistrée (vide = inchangée)" : "sk_live_… ou sk_test_…";
@@ -3518,6 +3535,34 @@ async function loadFsReglages() {
   $("#fsStripeEtat").textContent = st.secret_key_set ? `Paiement en ligne actif (${st.mode === "test" ? "mode test" : "mode réel"})${st.webhook_secret_set ? "" : " · webhook non configuré"}` : "Paiement en ligne désactivé";
   $("#fsWebhookUrl").textContent = (d.public_url || "https://portail.ton-domaine.fr") + "/espace/stripe/webhook";
 }
+
+async function loadFsBackups(post) {
+  try {
+    const d = post ? await postJSON("/fs/sauvegarde", {}) : await (await fetch("/fs/sauvegarde")).json();
+    $("#fsFilesDir").textContent = d.dossier_fichiers;
+    const b = d.sauvegardes || [];
+    $("#fsBackupOut").textContent = b.length
+      ? `Dernière : ${b[0].nom.slice(12, 20).replace(/(\d{4})(\d{2})(\d{2})/, "$3/$2/$1")} ${b[0].nom.slice(21, 23)}h${b[0].nom.slice(23, 25)} · ${b.length} récente(s)` + (post ? " — sauvegarde faite." : "")
+      : "Aucune sauvegarde pour l'instant.";
+  } catch (err) { $("#fsBackupOut").textContent = err.message; }
+}
+$("#fsBackup").onclick = () => loadFsBackups(true);
+
+async function loadFsSynthese() {
+  const d = await (await fetch("/fs/synthese")).json();
+  const eur = v => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+  const moisFr = m => new Date(m + "-01T12:00:00").toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  $("#fsSynthese").innerHTML = (d.mois.length ? `<table class="fs-table"><thead><tr><th>Mois</th><th>Factures</th>
+      <th>CA HT</th><th>TVA</th><th>TTC</th><th>Crédits vendus</th><th>Crédits consommés</th></tr></thead><tbody>`
+    + d.mois.map(m => `<tr><td>${esc(moisFr(m.mois))}</td><td>${m.factures}</td><td>${eur(m.ht)}</td><td>${eur(m.tva)}</td>
+      <td>${eur(m.ttc)}</td><td>${m.credits_vendus}</td><td>${m.credits_consommes}</td></tr>`).join("")
+    + `</tbody></table>` : "Aucune vente pour l'instant.")
+    + `<div style="margin-top:6px">Crédits en circulation (soldes clients non consommés) : <b>${d.credits_en_circulation}</b></div>`;
+}
+$("#fsCsv").onclick = () => {
+  const q = new URLSearchParams({ debut: $("#fsCsvDebut").value, fin: $("#fsCsvFin").value });
+  window.location = "/fs/factures.csv?" + q.toString();
+};
 
 $("#fsSaveReglages").onclick = async () => {
   const societe = {};
@@ -3528,7 +3573,9 @@ $("#fsSaveReglages").onclick = async () => {
     horaires[j] = o !== "" && f !== "" ? [+o, +f] : null;
   }
   try {
-    await postJSON("/fs/reglages", { societe, horaires, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
+    const pages = {};
+    document.querySelectorAll("[data-page]").forEach(t => { pages[t.dataset.page] = t.value; });
+    await postJSON("/fs/reglages", { societe, horaires, pages, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
     $("#fsReglagesOut").textContent = "Réglages enregistrés.";
     loadFsReglages();
   } catch (err) { $("#fsReglagesOut").textContent = err.message; }

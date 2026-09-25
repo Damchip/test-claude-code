@@ -278,12 +278,24 @@
         <div id="fsDetail" class="dash-card fs-detail"><div class="empty">Choisis une demande dans la liste.</div></div>
       </div>
 
+      <div class="dash-card" style="margin-top:22px">
+        <h3 style="margin-top:0">Chiffre d'affaires &amp; comptabilité</h3>
+        <div id="fsSynthese" class="muted small">…</div>
+        <div class="patch-row fs-form" style="margin-top:10px;align-items:flex-end">
+          <label>Du mois <input type="month" id="fsCsvDebut"></label>
+          <label>au mois <input type="month" id="fsCsvFin"></label>
+          <button id="fsCsv" class="patchbtn sm">Exporter les factures (CSV pour le comptable)</button>
+        </div>
+      </div>
+
       <div class="dash-card" style="margin-top:22px" id="fsReglages">
         <h3 style="margin-top:0">Réglages du fileservice</h3>
         <h4>Identité légale (affichée sur les factures et la page Support)</h4>
         <div class="patch-row fs-form" id="fsSociete"></div>
         <h4>Horaires d'ouverture <span class="muted small">(laisser vide = fermé)</span></h4>
         <div class="patch-row fs-form" id="fsHoraires"></div>
+        <h4>Pages légales <span class="muted small">(modèles à relire et adapter ; <code>## Titre</code> = intertitre, <code>- </code> = puce, <code>{raison_sociale}</code>… = identité ci-dessus)</span></h4>
+        <div id="fsPages"></div>
         <h4>Paiement en ligne (Stripe)</h4>
         <p class="muted small">Tableau de bord Stripe → Développeurs → <b>Clés API</b> : copie la clé secrète.
           Puis <b>Webhooks</b> → ajouter l'adresse <code id="fsWebhookUrl">…/espace/stripe/webhook</code>,
@@ -294,6 +306,13 @@
           <label>Secret du webhook <input type="password" id="fsStripeWh" autocomplete="new-password"></label>
           <span class="muted small" id="fsStripeEtat"></span>
         </div>
+        <h4>Sauvegardes</h4>
+        <p class="muted small">La base du fileservice (comptes, demandes, factures) est copiée dans <code>data/backups/</code>
+          au démarrage du portail puis chaque jour (30 copies gardées). Les fichiers clients sont dans
+          <code id="fsFilesDir">data/fileservice_fichiers</code> : inclus ce dossier et <code>data/backups/</code>
+          dans ta sauvegarde externe (OneDrive, disque USB…).</p>
+        <div class="patch-row"><button id="fsBackup" class="ghost sm">Sauvegarder maintenant</button>
+          <span id="fsBackupOut" class="muted small"></span></div>
         <div class="patch-row" style="margin-top:10px"><button id="fsSaveReglages" class="patchbtn sm">Enregistrer les réglages</button>
           <span id="fsReglagesOut" class="muted small"></span></div>
       </div>

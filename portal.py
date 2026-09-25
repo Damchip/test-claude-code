@@ -31,7 +31,7 @@ import demandes
 import factures
 import fileservice
 
-APP_VERSION = "1.53.0"
+APP_VERSION = "1.54.0"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt
@@ -385,12 +385,28 @@ def order():
     return jsonify({"ok": True, "prestas": wanted, "updated": updated})
 
 
+def _sauvegardes_quotidiennes():
+    """Sauvegarde la base du fileservice au démarrage puis toutes les 24 h (fil en arrière-plan)."""
+    import threading
+
+    def boucle():
+        while True:
+            try:
+                comptes.sauvegarder(app.config["FS_DB"])
+            except Exception as e:   # une sauvegarde ratée ne doit jamais arrêter le portail
+                print(f"  ⚠ Sauvegarde du fileservice impossible : {e}")
+            time.sleep(24 * 3600)
+
+    threading.Thread(target=boucle, name="sauvegardes-fileservice", daemon=True).start()
+
+
 if __name__ == "__main__":
     host = os.environ.get("CARTO_HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "5001"))
     lan = host not in ("127.0.0.1", "localhost")
     cfg = load_config()
     db.init_db(DB_PATH)
+    _sauvegardes_quotidiennes()
     print("=" * 60)
     print(f"  Portail client — Carto Matcher v{APP_VERSION}")
     print(f"  Atelier         : {cfg.get('shop_name')}")

@@ -415,3 +415,9 @@ hr.sep { border: none; border-top: 1px solid var(--line, #2a333d); margin: 20px 
 header{flex-wrap:wrap;gap:10px}
 .tabs{flex-wrap:wrap;justify-content:flex-end;flex:1 1 600px}
 .tabs .tab{white-space:nowrap}
+#view-fs .fs-page{margin:6px 0}
+#view-fs .fs-page summary{cursor:pointer;font-size:13px}
+#view-fs .fs-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+#view-fs .fs-table th{text-align:left;color:var(--muted);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--line)}
+#view-fs .fs-table td{padding:5px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+#view-fs input[type=month]{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 8px;color-scheme:dark}

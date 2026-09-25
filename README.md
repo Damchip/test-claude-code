@@ -629,6 +629,28 @@ Les données sont dans `data/fileservice.db` (comptes, demandes, factures) et
 - Le client peut demander une **révision** gratuite pendant 30 jours : la demande repasse « en traitement ».
 - Signe tes messages (champ *Signature* en haut de l'onglet Fileservice).
 
+### Pages légales
+CGV, mentions légales et politique de confidentialité sont publiées sur `/espace/legal/cgv`,
+`/espace/legal/mentions-legales` et `/espace/legal/confidentialite`. Les modèles fournis reprennent
+l'identité légale saisie dans Fileservice → Réglages (directeur de la publication et hébergeur
+compris) ; un badge signale les informations encore à compléter. **Ce sont des bases de travail :
+fais-les relire par ton expert-comptable ou un juriste**, puis adapte le texte dans les réglages.
+
+### Comptabilité
+Fileservice → *Chiffre d'affaires & comptabilité* : synthèse par mois et **export CSV** des factures
+d'une période (s'ouvre directement dans Excel) à transmettre au comptable.
+
+### Sauvegardes
+La base du fileservice est copiée dans `data/backups/fileservice-….db` au démarrage du portail puis
+chaque jour (30 copies). **Inclus `data/backups/` et `data/fileservice_fichiers/` dans ta sauvegarde
+externe** (OneDrive, disque USB) : une copie sur le même disque ne protège pas d'une panne du PC.
+Pour restaurer : arrête le portail et l'outil, remplace `data/fileservice.db` par la copie voulue.
+
+### RGPD
+Le client télécharge ses données depuis *Paramètres → Mes données*. Sur demande de suppression :
+onglet Clients → *Supprimer le compte* (tape SUPPRIMER) : coordonnées, véhicules, messages et
+fichiers sont effacés ; les factures restent (obligation de conservation de 10 ans).
+
 ### Tarifs
 Catalogue, packs, garanties et prix des packs de crédits : `catalogue.py` (prix en crédits,
 1 crédit = 2,50 € HT, TVA 20 %). Le prix de chaque demande est toujours recalculé par le serveur.

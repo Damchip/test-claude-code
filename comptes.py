@@ -104,6 +104,42 @@ def init_db(db_path=DEFAULT_DB):
                 con.execute(f"ALTER TABLE clients ADD COLUMN {nom} {decl}")
 
 
+def sauvegarder(db_path=DEFAULT_DB, garder=30):
+    """Copie cohérente de la base (API de sauvegarde SQLite, sûre pendant l'écriture) dans
+    data/backups/fileservice-AAAAMMJJ-HHMMSS.db. Garde les `garder` plus récentes.
+    Renvoie le chemin de la copie, ou None si la base n'existe pas encore."""
+    if not os.path.isfile(db_path):
+        return None
+    bdir = os.path.join(os.path.dirname(os.path.abspath(db_path)), "backups")
+    os.makedirs(bdir, exist_ok=True)
+    dest = os.path.join(bdir, f"fileservice-{dt.datetime.now():%Y%m%d-%H%M%S-%f}.db")
+    src = sqlite3.connect(db_path, timeout=8)
+    try:
+        dst = sqlite3.connect(dest)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+    finally:
+        src.close()
+    anciennes = sorted((os.path.join(bdir, f) for f in os.listdir(bdir)
+                        if f.startswith("fileservice-") and f.endswith(".db")), reverse=True)
+    for old in anciennes[garder:]:
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    return dest
+
+
+def dernieres_sauvegardes(db_path=DEFAULT_DB, n=5):
+    bdir = os.path.join(os.path.dirname(os.path.abspath(db_path)), "backups")
+    if not os.path.isdir(bdir):
+        return []
+    noms = sorted((f for f in os.listdir(bdir) if f.startswith("fileservice-") and f.endswith(".db")), reverse=True)
+    return [{"nom": f, "taille": os.path.getsize(os.path.join(bdir, f))} for f in noms[:n]]
+
+
 # --- Validation --------------------------------------------------------------
 
 def normaliser_siret(raw):

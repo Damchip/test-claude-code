@@ -8,8 +8,11 @@ Factures des packs de crédits.
     l'émission (une facture ne change plus ensuite) ;
   - un paiement (session Stripe, référence de virement) ne crédite qu'une fois.
 """
+import csv
 import datetime as dt
+import io
 import json
+import re
 import sqlite3
 
 import catalogue
@@ -152,3 +155,50 @@ def get(db_path, numero, client_id=None):
     with connect(db_path) as con:
         row = con.execute(sql, args).fetchone()
     return _decoder(row) if row else None
+
+
+# --- Comptabilité ------------------------------------------------------------
+
+def _mois(val, defaut):
+    return val if re.fullmatch(r"\d{4}-\d{2}", val or "") else defaut
+
+
+def export_csv(db_path, debut="", fin=""):
+    """Factures de la période [debut, fin] (mois AAAA-MM inclus) au format CSV pour Excel :
+    séparateur « ; », virgule décimale, UTF-8 avec BOM."""
+    debut, fin = _mois(debut, "0000-00"), _mois(fin, "9999-99")
+    with connect(db_path) as con:
+        rows = con.execute("SELECT * FROM factures WHERE substr(date, 1, 7) BETWEEN ? AND ? ORDER BY numero",
+                           (debut, fin)).fetchall()
+    num = lambda v: f"{v:.2f}".replace(".", ",")
+    out = io.StringIO()
+    w = csv.writer(out, delimiter=";", lineterminator="\r\n")
+    w.writerow(["Numéro", "Date", "Client", "SIRET", "TVA client", "Pays", "Désignation", "Crédits",
+                "Total HT", "Taux TVA", "TVA", "Total TTC", "Mention", "Règlement", "Référence"])
+    for r in rows:
+        f = _decoder(r)
+        c = f["client"]
+        w.writerow([f["numero"], f["date"][:10], c.get("societe", ""), c.get("siret", ""), c.get("tva", ""),
+                    c.get("pays", ""), f["designation"], f["credits"], num(f["ht"]), f"{f['taux_tva'] * 100:g} %",
+                    num(f["tva"]), num(f["ttc"]), f["mention"], f["paiement"], f["reference"] or ""])
+    return "\ufeff" + out.getvalue()
+
+
+def synthese(db_path, mois=12):
+    """Par mois : factures, CA HT / TVA / TTC, crédits vendus, crédits consommés (hors remboursés)."""
+    with connect(db_path) as con:
+        ventes = {r["m"]: dict(r) for r in con.execute(
+            "SELECT substr(date, 1, 7) m, COUNT(*) factures, SUM(ht) ht, SUM(tva) tva, SUM(ttc) ttc,"
+            " SUM(credits) credits_vendus FROM factures GROUP BY m")}
+        conso = {r["m"]: r["n"] for r in con.execute(
+            "SELECT substr(cree_le, 1, 7) m, SUM(total) n FROM demandes WHERE rembourse = 0 GROUP BY m")}
+        encours = con.execute("SELECT COALESCE(SUM(credits), 0) n FROM clients").fetchone()["n"]
+    tous = sorted(set(ventes) | set(conso), reverse=True)[:mois]
+    lignes = []
+    for m in tous:
+        v = ventes.get(m, {})
+        lignes.append({"mois": m, "factures": v.get("factures", 0), "ht": round(v.get("ht") or 0, 2),
+                       "tva": round(v.get("tva") or 0, 2), "ttc": round(v.get("ttc") or 0, 2),
+                       "credits_vendus": v.get("credits_vendus") or 0, "credits_consommes": conso.get(m, 0)})
+    return {"mois": lignes, "credits_en_circulation": encours}
+
