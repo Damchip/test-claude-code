@@ -424,3 +424,7 @@ header{flex-wrap:wrap;gap:10px}
 /* Technicien : les actions réservées aux administrateurs sont masquées (le serveur les refuse de toute façon) */
 .role-technicien [data-cfac], .role-technicien [data-ccred], .role-technicien [data-csuppr],
 .role-technicien #clientsList details, .role-technicien .c-montant, .role-technicien .c-libelle { display:none !important }
+#view-clients #ncCard .fs-form label{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
+#view-clients #ncCard input[type=text],#view-clients #ncCard select{margin-top:4px}
+.role-technicien #ncCard #nc_credits{display:none}
+#view-clients .patch-row label.nc-check{flex-direction:row;align-items:center;gap:6px}

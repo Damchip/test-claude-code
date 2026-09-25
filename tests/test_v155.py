@@ -408,3 +408,76 @@ class AnglaisTests(unittest.TestCase):
             self.assertIn("file declined", self._mails())
         finally:
             outil.FS_DB, outil.FS_FILES, outil.PORTAL_CONFIG_PATH, outil.DATA_DIR = saved
+
+
+class CreationManuelleTests(unittest.TestCase):
+    def setUp(self):
+        import app as outil
+        self.o = outil
+        self.tmp = tempfile.TemporaryDirectory()
+        self.saved = (outil.FS_DB, outil.FS_FILES, outil.PORTAL_CONFIG_PATH, outil.DATA_DIR)
+        outil.FS_DB = _base(self.tmp.name)
+        outil.FS_FILES = os.path.join(self.tmp.name, "f")
+        outil.PORTAL_CONFIG_PATH = os.path.join(self.tmp.name, "c.json")
+        outil.DATA_DIR = self.tmp.name
+        with open(outil.PORTAL_CONFIG_PATH, "w", encoding="utf-8") as fh:
+            json.dump({"public_url": "https://portail.exemple.fr"}, fh)
+        self.c = outil.app.test_client()
+
+    def tearDown(self):
+        self.o.FS_DB, self.o.FS_FILES, self.o.PORTAL_CONFIG_PATH, self.o.DATA_DIR = self.saved
+        self.tmp.cleanup()
+
+    def _mails(self):
+        with open(os.path.join(self.tmp.name, "mails_non_envoyes.log"), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_invitation(self):
+        d = self.c.post("/clients/creer", json={"societe": "Garage Invité", "email": "Invite@Garage.fr",
+                                                "siret": "73282932000074", "niveau": "Partenaire",
+                                                "credits": "440"}).get_json()
+        self.assertTrue(d["ok"], d)
+        c = comptes.get_client(self.o.FS_DB, d["id"])
+        self.assertEqual((c["statut"], c["niveau"], c["credits"], c["email"]), ("actif", "Partenaire", 440, "invite@garage.fr"))
+        lien = re.search(r"https://portail\.exemple\.fr(/reinitialiser/[\w-]+)", self._mails()).group(1)
+        self.assertIn("valable 7 jours", self._mails())
+        # le client choisit son mot de passe via le portail puis se connecte
+        import portal
+        p = portal.app
+        saved = {k: p.config[k] for k in ("FS_DB", "FS_DATA_DIR", "FS_CONFIG", "FS_FILES")}
+        p.config.update(FS_DB=self.o.FS_DB, FS_DATA_DIR=self.tmp.name, FS_CONFIG=self.o.PORTAL_CONFIG_PATH,
+                        FS_FILES=self.o.FS_FILES)
+        try:
+            portal.fileservice.LIMITEUR._echecs.clear()
+            pc = p.test_client()
+            tok = re.search(r'name="csrf" value="([^"]+)"', pc.get(lien).get_data(as_text=True)).group(1)
+            pc.post(lien, data={"csrf": tok, "password": "choisi-par-client", "password2": "choisi-par-client"})
+            self.assertIsNotNone(comptes.authentifier(self.o.FS_DB, "invite@garage.fr", "choisi-par-client"))
+        finally:
+            p.config.update(saved)
+        r = self.c.post("/clients/inviter", json={"id": d["id"]}).get_json()
+        self.assertTrue(r["ok"])
+        self.assertIn("/reinitialiser/", r["lien"])          # sans SMTP : lien fourni à l'atelier
+
+    def test_mot_de_passe_fixe_et_client_etranger(self):
+        d = self.c.post("/clients/creer", json={"societe": "Garage UK Ltd", "email": "uk@garage.co.uk", "pays": "Royaume-Uni",
+                                                "siret": "Companies House 01234567", "langue": "en",
+                                                "mdp": "mot-de-passe-atelier"}).get_json()
+        self.assertTrue(d["ok"], d)
+        self.assertIsNotNone(comptes.authentifier(self.o.FS_DB, "uk@garage.co.uk", "mot-de-passe-atelier"))
+        self.assertEqual(comptes.get_client(self.o.FS_DB, d["id"])["langue"], "en")
+        r = self.c.post("/clients/creer", json={"societe": "X", "email": "x@x.fr", "siret": "123"})
+        self.assertEqual(r.status_code, 400)                 # en France, le SIRET reste vérifié
+        r = self.c.post("/clients/creer", json={"societe": "Y", "email": "uk@garage.co.uk", "pays": "Belgique"})
+        self.assertIn("existe déjà", r.get_json()["error"])
+
+    def test_technicien_sans_credits_d_ouverture(self):
+        self.c.post("/equipe/creer", json={"identifiant": "admin", "nom": "Admin", "mdp": "admin-solide-1"})
+        self.c.post("/equipe/creer", json={"identifiant": "tech", "nom": "Tech", "role": "technicien", "mdp": "tech-solide-12"})
+        t = self.o.app.test_client()
+        t.post("/login", data={"identifiant": "tech", "password": "tech-solide-12"})
+        base = {"societe": "G", "email": "g@g.fr", "siret": "73282932000074"}
+        self.assertEqual(t.post("/clients/creer", json={**base, "credits": "100"}).status_code, 403)
+        self.assertTrue(t.post("/clients/creer", json=base).get_json()["ok"])
+        j = self.c.get("/equipe/journal").get_json()["journal"]
+        self.assertTrue(any(x["action"] == "Compte client créé" and x["technicien"] == "Tech" for x in j))

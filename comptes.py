@@ -24,7 +24,8 @@ DEFAULT_DB = os.path.abspath(
 
 STATUTS = ("en_attente", "actif", "bloque")
 MDP_MIN = 10
-JETON_DUREE = 3600  # 1 h
+JETON_DUREE = 3600               # 1 h (mot de passe oublié)
+JETON_INVITATION = 7 * 24 * 3600  # 7 jours (compte créé par l'atelier)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS clients (
@@ -173,6 +174,10 @@ def tva_valide(tva):
     return bool(re.fullmatch(r"[A-Z]{2}[0-9A-Z]{2,13}", tva))
 
 
+def est_en_france(pays):
+    return (pays or "France").strip().lower() in ("france", "fr", "")
+
+
 def email_valide(email):
     return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}", email)) and len(email) <= 160
 
@@ -202,8 +207,12 @@ def creer_client(db_path, *, societe, siret, tva, contact, email, tel, mdp,
     tva = normaliser_tva(tva)
     if not societe:
         raise ErreurCompte("Indiquez le nom de la société.")
-    if not siret_valide(siret):
-        raise ErreurCompte("SIRET invalide : 14 chiffres attendus.")
+    if est_en_france(adr["pays"]):
+        if not siret_valide(siret):
+            raise ErreurCompte("SIRET invalide : 14 chiffres attendus.")
+    else:
+        # entreprise étrangère : numéro d'immatriculation libre (pas de SIRET)
+        siret = (siret or "").strip()[:40]
     if tva and not tva_valide(tva):
         raise ErreurCompte("Numéro de TVA invalide (ex. FR12345678901).")
     if not email_valide(email):
@@ -333,12 +342,12 @@ def _empreinte(jeton):
     return hashlib.sha256(jeton.encode()).hexdigest()
 
 
-def creer_jeton(db_path, client_id):
+def creer_jeton(db_path, client_id, duree=JETON_DUREE):
     jeton = secrets.token_urlsafe(32)
     with connect(db_path) as con:
         con.execute("DELETE FROM jetons WHERE expire < ? OR utilise = 1", (int(time.time()),))
         con.execute("INSERT INTO jetons (empreinte, client_id, expire) VALUES (?, ?, ?)",
-                    (_empreinte(jeton), client_id, int(time.time()) + JETON_DUREE))
+                    (_empreinte(jeton), client_id, int(time.time()) + duree))
     return jeton
 
 

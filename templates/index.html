@@ -371,6 +371,30 @@
         <span class="muted small">Les inscriptions de l'espace client arrivent <b>en attente</b> :
           <b>Valider</b> ouvre le compte et envoie l'e-mail d'activation.</span>
       </div>
+      <details class="dash-card" id="ncCard" style="margin:12px 0">
+        <summary style="cursor:pointer"><b>＋ Nouveau client</b> <span class="muted small">— compte créé par l'atelier, actif immédiatement</span></summary>
+        <div class="patch-row fs-form" style="margin-top:10px;flex-wrap:wrap;gap:8px">
+          <label>Société * <input type="text" id="nc_societe"></label>
+          <label>E-mail * <input type="text" id="nc_email"></label>
+          <label>Pays <input type="text" id="nc_pays" value="France"></label>
+          <label>SIRET (France) / n° d'entreprise <input type="text" id="nc_siret"></label>
+          <label>N° TVA <input type="text" id="nc_tva" placeholder="FR…"></label>
+          <label>Contact <input type="text" id="nc_contact"></label>
+          <label>Téléphone <input type="text" id="nc_tel"></label>
+          <label>Adresse <input type="text" id="nc_adresse"></label>
+          <label>Code postal <input type="text" id="nc_code_postal" style="width:90px"></label>
+          <label>Ville <input type="text" id="nc_ville"></label>
+          <label>Niveau <select id="nc_niveau"></select></label>
+          <label>Langue <select id="nc_langue"><option value="fr">Français</option><option value="en">English</option></select></label>
+          <label>Crédits d'ouverture <input type="text" id="nc_credits" placeholder="0" style="width:80px"></label>
+        </div>
+        <div class="patch-row" style="margin-top:8px;flex-wrap:wrap;gap:10px;align-items:center">
+          <label class="muted small nc-check"><input type="checkbox" id="nc_mdp_moi"> Fixer le mot de passe moi-même (sinon : invitation par e-mail, lien valable 7 jours)</label>
+          <input type="password" id="nc_mdp" placeholder="mot de passe (10 caractères min.)" autocomplete="new-password" class="hidden">
+          <button class="patchbtn sm" id="ncCreer">Créer le compte</button>
+        </div>
+        <div id="ncOut" class="muted small" style="margin-top:6px;word-break:break-all"></div>
+      </details>
       <div id="clientsList" class="jobs-list"></div>
 
       <div class="dash-card" style="margin-top:22px">

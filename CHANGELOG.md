@@ -3,6 +3,15 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.55.1
+- **Création manuelle d'un compte client** (onglet Clients → « ＋ Nouveau client ») : compte actif
+  immédiatement, niveau, langue et crédits d'ouverture au choix. Le client reçoit une **invitation par
+  e-mail** (lien valable 7 jours pour choisir son mot de passe), ou l'atelier fixe le mot de passe lui-même.
+  Bouton « Renvoyer l'invitation » sur chaque client. Sans e-mail configuré, le lien est affiché pour être
+  transmis à la main. Crédits d'ouverture réservés aux administrateurs ; création tracée dans le journal.
+- **Clients étrangers** : le SIRET n'est exigé (et vérifié) que pour un client en France ; ailleurs, un
+  numéro d'entreprise libre est accepté (inscription et création manuelle).
+
 ## v1.55.0
 Productivité de l'atelier et développement commercial.
 

@@ -619,6 +619,9 @@ Les données sont dans `data/fileservice.db` (comptes, demandes, factures) et
 
 ### Au quotidien
 - **Nouvelle inscription** → onglet Clients (badge) → *Valider* : le client reçoit l'e-mail d'activation.
+- **Créer un compte toi-même** (client au téléphone, au comptoir…) → Clients → *＋ Nouveau client* :
+  le compte est actif tout de suite ; le client reçoit un e-mail pour choisir son mot de passe (lien
+  7 jours, *Renvoyer l'invitation* si besoin), ou tu fixes le mot de passe et le lui communiques.
 - **Paiement reçu par virement** → Clients → *Paiement reçu hors ligne* : choisis le pack, mets la
   référence du virement → crédits ajoutés **et** facture émise. Une même référence ne crédite qu'une fois.
 - **Nouveau fichier** → onglet Fileservice (badge, e-mail atelier) → ouvre la demande :

@@ -3166,6 +3166,8 @@ async function loadClients() {
   const rows = cd.clients || [];
   FS_PACKS = cd.packs || [];
   const NIVEAUX = Object.keys(cd.niveaux || { Standard: 0, Partenaire: 10, VIP: 20 });
+  const ncNiv = $("#nc_niveau");
+  if (ncNiv && !ncNiv.options.length) ncNiv.innerHTML = NIVEAUX.map(n => `<option>${esc(n)}</option>`).join("");
   refreshClientsCount(rows);
   if (!rows.length) {
     box.innerHTML = `<div class="empty">Aucun client pour l'instant. Les inscriptions faites sur
@@ -3181,7 +3183,8 @@ async function loadClients() {
         ? `<button class="ghost sm" data-cstat="bloque" data-id="${c.id}">Bloquer</button>`
         : c.email.endsWith("@invalid") ? `<span class="muted small">supprimé</span>`
         : `<button class="ghost sm" data-cstat="actif" data-id="${c.id}">Débloquer</button>`;
-    const suppr = c.email.endsWith("@invalid") ? "" : `<button class="ghost sm" data-csuppr="${c.id}" title="Droit à l'effacement (RGPD)">Supprimer le compte</button>`;
+    const suppr = c.email.endsWith("@invalid") ? "" : `<button class="ghost sm" data-cinv="${c.id}" title="Nouveau lien pour choisir son mot de passe (7 jours)">Renvoyer l'invitation</button>
+      <button class="ghost sm" data-csuppr="${c.id}" title="Droit à l'effacement (RGPD)">Supprimer le compte</button>`;
     return `<div class="job-row" data-id="${c.id}">
       <div class="job-main">
         <div class="job-top"><b>${esc(c.societe)}</b> <span class="badge ${cls}">${esc(lbl)}</span>
@@ -3238,6 +3241,11 @@ $("#clientsList").addEventListener("click", async e => {
   if (!row) return;
   const out = row.querySelector(".c-out");
   try {
+    if (e.target.dataset.cinv) {
+      const d = await postJSON("/clients/inviter", { id: +e.target.dataset.cinv });
+      alert(d.mail + (d.lien ? "\n\nLien à transmettre au client :\n" + d.lien : ""));
+      return;
+    }
     if (e.target.dataset.csuppr) {
       const ok = prompt("Supprimer définitivement les données personnelles et les fichiers de ce client ?\n"
         + "Les factures sont conservées (obligation légale de 10 ans). Tape SUPPRIMER pour confirmer.");
@@ -3780,4 +3788,22 @@ $("#jnRefresh").onclick = loadJournal;
 $("#jnQ").addEventListener("change", loadJournal);
 
 initSession();
+
+/* ===== Création manuelle d'un compte client ===== */
+$("#nc_mdp_moi").addEventListener("change", e => $("#nc_mdp").classList.toggle("hidden", !e.target.checked));
+$("#ncCreer").onclick = async () => {
+  const body = {};
+  ["societe", "email", "pays", "siret", "tva", "contact", "tel", "adresse", "code_postal", "ville", "niveau", "langue", "credits"]
+    .forEach(k => { body[k] = $("#nc_" + k).value; });
+  if ($("#nc_mdp_moi").checked) body.mdp = $("#nc_mdp").value;
+  const out = $("#ncOut");
+  try {
+    const d = await postJSON("/clients/creer", body);
+    out.innerHTML = `<span class="badge ok">compte créé</span> ${esc(d.mail || "")}`
+      + (d.lien ? `<br>Lien à transmettre au client : <code>${esc(d.lien)}</code>` : "");
+    ["societe", "email", "siret", "tva", "contact", "tel", "adresse", "code_postal", "ville", "credits", "mdp"]
+      .forEach(k => { $("#nc_" + k).value = ""; });
+    loadClients();
+  } catch (err) { out.textContent = err.message; }
+};
 

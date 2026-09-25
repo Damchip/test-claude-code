@@ -33,7 +33,7 @@ import api
 import fileservice
 import relances
 
-APP_VERSION = "1.55.0"
+APP_VERSION = "1.55.1"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt

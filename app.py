@@ -38,7 +38,7 @@ app = Flask(__name__)
 # Filtres d'affichage partagés avec l'espace client (facture vue par l'atelier)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits)
-APP_VERSION = "1.55.0"
+APP_VERSION = "1.55.1"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -159,7 +159,7 @@ def _require_login():
 JOURNAL_ACTIONS = {
     "fs_message": "Message au client", "fs_livrer": "Livraison", "fs_livrer_auto": "Livraison en un clic",
     "fs_refuser": "Refus + remboursement", "fs_statut": "Changement de statut",
-    "clients_statut": "Statut client", "clients_credits": "Crédits (ajustement)", "clients_facture": "Facture hors ligne",
+    "clients_statut": "Statut client", "clients_creer": "Compte client créé", "clients_inviter": "Invitation renvoyée", "clients_credits": "Crédits (ajustement)", "clients_facture": "Facture hors ligne",
     "clients_supprimer": "Suppression de compte (RGPD)", "clients_niveau": "Niveau client",
     "fs_reglages_set": "Réglages fileservice", "clients_smtp_set": "Réglages e-mail",
     "equipe_creer": "Compte atelier créé", "equipe_modifier": "Compte atelier modifié",
@@ -184,6 +184,8 @@ def _journaliser(resp):
             cible = c["societe"] if c else f"client {b['id']}"
         elif b.get("identifiant"):
             cible = b["identifiant"]
+        elif b.get("societe"):
+            cible = b["societe"]
         detail = " · ".join(str(x) for x in (b.get("statut"), b.get("motif"), b.get("montant"), b.get("libelle"),
                                              b.get("niveau"), b.get("credits") and f"{b.get('credits')} cr.",
                                              b.get("ht") and f"{b.get('ht')} € HT", b.get("reference"),
@@ -752,6 +754,70 @@ def clients_statut():
         if not base:
             mail += " (Adresse publique du portail non renseignée : l'e-mail ne contient pas de lien.)"
     return jsonify({"ok": True, "mail": mail})
+
+
+@app.route("/clients/creer", methods=["POST"])
+def clients_creer():
+    """Compte créé par l'atelier : actif tout de suite, invitation par e-mail (ou mot de passe fixé ici)."""
+    b = request.json or {}
+    _fs_init()
+    champs = {k: str(b.get(k) or "").strip() for k in ("societe", "siret", "tva", "contact", "email", "tel",
+                                                       "adresse", "code_postal", "ville", "pays")}
+    mdp = str(b.get("mdp") or "")
+    inviter = not mdp
+    if str(b.get("credits") or "0").strip() not in ("", "0") and getattr(g, "tech", None) and g.tech["role"] != "admin":
+        return jsonify({"error": "Crédits d'ouverture réservés à un administrateur."}), 403
+    try:
+        cid = comptes.creer_client(FS_DB, mdp=mdp or secrets.token_urlsafe(24), **champs)
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    comptes.changer_statut(FS_DB, cid, "actif")
+    niveaux = catalogue.remises(load_portal_config())
+    comptes.changer_niveau(FS_DB, cid, b.get("niveau") if b.get("niveau") in niveaux else "Standard")
+    langue = traductions.normaliser(b.get("langue") or "fr")
+    comptes.changer_langue(FS_DB, cid, langue)
+    credits = 0
+    try:
+        credits = int(str(b.get("credits") or "0").replace(" ", ""))
+    except ValueError:
+        pass
+    if credits > 0:
+        comptes.mouvement(FS_DB, cid, credits, (b.get("libelle_credits") or "Crédits d'ouverture").strip()[:200])
+    out = {"ok": True, "id": cid}
+    if inviter:
+        cfg = load_portal_config()
+        base = (cfg.get("public_url") or "").rstrip("/")
+        jeton = comptes.creer_jeton(FS_DB, cid, duree=comptes.JETON_INVITATION)
+        lien = f"{base}/reinitialiser/{jeton}" if base else f"/reinitialiser/{jeton}"
+        ok, err = _mail_client(champs["email"], *traductions.mail(
+            "invitation", langue, atelier=cfg.get("shop_name") or "E85-FRANCE", societe=champs["societe"],
+            lien=lien, email=champs["email"].lower()))
+        out["mail"] = "Invitation envoyée par e-mail (lien valable 7 jours)." if ok else err
+        if not base or not ok:
+            # sans adresse publique ou sans SMTP : l'atelier transmet le lien lui-même
+            out["lien"] = lien
+            out["mail"] += (" Adresse publique du portail non renseignée : complète le lien avec l'adresse du portail."
+                            if not base else "")
+    else:
+        out["mail"] = "Compte créé avec le mot de passe choisi : communique-le au client."
+    return jsonify(out)
+
+
+@app.route("/clients/inviter", methods=["POST"])
+def clients_inviter():
+    """Renvoie une invitation (nouveau lien 7 jours) à un client existant."""
+    b = request.json or {}
+    c = comptes.get_client(FS_DB, int(b.get("id") or 0))
+    if not c or c["email"].endswith("@invalid"):
+        return jsonify({"error": "Client introuvable."}), 404
+    cfg = load_portal_config()
+    base = (cfg.get("public_url") or "").rstrip("/")
+    jeton = comptes.creer_jeton(FS_DB, c["id"], duree=comptes.JETON_INVITATION)
+    lien = f"{base}/reinitialiser/{jeton}" if base else f"/reinitialiser/{jeton}"
+    ok, err = _mail_client(c["email"], *traductions.mail(
+        "invitation", c.get("langue"), atelier=cfg.get("shop_name") or "E85-FRANCE", societe=c["societe"],
+        lien=lien, email=c["email"]))
+    return jsonify({"ok": True, "mail": "Invitation renvoyée." if ok else err, "lien": None if ok and base else lien})
 
 
 @app.route("/clients/supprimer", methods=["POST"])

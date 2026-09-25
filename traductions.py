@@ -175,6 +175,7 @@ EN = {
     "Modifications mécaniques, codes défaut à traiter, carburant utilisé…": "Mechanical changes, fault codes to handle, fuel used…",
     "Ce qui doit être revu (comportement, codes défaut…)": "What needs to be reviewed (behaviour, fault codes…)",
     "Véhicule, calculateur, n°…": "Vehicle, ECU, no.…", "Rechercher": "Search",
+    "SIRET": "Company no. (SIRET in France)",
     "CGV": "Terms of sale", "Mentions légales": "Legal notice", "Confidentialité": "Privacy",
     "Demande envoyée": "Request sent",
     "Merci, la demande pour {societe} est bien reçue. L'atelier la vérifie sous 24 h ouvrées ; vous recevrez un e-mail dès que votre compte sera actif.":
@@ -269,6 +270,16 @@ MAILS = {
     "acces_sans_lien": {
         "fr": ("", "Connectez-vous à votre espace client avec votre e-mail et le mot de passe choisi à l'inscription."),
         "en": ("", "Sign in to your client area with your email and the password chosen at registration."),
+    },
+    "invitation": {
+        "fr": ("{atelier} — votre compte fileservice est prêt",
+               "Bonjour,\n\n{atelier} vous a ouvert un compte fileservice pour {societe}.\n"
+               "Choisissez votre mot de passe avec ce lien (valable 7 jours) :\n{lien}\n\n"
+               "Vous pourrez ensuite vous connecter avec l'adresse {email}.\n\n{atelier}"),
+        "en": ("{atelier} — your file service account is ready",
+               "Hello,\n\n{atelier} has opened a file service account for {societe}.\n"
+               "Choose your password with this link (valid for 7 days):\n{lien}\n\n"
+               "You can then sign in with {email}.\n\n{atelier}"),
     },
     "reset": {
         "fr": ("{atelier} — réinitialisation du mot de passe",
