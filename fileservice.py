@@ -1,5 +1,5 @@
 """
-Espace client du fileservice, monté par portal.py sous /espace.
+Espace client du fileservice, monté par portal.py à la racine du portail.
 
   comptes.py   : comptes pro, connexion, crédits
   demandes.py  : fichiers envoyés, suivi, messages, livraisons
@@ -26,7 +26,7 @@ import mailer
 import pages_legales
 import stripe_api
 
-bp = Blueprint("fs", __name__, url_prefix="/espace")
+bp = Blueprint("fs", __name__)
 
 TZ = ZoneInfo("Europe/Paris")
 DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
@@ -191,7 +191,8 @@ def _securite():
     if g.client is None and request.endpoint not in PUBLIC_ENDPOINTS:
         if request.is_json:
             return jsonify({"erreur": "Connexion requise."}), 401
-        return redirect(url_for("fs.login", next=request.full_path.rstrip("?")))
+        suite = request.full_path.rstrip("?")
+        return redirect(url_for("fs.login", next=suite) if suite != "/" else url_for("fs.login"))
     return None
 
 
@@ -210,7 +211,7 @@ def _inject():
 
 def _safe_next(raw):
     raw = (raw or "").strip()
-    if not raw.startswith("/espace") or raw.startswith("//") or "\\" in raw or ":" in raw:
+    if not raw.startswith("/") or raw.startswith("//") or "\\" in raw or ":" in raw:
         return url_for("fs.dashboard")
     return raw
 
@@ -569,6 +570,7 @@ def buy_success():
 
 
 @bp.route("/stripe/webhook", methods=["POST"])
+@bp.route("/espace/stripe/webhook", methods=["POST"])   # ancienne adresse, si déjà déclarée chez Stripe
 def stripe_webhook():
     cfg = reglages().get("stripe") or {}
     try:

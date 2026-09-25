@@ -233,16 +233,16 @@ class ParcoursPortailTests(unittest.TestCase):
 
     def _connecte(self, email):
         c = self.portal.app.test_client()
-        tok = re.search(r'name="csrf" value="([^"]+)"', c.get("/espace/connexion").get_data(as_text=True)).group(1)
-        r = c.post("/espace/connexion", data={"csrf": tok, "email": email, "password": "motdepasse-solide"})
+        tok = re.search(r'name="csrf" value="([^"]+)"', c.get("/connexion").get_data(as_text=True)).group(1)
+        r = c.post("/connexion", data={"csrf": tok, "email": email, "password": "motdepasse-solide"})
         self.assertEqual(r.status_code, 302)
         return c
 
-    def _csrf(self, c, path="/espace/nouveau"):
+    def _csrf(self, c, path="/nouveau"):
         return re.search(r'name="csrf" value="([^"]+)"', c.get(path).get_data(as_text=True)).group(1)
 
     def _envoyer(self, prestas=("stage1",)):
-        return self.c.post("/espace/nouveau", data={
+        return self.c.post("/nouveau", data={
             "csrf": self._csrf(self.c), "categorie": "vl", "prestas": list(prestas), "marque": "Audi",
             "modele": "A3", "outil": "KESS3", "methode": "OBD",
             "file": (io.BytesIO(b"\x01" * 4096), "lecture_ori.bin")}, content_type="multipart/form-data")
@@ -253,18 +253,18 @@ class ParcoursPortailTests(unittest.TestCase):
         d = demandes.lister(self.db, self.cid)[0]
         self.assertEqual(d["total"], 99)
         self.assertEqual(d["detection"]["plateforme"], "EDC17C64")
-        page = self.c.get(f"/espace/fichiers/{d['numero']}").get_data(as_text=True)
+        page = self.c.get(f"/fichiers/{d['numero']}").get_data(as_text=True)
         self.assertIn("Pack E85 + débridage moteur", page)
         self.assertIn("EDC17C64", page)                 # calculateur détecté affiché
         self.assertNotIn("compatible", page)            # le verdict bibliothèque reste interne
-        self.assertEqual(self.c.get(f"/espace/fichiers/{d['numero']}/original").data, b"\x01" * 4096)
-        self.assertIn(d["numero"], self.c.get("/espace/").get_data(as_text=True))
-        self.assertIn("101", self.c.get("/espace/credits").get_data(as_text=True))
+        self.assertEqual(self.c.get(f"/fichiers/{d['numero']}/original").data, b"\x01" * 4096)
+        self.assertIn(d["numero"], self.c.get("/").get_data(as_text=True))
+        self.assertIn("101", self.c.get("/credits").get_data(as_text=True))
 
     def test_message_et_livraison(self):
         self._envoyer()
         d = demandes.lister(self.db, self.cid)[0]
-        url = f"/espace/fichiers/{d['numero']}"
+        url = f"/fichiers/{d['numero']}"
         r = self.c.post(url + "/message", data={"csrf": self._csrf(self.c, url), "texte": "Échappement d'origine",
                                                 "pj": (io.BytesIO(b"pj"), "photo.jpg")},
                         content_type="multipart/form-data")
@@ -280,7 +280,7 @@ class ParcoursPortailTests(unittest.TestCase):
         comptes.mouvement(self.db, self.cid, -150, "vidage")
         r = self._envoyer()
         self.assertEqual(r.status_code, 302)
-        self.assertIn("Solde insuffisant", self.c.get("/espace/nouveau").get_data(as_text=True))
+        self.assertIn("Solde insuffisant", self.c.get("/nouveau").get_data(as_text=True))
         self.assertEqual(demandes.lister(self.db, self.cid), [])
 
     def test_un_client_ne_voit_pas_les_fichiers_d_un_autre(self):
@@ -289,27 +289,27 @@ class ParcoursPortailTests(unittest.TestCase):
         _client(self.db, email="autre@garage.fr")
         autre = self._connecte("autre@garage.fr")
         for suffixe in ("", "/original", "/livre/1"):
-            self.assertEqual(autre.get(f"/espace/fichiers/{numero}{suffixe}").status_code, 404)
-        self.assertNotIn(numero, autre.get("/espace/fichiers").get_data(as_text=True))
+            self.assertEqual(autre.get(f"/fichiers/{numero}{suffixe}").status_code, 404)
+        self.assertNotIn(numero, autre.get("/fichiers").get_data(as_text=True))
 
     def test_parametres(self):
-        tok = self._csrf(self.c, "/espace/parametres")
-        self.c.post("/espace/parametres", data={"csrf": tok, "action": "profil", "contact": "Jean Nouveau",
+        tok = self._csrf(self.c, "/parametres")
+        self.c.post("/parametres", data={"csrf": tok, "action": "profil", "contact": "Jean Nouveau",
                                                 "tel": "01", "tva": "", "adresse": "2 rue Neuve",
                                                 "code_postal": "69001", "ville": "Lyon", "pays": "France"})
         self.assertEqual(comptes.get_client(self.db, self.cid)["ville"], "Lyon")
-        self.c.post("/espace/parametres", data={"csrf": tok, "action": "mdp", "actuel": "motdepasse-solide",
+        self.c.post("/parametres", data={"csrf": tok, "action": "mdp", "actuel": "motdepasse-solide",
                                                 "nouveau": "encore-plus-solide", "nouveau2": "encore-plus-solide"})
         self.assertIsNotNone(comptes.authentifier(self.db, "jean@garage.fr", "encore-plus-solide"))
-        self.assertEqual(self.c.get("/espace/support").status_code, 200)
+        self.assertEqual(self.c.get("/support").status_code, 200)
 
     def test_paiement_stripe(self):
         with open(self.cfg_path, "w", encoding="utf-8") as fh:
             json.dump({"stripe": {"secret_key": "sk_test_x", "webhook_secret": "whsec_test"},
                        "societe": {"raison_sociale": "E85 SAS", "siret": SIRET_OK}}, fh)
-        tok = self._csrf(self.c, "/espace/credits")
+        tok = self._csrf(self.c, "/credits")
         with mock.patch.object(stripe_api, "creer_session", return_value="https://checkout.stripe.com/c/pay/x") as cs:
-            r = self.c.post("/espace/credits/acheter/3", data={"csrf": tok})
+            r = self.c.post("/credits/acheter/3", data={"csrf": tok})
         self.assertEqual(r.status_code, 303)
         self.assertEqual(cs.call_args.kwargs["montant_centimes"], 120000)     # 1000 € HT + 20 %
         self.assertEqual(cs.call_args.kwargs["reference"], f"{self.cid}:3")
@@ -320,17 +320,17 @@ class ParcoursPortailTests(unittest.TestCase):
         t = str(int(time.time()))
         entete = f"t={t},v1={stripe_api.signer('whsec_test', payload, t)}"
         anon = self.portal.app.test_client()
-        self.assertEqual(anon.post("/espace/stripe/webhook", data=payload,
+        self.assertEqual(anon.post("/stripe/webhook", data=payload,
                                    headers={"Stripe-Signature": "t=1,v1=00"}).status_code, 400)
         for _ in range(2):   # Stripe peut renvoyer le même événement
-            r = anon.post("/espace/stripe/webhook", data=payload, headers={"Stripe-Signature": entete})
+            r = anon.post("/stripe/webhook", data=payload, headers={"Stripe-Signature": entete})
             self.assertEqual(r.status_code, 200)
         self.assertEqual(comptes.get_client(self.db, self.cid)["credits"], 200 + 440)
         with mock.patch.object(stripe_api, "lire_session", return_value=sess):
-            self.c.get("/espace/credits/merci?session_id=cs_test_1")    # retour navigateur : pas de double crédit
+            self.c.get("/credits/merci?session_id=cs_test_1")    # retour navigateur : pas de double crédit
         self.assertEqual(comptes.get_client(self.db, self.cid)["credits"], 640)
         fac = factures.lister(self.db, self.cid)[0]
-        page = self.c.get(f"/espace/factures/{fac['numero']}").get_data(as_text=True)
+        page = self.c.get(f"/factures/{fac['numero']}").get_data(as_text=True)
         self.assertIn("E85 SAS", page)
         self.assertIn("1\u202f200,00 €", page)
 

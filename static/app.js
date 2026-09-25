@@ -3168,7 +3168,7 @@ async function loadClients() {
   refreshClientsCount(rows);
   if (!rows.length) {
     box.innerHTML = `<div class="empty">Aucun client pour l'instant. Les inscriptions faites sur
-      l'espace client du portail (/espace/inscription) apparaîtront ici.</div>`;
+      l'espace client du portail (/inscription) apparaîtront ici.</div>`;
     return;
   }
   box.innerHTML = rows.map(c => {
@@ -3514,8 +3514,11 @@ const FS_SOCIETE = [["raison_sociale", "Raison sociale"], ["forme", "Forme (SAS,
   ["directeur_publication", "Directeur de la publication"], ["hebergeur", "Hébergeur (nom, adresse, téléphone)"]];
 const FS_JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
+let fsPortail = "";
 async function loadFsReglages() {
   const d = await (await fetch("/fs/reglages")).json();
+  // Adresse du portail : l'adresse publique si renseignée, sinon le portail local (port 5001)
+  fsPortail = (d.public_url || `${location.protocol}//${location.hostname}:5001`).replace(/\/$/, "");
   $("#fsSociete").innerHTML = FS_SOCIETE.map(([k, lbl]) =>
     `<label>${lbl} <input type="text" data-soc="${k}" value="${esc(d.societe[k] || "")}"></label>`).join("");
   $("#fsHoraires").innerHTML = FS_JOURS.map((j, i) => {
@@ -3525,7 +3528,7 @@ async function loadFsReglages() {
   }).join("");
   $("#fsPages").innerHTML = Object.entries(d.pages).map(([k, p]) => `<details class="fs-page">
     <summary><b>${esc(p.titre)}</b> ${p.a_completer ? '<span class="badge warn">informations à compléter</span>' : '<span class="badge ok">complète</span>'}
-      · <a class="fs-link" href="/espace/legal/${k}" target="_blank">voir la page</a> <span class="muted small">(portail)</span></summary>
+      · <a class="fs-link" href="${esc(fsPortail)}/legal/${k}" target="_blank">voir la page</a> <span class="muted small">(portail)</span></summary>
     <textarea data-page="${k}" rows="14" style="margin-top:6px;font-family:var(--mono);font-size:12px">${esc(p.texte)}</textarea>
   </details>`).join("");
   const st = d.stripe;
@@ -3533,7 +3536,7 @@ async function loadFsReglages() {
   $("#fsStripeKey").placeholder = st.secret_key_set ? "enregistrée (vide = inchangée)" : "sk_live_… ou sk_test_…";
   $("#fsStripeWh").placeholder = st.webhook_secret_set ? "enregistré (vide = inchangé)" : "whsec_…";
   $("#fsStripeEtat").textContent = st.secret_key_set ? `Paiement en ligne actif (${st.mode === "test" ? "mode test" : "mode réel"})${st.webhook_secret_set ? "" : " · webhook non configuré"}` : "Paiement en ligne désactivé";
-  $("#fsWebhookUrl").textContent = (d.public_url || "https://portail.ton-domaine.fr") + "/espace/stripe/webhook";
+  $("#fsWebhookUrl").textContent = (d.public_url || "https://portail.ton-domaine.fr") + "/stripe/webhook";
 }
 
 async function loadFsBackups(post) {

@@ -31,7 +31,7 @@ import demandes
 import factures
 import fileservice
 
-APP_VERSION = "1.54.0"
+APP_VERSION = "1.54.1"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt
@@ -173,13 +173,23 @@ def _maybe_require_login():
     cfg = load_config()
     if not cfg.get("access_password_hash"):
         return None
-    if request.endpoint in ("portal_login", "static", "fs.stripe_webhook"):
-        return None
+    if request.endpoint in ("portal_login", "static", "espace_legacy") or (request.endpoint or "").startswith("fs."):
+        return None   # l'espace client a ses propres comptes
     if session.get("authed"):
         return None
     if request.endpoint == "home":
         return redirect(url_for("portal_login", next=request.path))
     return jsonify({"error": "Accès restreint."}), 401
+
+
+@app.route("/espace", defaults={"reste": ""})
+@app.route("/espace/<path:reste>")
+def espace_legacy(reste):
+    """L'espace client était sous /espace : les anciens liens (e-mails, favoris) redirigent."""
+    cible = "/" + reste
+    if request.query_string:
+        cible += "?" + request.query_string.decode("latin-1")
+    return redirect(cible, code=308)
 
 
 @app.route("/portal-login", methods=["GET", "POST"])
@@ -228,8 +238,9 @@ def store_lead(filename, data, verdict, info, contact):
         return None
 
 
-@app.route("/")
+@app.route("/verifier")
 def home():
+    """Ancienne page publique : vérification anonyme d'un fichier (l'espace client est à la racine)."""
     cfg = load_config()
     return render_template("portal.html", cfg=cfg, version=APP_VERSION)
 

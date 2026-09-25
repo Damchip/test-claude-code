@@ -34,7 +34,7 @@ app = Flask(__name__)
 # Filtres d'affichage partagés avec l'espace client (facture vue par l'atelier)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits)
-APP_VERSION = "1.54.0"
+APP_VERSION = "1.54.1"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -606,7 +606,7 @@ def clients_statut():
         cfg = load_portal_config()
         base = (cfg.get("public_url") or "").rstrip("/")
         acces = (f"Connectez-vous avec votre e-mail et le mot de passe choisi à l'inscription :\n"
-                 f"{base}/espace/connexion" if base else
+                 f"{base}/connexion" if base else
                  "Connectez-vous à votre espace client avec votre e-mail et le mot de passe choisi à l'inscription.")
         ok, err = _mail_client(
             avant["email"], f"{cfg.get('shop_name') or 'E85-FRANCE'} — votre compte est ouvert",
@@ -849,7 +849,7 @@ def _fs_demande(did):
 
 def _fs_lien(numero):
     base = (load_portal_config().get("public_url") or "").rstrip("/")
-    return f"\n{base}/espace/fichiers/{numero}" if base else ""
+    return f"\n{base}/fichiers/{numero}" if base else ""
 
 
 def _fs_prevenir(d, sujet, texte):

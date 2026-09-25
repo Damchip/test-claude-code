@@ -97,7 +97,7 @@
       });
     }
 
-    // Le prix est calculé par le serveur (/espace/tarif) : une seule source de vérité
+    // Le prix est calculé par le serveur (/tarif) : une seule source de vérité
     async function update() {
       const cat = ($('input[name="categorie"]:checked', form) || {}).value;
       const codes = $$('input[name="prestas"]:checked', form).map(i => i.value);

@@ -39,10 +39,10 @@ class PagesLegalesTests(unittest.TestCase):
         import portal
         c = portal.app.test_client()
         for k in pages_legales.PAGES:
-            r = c.get(f"/espace/legal/{k}")
+            r = c.get(f"/legal/{k}")
             self.assertEqual(r.status_code, 200, k)
-        self.assertEqual(c.get("/espace/legal/inconnue").status_code, 404)
-        self.assertIn("/espace/legal/cgv", c.get("/espace/inscription").get_data(as_text=True))
+        self.assertEqual(c.get("/legal/inconnue").status_code, 404)
+        self.assertIn("/legal/cgv", c.get("/inscription").get_data(as_text=True))
 
 
 class SauvegardeTests(unittest.TestCase):
@@ -125,16 +125,16 @@ class RgpdTests(unittest.TestCase):
                 portal.fileservice.LIMITEUR._echecs.clear()
                 cid = _client(db)
                 c = portal.app.test_client()
-                tok = re.search(r'name="csrf" value="([^"]+)"', c.get("/espace/connexion").get_data(as_text=True)).group(1)
-                c.post("/espace/connexion", data={"csrf": tok, "email": "jean@garage.fr", "password": "motdepasse-solide"})
-                r = c.get("/espace/parametres/mes-donnees")
+                tok = re.search(r'name="csrf" value="([^"]+)"', c.get("/connexion").get_data(as_text=True)).group(1)
+                c.post("/connexion", data={"csrf": tok, "email": "jean@garage.fr", "password": "motdepasse-solide"})
+                r = c.get("/parametres/mes-donnees")
                 self.assertEqual(r.get_json()["compte"]["email"], "jean@garage.fr")
                 self.assertIn("attachment", r.headers["Content-Disposition"])
 
                 o = outil.app.test_client()
                 self.assertEqual(o.post("/clients/supprimer", json={"id": cid}).status_code, 400)
                 self.assertTrue(o.post("/clients/supprimer", json={"id": cid, "confirmation": "SUPPRIMER"}).get_json()["ok"])
-                self.assertEqual(c.get("/espace/").status_code, 302)     # session du client tombée
+                self.assertEqual(c.get("/").status_code, 302)     # session du client tombée
                 self.assertIn("text/csv", o.get("/fs/factures.csv?debut=2026-01&fin=2026-12").headers["Content-Type"])
                 self.assertIn("credits_en_circulation", o.get("/fs/synthese").get_json())
                 self.assertEqual(len(o.post("/fs/sauvegarde").get_json()["sauvegardes"]), 1)
@@ -163,6 +163,28 @@ class SecuriteTests(unittest.TestCase):
             with open(os.path.join(t, "mails_non_envoyes.log"), encoding="utf-8") as fh:
                 self.assertIn("Inscription : Garage Bcc: x@y.fr", fh.read())
             self.assertEqual(mailer.envoyer({}, "a@b.fr, c@d.fr", "s", "t")[1], "Destinataire invalide.")
+
+
+class RacineTests(unittest.TestCase):
+    """L'espace client est à la racine du portail ; les anciennes adresses /espace redirigent."""
+
+    def test_racine_et_redirections(self):
+        import portal
+        c = portal.app.test_client()
+        r = c.get("/")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.headers["Location"], "/connexion")
+        self.assertIn("Bon retour", c.get("/connexion").get_data(as_text=True))
+        r = c.get("/espace/fichiers/F-00001?x=1")
+        self.assertEqual((r.status_code, r.headers["Location"]), (308, "/fichiers/F-00001?x=1"))
+        self.assertEqual(c.get("/espace").headers["Location"], "/")
+        self.assertEqual(c.get("/verifier").status_code, 200)            # ancienne page publique conservée
+        self.assertIn('href="/connexion"', c.get("/verifier").get_data(as_text=True))
+
+    def test_ancienne_adresse_webhook_stripe(self):
+        import portal
+        r = portal.app.test_client().post("/espace/stripe/webhook", data=b"{}", headers={"Stripe-Signature": "t=1,v1=0"})
+        self.assertEqual(r.status_code, 400)                             # traité (signature refusée), pas redirigé
 
 
 if __name__ == "__main__":

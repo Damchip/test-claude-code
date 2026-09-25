@@ -7,9 +7,9 @@ interne, onglet Fileservice → Réglages) :
     webhook_secret  : secret de signature du webhook (whsec_…)
 
 Webhook à déclarer dans le tableau de bord Stripe :
-    https://<adresse publique du portail>/espace/stripe/webhook
+    https://<adresse publique du portail>/stripe/webhook
     événements : checkout.session.completed, checkout.session.async_payment_succeeded
-Le retour navigateur (/espace/credits/merci) vérifie aussi la session : les
+Le retour navigateur (/credits/merci) vérifie aussi la session : les
 crédits arrivent même si le webhook est en retard, et jamais deux fois.
 """
 import base64

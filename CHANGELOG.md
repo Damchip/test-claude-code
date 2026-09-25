@@ -3,6 +3,14 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.54.1
+- **L'espace client est à la racine du portail** : `https://portail.ton-domaine.fr/` ouvre directement
+  la connexion / le tableau de bord (fini le `/espace`). Les anciens liens `/espace/…` (e-mails déjà
+  envoyés, favoris) redirigent automatiquement ; l'ancienne adresse du webhook Stripe reste acceptée.
+- L'ancienne page de vérification anonyme d'un fichier reste disponible sur `/verifier`.
+- Le verrou optionnel du portail ne bloque plus l'espace client (qui a ses propres comptes).
+- Outil interne : le lien « voir la page » des pages légales ouvre bien le portail.
+
 ## v1.54.0
 Mise en conformité et exploitation du fileservice.
 

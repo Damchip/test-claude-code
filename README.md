@@ -600,9 +600,10 @@ Plus de contrôle, mais plus de maintenance et ta box est exposée.
 - Intégration à ton site WordPress : le plus simple est un lien/bouton vers
   `https://portail.tondomaine.fr` (ou une iframe si tu veux l'intégrer visuellement).
 
-## Fileservice (espace client /espace)
+## Fileservice (espace client)
 
-Le portail (port 5001) sert l'espace client : `http://127.0.0.1:5001/espace/`.
+Le portail (port 5001) sert l'espace client à sa racine : `http://127.0.0.1:5001/` (en ligne : `https://portail.ton-domaine.fr/`).
+L'ancienne page de vérification anonyme d'un fichier reste disponible sur `/verifier`.
 Tout se gère ensuite dans l'outil interne (port 5000), onglets **Fileservice** et **Clients**.
 Les données sont dans `data/fileservice.db` (comptes, demandes, factures) et
 `data/fileservice_fichiers/` (fichiers déposés et livrés), séparées de la bibliothèque de solutions.
@@ -630,8 +631,8 @@ Les données sont dans `data/fileservice.db` (comptes, demandes, factures) et
 - Signe tes messages (champ *Signature* en haut de l'onglet Fileservice).
 
 ### Pages légales
-CGV, mentions légales et politique de confidentialité sont publiées sur `/espace/legal/cgv`,
-`/espace/legal/mentions-legales` et `/espace/legal/confidentialite`. Les modèles fournis reprennent
+CGV, mentions légales et politique de confidentialité sont publiées sur `/legal/cgv`,
+`/legal/mentions-legales` et `/legal/confidentialite`. Les modèles fournis reprennent
 l'identité légale saisie dans Fileservice → Réglages (directeur de la publication et hébergeur
 compris) ; un badge signale les informations encore à compléter. **Ce sont des bases de travail :
 fais-les relire par ton expert-comptable ou un juriste**, puis adapte le texte dans les réglages.
@@ -665,7 +666,7 @@ Tant que rien n'est réglé, les e-mails sont écrits dans `data/mails_non_envoy
 ### Paiement en ligne (Stripe)
 1. Crée un compte Stripe. Commence en **mode test** (clé `sk_test_…`, carte `4242 4242 4242 4242`).
 2. Développeurs → *Clés API* : copie la **clé secrète** dans Fileservice → Réglages.
-3. Développeurs → *Webhooks* → ajoute `https://<adresse publique>/espace/stripe/webhook`, événements
+3. Développeurs → *Webhooks* → ajoute `https://<adresse publique>/stripe/webhook`, événements
    `checkout.session.completed` et `checkout.session.async_payment_succeeded` ; copie le
    **secret de signature** (`whsec_…`) dans les réglages.
 4. Le client clique *Acheter* sur un pack, paie sur la page Stripe, revient : crédits et facture

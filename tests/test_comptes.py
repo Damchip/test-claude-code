@@ -121,14 +121,14 @@ class ParcoursPortailTests(unittest.TestCase):
             return fh.read()
 
     def _login(self, mdp):
-        return self.c.post("/espace/connexion", data={
-            "csrf": self._csrf("/espace/connexion"), "email": "jean@garage.fr", "password": mdp})
+        return self.c.post("/connexion", data={
+            "csrf": self._csrf("/connexion"), "email": "jean@garage.fr", "password": mdp})
 
     def test_parcours_complet(self):
-        self.assertEqual(self.c.get("/espace/").status_code, 302)       # page protégée
+        self.assertEqual(self.c.get("/").status_code, 302)       # page protégée
 
-        r = self.c.post("/espace/inscription", data={
-            "csrf": self._csrf("/espace/inscription"), "societe": "Garage Test", "siret": SIRET_OK,
+        r = self.c.post("/inscription", data={
+            "csrf": self._csrf("/inscription"), "societe": "Garage Test", "siret": SIRET_OK,
             "email": "jean@garage.fr", "password": "motdepasse-solide", "cgv": "1"})
         self.assertIn("Demande envoyée", r.get_data(as_text=True))
         self.assertIn("demande d'ouverture de compte", self._mails())
@@ -140,27 +140,27 @@ class ParcoursPortailTests(unittest.TestCase):
         comptes.changer_statut(self.portal.app.config["FS_DB"], cid, "actif")
         r = self._login("motdepasse-solide")
         self.assertEqual(r.status_code, 302)
-        self.assertIn("Garage Test", self.c.get("/espace/").get_data(as_text=True))
-        self.assertEqual(self.c.get("/espace/credits").status_code, 200)
+        self.assertIn("Garage Test", self.c.get("/").get_data(as_text=True))
+        self.assertEqual(self.c.get("/credits").status_code, 200)
 
         # Tarif : exige le jeton CSRF en en-tête
-        r = self.c.post("/espace/tarif", json={"categorie": "vl", "prestations": ["stage1"]})
+        r = self.c.post("/tarif", json={"categorie": "vl", "prestations": ["stage1"]})
         self.assertEqual(r.status_code, 400)
-        tok = self._csrf("/espace/nouveau")
-        r = self.c.post("/espace/tarif", json={"categorie": "vl", "prestations": ["stage1"]},
+        tok = self._csrf("/nouveau")
+        r = self.c.post("/tarif", json={"categorie": "vl", "prestations": ["stage1"]},
                         headers={"X-CSRF-Token": tok})
         self.assertEqual(r.get_json()["total"], 59)
 
         # Compte bloqué : la session tombe immédiatement
         comptes.changer_statut(self.portal.app.config["FS_DB"], cid, "bloque")
-        self.assertEqual(self.c.get("/espace/").status_code, 302)
+        self.assertEqual(self.c.get("/").status_code, 302)
 
     def test_csrf_obligatoire(self):
         # sans session ni jeton, puis avec une session mais un faux jeton
         for _ in range(2):
-            r = self.c.post("/espace/connexion", data={"email": "x@y.fr", "password": "z", "csrf": "faux"})
+            r = self.c.post("/connexion", data={"email": "x@y.fr", "password": "z", "csrf": "faux"})
             self.assertEqual(r.status_code, 302)   # renvoyé sur le formulaire, rien n'est traité
-            self._csrf("/espace/connexion")
+            self._csrf("/connexion")
 
     def test_force_brute_bloquee(self):
         comptes.creer_client(self.portal.app.config["FS_DB"], societe="G", siret=SIRET_OK, tva="",
@@ -177,11 +177,11 @@ class ParcoursPortailTests(unittest.TestCase):
         comptes.changer_statut(db, cid, "actif")
         # même réponse pour un e-mail inconnu : pas d'énumération des comptes
         for email in ("jean@garage.fr", "inconnu@garage.fr"):
-            r = self.c.post("/espace/mot-de-passe-oublie", data={
-                "csrf": self._csrf("/espace/mot-de-passe-oublie"), "email": email})
+            r = self.c.post("/mot-de-passe-oublie", data={
+                "csrf": self._csrf("/mot-de-passe-oublie"), "email": email})
             self.assertIn("Si un compte existe", r.get_data(as_text=True))
-        lien = re.search(r"(/espace/reinitialiser/[\w-]+)", self._mails()).group(1)
-        self.assertEqual(self._mails().count("/espace/reinitialiser/"), 1)
+        lien = re.search(r"(/reinitialiser/[\w-]+)", self._mails()).group(1)
+        self.assertEqual(self._mails().count("/reinitialiser/"), 1)
         r = self.c.post(lien, data={"csrf": self._csrf(lien), "password": "nouveau-mot-de-passe",
                                     "password2": "nouveau-mot-de-passe"})
         self.assertEqual(r.status_code, 302)
@@ -224,7 +224,7 @@ class OngletClientsTests(unittest.TestCase):
         with open(os.path.join(self.tmp.name, "mails_non_envoyes.log"), encoding="utf-8") as fh:
             log = fh.read()
         self.assertIn("votre compte est ouvert", log)
-        self.assertIn("https://portail.exemple.fr/espace/connexion", log)
+        self.assertIn("https://portail.exemple.fr/connexion", log)
         self.assertEqual(comptes.get_client(self.outil.FS_DB, self.cid)["statut"], "actif")
 
     def test_credits(self):
