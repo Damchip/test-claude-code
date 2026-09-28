@@ -3,6 +3,27 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.57.0
+**Application mobile (PWA) et notifications**
+- L'espace client s'**installe comme une application** (Android, iPhone, ordinateur) : icône E85, plein écran,
+  page d'attente hors connexion.
+- **Notifications push** gratuites (Web Push, chiffrement RFC 8291) : fichier prêt, message ou précision demandée
+  par l'atelier, refus. Activation par appareil dans Paramètres, notification de test, abonnements expirés nettoyés,
+  utilisateurs rattachés désactivés exclus. Envoyées en même temps que les e-mails et SMS.
+
+**Mise à jour du logiciel** (outil atelier, administrateurs)
+- Recherche de la dernière release GitHub et **installation d'un clic** : empreinte SHA-256 vérifiée, contrôle de
+  l'archive, dépendances installées dans les environnements Python des deux applications, essai de démarrage,
+  sauvegarde du code, redémarrage automatique chez l'hébergeur (Passenger).
+- **Retour à la version précédente**, installation depuis un **fichier .zip**, mode **Git** (passage sur l'étiquette).
+- Option **installation automatique la nuit** ; sinon e-mail à l'atelier quand une version sort. Mot de passe
+  redemandé pour installer ; journal des mises à jour.
+- Les releases publient désormais l'empreinte `carto_matcher_vX.Y.Z.zip.sha256`.
+
+**Corrections**
+- Numéro de version transmis aux pages de l'espace client (les navigateurs rechargent le thème après une mise à jour).
+- L'attribut `hidden` l'emporte toujours sur le style des boutons.
+
 ## v1.56.0
 Mise en production et nouvelles fonctions clients / atelier.
 

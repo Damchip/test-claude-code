@@ -244,7 +244,7 @@ function showView(v) {
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
   if (v === "clients") { loadClients(); loadSmtp(); }
-  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadFsSante(); loadFsStats(); loadModeles(); loadEquipe(); loadJournal(); }
+  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadFsSante(); loadFsStats(); loadModeles(); loadEquipe(); loadJournal(); loadMaj(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -3410,7 +3410,7 @@ async function openFs(id) {
     <div class="fs-actions" style="justify-content:space-between">
       <div><h3>${esc(d.numero)} · ${esc(fsVeh(d))} <span class="badge ${cls}">${esc(lbl)}</span>
         ${d.express ? `<span class="badge danger">⚡ express</span>` : ""}</h3>
-        <div class="muted small">${esc(d.societe)} · ${esc(d.email)}${d.tel ? " · " + esc(d.tel) : ""} · reçu le ${esc(fsDate(d.cree_le))}${d.envoye_par ? " · envoyé par " + esc(d.envoye_par) : ""}${d.sms_actif ? " · 📱 SMS" : ""}</div></div>
+        <div class="muted small">${esc(d.societe)} · ${esc(d.email)}${d.tel ? " · " + esc(d.tel) : ""} · reçu le ${esc(fsDate(d.cree_le))}${d.envoye_par ? " · envoyé par " + esc(d.envoye_par) : ""}${d.sms_actif ? " · 📱 SMS" : ""}${x.appareils_push ? ` · 📲 appli (${x.appareils_push})` : ""}</div></div>
     </div>
     <div class="fs-sec" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <dl class="fs-kv">${kv("Moteur", v.moteur)}${kv("Année", v.annee)}${kv("Boîte", v.boite)}${kv("Km", v.km)}${kv("VIN", v.vin)}${kv("Immat.", v.immat)}</dl>
@@ -3902,7 +3902,7 @@ async function initSession() {
       const lab = $("#fsAuteur").closest("label");
       if (lab) lab.innerHTML = `<span class="muted small">Connecté : <b>${esc(MOI.nom)}</b></span>`;
       if (MOI.role !== "admin") {
-        ["#fsReglages", "#fsEquipeForm"].forEach(sel => { const el = $(sel); if (el) el.classList.add("hidden"); });
+        ["#fsReglages", "#fsEquipeForm", "#majCard"].forEach(sel => { const el = $(sel); if (el) el.classList.add("hidden"); });
         document.body.classList.add("role-technicien");
       }
       majDoubleAuth(d);
@@ -4057,3 +4057,82 @@ $("#ncCreer").onclick = async () => {
   } catch (err) { out.textContent = err.message; }
 };
 
+
+/* ===== Mise à jour du logiciel (administrateurs) ===== */
+let MAJ = null;
+async function loadMaj() {
+  let d;
+  try { const r = await fetch("/maj"); if (!r.ok) { $("#majCard").classList.add("hidden"); return; } d = await r.json(); } catch (e) { return; }
+  MAJ = d;
+  const e = d.etat || {};
+  const nouvelle = e.derniere_version && versionPlusRecente(e.derniere_version, d.locale);
+  $("#majBadge").innerHTML = nouvelle ? `<span class="badge warn">v${esc(e.derniere_version)} disponible</span>` : "";
+  $("#majEtat").innerHTML = `Version installée : <b>v${esc(d.locale)}</b>`
+    + (d.en_memoire !== d.locale ? ` <span class="badge warn">redémarrage nécessaire (v${esc(d.en_memoire)} en cours d'exécution)</span>` : "")
+    + ` · mode ${d.git ? "Git" : "archive .zip"}`
+    + (e.derniere_verification ? ` · dernière recherche ${esc(e.derniere_verification.slice(0, 16))}` : "")
+    + (e.installee_le ? ` · mise à jour le ${esc(e.installee_le.slice(0, 16))} (depuis v${esc(e.precedente || "?")})` : "")
+    + ((e.journal || []).length ? `<br>Dernier événement : ${esc(e.journal[e.journal.length - 1].date.slice(0, 16))} — ${esc(e.journal[e.journal.length - 1].texte)}` : "");
+  $("#majInstaller").classList.toggle("hidden", !nouvelle);
+  $("#majInstaller").textContent = nouvelle ? `Installer la version ${e.derniere_version}` : "Installer";
+  $("#majRevenir").classList.toggle("hidden", !(e.sauvegarde || e.commit_precedent));
+  $("#majNotesBloc").classList.toggle("hidden", !(nouvelle && e.notes));
+  $("#majNotes").textContent = e.notes || "";
+  $("#majDepot").value = d.reglages.depot; $("#majAuto").checked = !!d.reglages.auto;
+  $("#majJeton").value = ""; $("#majJeton").placeholder = d.reglages.jeton_set ? "enregistré (vide = inchangé)" : "";
+}
+function versionPlusRecente(a, b) {
+  const t = v => String(v).replace(/^v/, "").split(".").map(Number);
+  const x = t(a), y = t(b);
+  for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); }
+  return false;
+}
+function majMotDePasse() {
+  if (!MOI) return "";                       // outil sans comptes : pas de mot de passe à confirmer
+  return prompt("Pour installer, confirme ton mot de passe :") || null;
+}
+function majResultat(r) {
+  $("#majOut").innerHTML = `<span class="badge ok">v${esc(r.version)} installée</span> ${esc((r.journal || []).join(" "))}\n${esc(r.redemarrage || "")}`;
+  loadMaj();
+}
+$("#majVerifier").onclick = async () => {
+  $("#majOut").innerHTML = '<span class="spin"></span> Recherche…';
+  try {
+    const v = await postJSON("/maj/verifier", {});
+    $("#majOut").textContent = v.nouvelle ? `Version ${v.disponible} disponible (installée : ${v.locale}).` : `Le logiciel est à jour (v${v.locale}).`;
+  } catch (err) { $("#majOut").textContent = err.message; }
+  loadMaj();
+};
+$("#majInstaller").onclick = async () => {
+  const mdp = majMotDePasse();
+  if (mdp === null) return;
+  if (!confirm("Installer la nouvelle version ? Le code actuel est sauvegardé pour pouvoir revenir en arrière.")) return;
+  $("#majOut").innerHTML = '<span class="spin"></span> Téléchargement, vérification et installation… (jusqu\'à quelques minutes)';
+  try { majResultat(await postJSON("/maj/installer", { mdp })); } catch (err) { $("#majOut").textContent = err.message; loadMaj(); }
+};
+$("#majZipBtn").onclick = async () => {
+  const f = $("#majZip").files[0];
+  if (!f) { $("#majOut").textContent = "Choisis d'abord le fichier .zip."; return; }
+  const mdp = majMotDePasse();
+  if (mdp === null) return;
+  const fd = new FormData(); fd.append("zip", f); fd.append("mdp", mdp);
+  $("#majOut").innerHTML = '<span class="spin"></span> Vérification et installation…';
+  try {
+    const r = await fetch("/maj/zip", { method: "POST", body: fd });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || "Installation impossible.");
+    majResultat(d);
+  } catch (err) { $("#majOut").textContent = err.message; loadMaj(); }
+};
+$("#majRevenir").onclick = async () => {
+  const mdp = majMotDePasse();
+  if (mdp === null) return;
+  if (!confirm("Revenir à la version d'avant la dernière mise à jour ?")) return;
+  try { majResultat(await postJSON("/maj/revenir", { mdp })); } catch (err) { $("#majOut").textContent = err.message; loadMaj(); }
+};
+$("#majSauver").onclick = async () => {
+  try {
+    await postJSON("/maj/reglages", { depot: $("#majDepot").value, jeton: $("#majJeton").value, auto: $("#majAuto").checked });
+    $("#majOut").textContent = "Réglages de mise à jour enregistrés."; loadMaj();
+  } catch (err) { $("#majOut").textContent = err.message; }
+};

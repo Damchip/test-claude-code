@@ -25,6 +25,7 @@ import factures
 import livraison_auto
 import mailer
 import pages_legales
+import push
 import relances
 import sms
 import stripe_api
@@ -37,7 +38,9 @@ DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Diman
 # Horaires par défaut (jour 0 = lundi) ; remplacés par « horaires » de portal_config.json
 HOURS_DEFAUT = {0: (8, 19), 1: (8, 19), 2: (8, 19), 3: (8, 19), 4: (8, 19), 5: (9, 13)}
 TOOLS = ["KESS3", "Autotuner", "Flex", "CMD Flash", "MagicMotorsport", "KTAG", "PCMFlash", "Autre"]
-PUBLIC_ENDPOINTS = {"fs.login", "fs.register", "fs.forgot", "fs.reset", "fs.stripe_webhook", "fs.legal", "fs.set_langue"}
+PUBLIC_ENDPOINTS = {"fs.login", "fs.register", "fs.forgot", "fs.reset", "fs.stripe_webhook", "fs.legal", "fs.set_langue",
+                    "fs.manifest", "fs.service_worker", "fs.hors_ligne", "fs.push_renouveler"}
+SANS_CSRF = {"fs.stripe_webhook", "fs.push_renouveler"}   # appelés par Stripe / le service worker, sans session
 LIMITEUR = comptes.Limiteur(max_echecs=5, fenetre=900)
 
 
@@ -214,7 +217,7 @@ def _fmt_taille(n):
 
 @bp.before_request
 def _securite():
-    if request.method == "POST" and request.endpoint != "fs.stripe_webhook":
+    if request.method == "POST" and request.endpoint not in SANS_CSRF:
         sent = request.form.get("csrf") or request.headers.get("X-CSRF-Token") or ""
         attendu = session.get("csrf") or ""
         if not attendu or not hmac.compare_digest(sent, attendu):
@@ -275,7 +278,8 @@ def _inject():
                 "level": c["niveau"], "open_count": st["ouverts"], "titulaire": titulaire(),
                 "peut_acheter": peut_acheter()}
     return {"shop": shop(), "user": user, "service": service_status(), "statuses": demandes.STATUTS,
-            "csrf_token": csrf_token, "t": t, "langue": langue(), "langues": traductions.LANGUES}
+            "csrf_token": csrf_token, "t": t, "langue": langue(), "langues": traductions.LANGUES,
+            "version": current_app.config.get("APP_VERSION", "")}
 
 
 def _safe_next(raw):
@@ -496,7 +500,7 @@ def _livraison_auto_reception(d, contenu):
                         f"{' + '.join(cr['types'])} · checksum {cr['checksum'] or 'OK'}")
         livraison_auto.journaliser(current_app.config["FS_SOLUTIONS_DB"], d, prep, "automatique")
         prevenir(reglages(), d, "fichier_pret", _url_publique("fs.file_detail", numero=d["numero"]),
-                 journal_dir=current_app.config["FS_DATA_DIR"])
+                 journal_dir=current_app.config["FS_DATA_DIR"], db_path=_db(), config_path=current_app.config["FS_CONFIG"])
         return True
     except Exception:
         current_app.logger.exception("Livraison automatique impossible pour %s", d["numero"])
@@ -860,6 +864,93 @@ def support():
                            revision_jours=demandes.REVISION_JOURS)
 
 
+# --- Application (PWA) et notifications -----------------------------------------
+
+@bp.route("/manifest.webmanifest")
+def manifest():
+    nom = shop()["name"]
+    icones = [{"src": url_for("static", filename=f"pwa/{f}"), "sizes": taille, "type": "image/png", "purpose": but}
+              for f, taille, but in (("icon-192.png", "192x192", "any"), ("icon-512.png", "512x512", "any"),
+                                     ("icon-maskable-512.png", "512x512", "maskable"))]
+    data = {"name": f"{nom} · {t('File service')}", "short_name": nom, "lang": langue(),
+            "description": t("Vos fichiers moteur, préparés par des spécialistes."), "id": "/", "start_url": "/?source=app",
+            "scope": "/", "display": "standalone", "background_color": "#0a0c0f", "theme_color": "#0a0c0f",
+            "icons": icones,
+            "shortcuts": [{"name": t("Nouveau fichier"), "url": url_for("fs.new_file")},
+                          {"name": t("Mes fichiers"), "url": url_for("fs.files")}]}
+    resp = current_app.response_class(json.dumps(data, ensure_ascii=False), mimetype="application/manifest+json")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@bp.route("/sw.js")
+def service_worker():
+    resp = current_app.response_class(render_template("fs/sw.js"), mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache"          # le navigateur vérifie la version à chaque visite
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
+
+@bp.route("/hors-ligne")
+def hors_ligne():
+    return render_template("fs/hors_ligne.html")
+
+
+@bp.route("/push/cle")
+def push_cle():
+    if not push.DISPONIBLE:
+        return jsonify({"disponible": False})
+    _, cle = push.cles(current_app.config["FS_CONFIG"])
+    return jsonify({"disponible": True, "cle": cle})
+
+
+@bp.route("/push/abonnement", methods=["POST"])
+def push_abonnement():
+    b = request.get_json(silent=True) or {}
+    try:
+        push.init_db(_db())
+        push.abonner(_db(), g.client["id"], b.get("abonnement"), g.utilisateur["id"] if g.utilisateur else None,
+                     appareil=(request.headers.get("User-Agent") or "")[:120])
+    except push.ErreurPush as e:
+        return jsonify({"erreur": t(str(e))}), 400
+    return jsonify({"ok": True})
+
+
+@bp.route("/push/desabonnement", methods=["POST"])
+def push_desabonnement():
+    push.init_db(_db())
+    push.desabonner(_db(), g.client["id"], (request.get_json(silent=True) or {}).get("endpoint"))
+    return jsonify({"ok": True})
+
+
+@bp.route("/push/test", methods=["POST"])
+def push_test():
+    push.init_db(_db())
+    n = push.envoyer(_db(), current_app.config["FS_CONFIG"], g.client["id"],
+                     {"titre": shop()["name"], "texte": t("Les notifications fonctionnent sur cet appareil."), "url": "/",
+                      "tag": "test"}, sujet=_sujet_vapid(reglages()))
+    return jsonify({"ok": bool(n), "appareils": n})
+
+
+@bp.route("/push/renouveler", methods=["POST"])
+def push_renouveler():
+    """Appelé par le service worker quand le navigateur change l'abonnement : l'ancienne adresse
+    d'envoi (secrète, connue du seul appareil) sert de preuve."""
+    b = request.get_json(silent=True) or {}
+    push.init_db(_db())
+    with comptes.connect(_db()) as con:
+        ancien = con.execute("SELECT client_id, utilisateur_id, appareil FROM abonnements_push WHERE endpoint = ?",
+                             (str(b.get("ancien") or ""),)).fetchone()
+    if not ancien:
+        return jsonify({"erreur": "Abonnement inconnu."}), 404
+    try:
+        push.desabonner(_db(), ancien["client_id"], b.get("ancien"))
+        push.abonner(_db(), ancien["client_id"], b.get("nouveau"), ancien["utilisateur_id"], ancien["appareil"])
+    except push.ErreurPush as e:
+        return jsonify({"erreur": str(e)}), 400
+    return jsonify({"ok": True})
+
+
 @bp.route("/legal/<cle>")
 def legal(cle):
     if cle not in pages_legales.PAGES:
@@ -868,9 +959,10 @@ def legal(cle):
                            contenu=pages_legales.rendre(reglages(), cle), pages=pages_legales.PAGES)
 
 
-def prevenir(cfg, d, cle, lien, journal_dir=None, **champs):
+def prevenir(cfg, d, cle, lien, journal_dir=None, db_path=None, config_path=None, **champs):
     """Prévient le client d'un événement sur sa demande : e-mail au titulaire (et à l'utilisateur
-    qui l'a envoyée), SMS si le client l'a demandé. Renvoie un texte pour l'atelier."""
+    qui l'a envoyée), SMS si le client l'a demandé, notification sur les appareils où l'application
+    est installée. Renvoie un texte pour l'atelier."""
     nom = cfg.get("shop_name") or "E85-FRANCE"
     smtp = cfg.get("smtp") or {}
     ok, err = mailer.envoyer(smtp, d["email"], *traductions.mail(cle, d.get("langue"), atelier=nom, numero=d["numero"],
@@ -885,7 +977,27 @@ def prevenir(cfg, d, cle, lien, journal_dir=None, **champs):
         sok, serr = sms.envoyer(cfg, d["sms_mobile"], traductions.sms(cle, d.get("langue"), atelier=nom,
                                                                       numero=d["numero"], lien=lien))
         infos.append("SMS envoyé." if sok else serr)
+    if db_path and config_path and cle in traductions.PUSH:
+        titre, texte = traductions.push(cle, d.get("langue"), numero=d["numero"], vehicule=_vehicule_court(d))
+        n = push.envoyer(db_path, config_path, d["client_id"],
+                         {"titre": titre, "texte": texte, "url": f"/fichiers/{d['numero']}", "tag": d["numero"]},
+                         sujet=_sujet_vapid(cfg))
+        if n:
+            infos.append(f"Notification envoyée sur {n} appareil(s).")
     return " ".join(i for i in infos if i)
+
+
+def _vehicule_court(d):
+    v = d.get("vehicule") or {}
+    return " ".join(x for x in (v.get("marque"), v.get("modele")) if x)
+
+
+def _sujet_vapid(cfg):
+    """Contact transmis aux services push (Google, Apple, Mozilla) en cas de problème d'envoi."""
+    email = (cfg.get("societe") or {}).get("email") or (cfg.get("smtp") or {}).get("from") or (cfg.get("smtp") or {}).get("user")
+    if email:
+        return "mailto:" + email
+    return cfg.get("public_url") or "mailto:contact@localhost"
 
 
 def executer_relances(app, base_url=""):

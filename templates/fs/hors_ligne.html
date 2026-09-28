@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="{{ langue }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0c0f">
+  <title>{{ t("Hors connexion") }} · {{ shop.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='fs/theme.css') }}?v={{ version }}">
+</head>
+<body>
+  <div class="offline">
+    <img src="{{ url_for('static', filename='brand/badge.png') }}" alt="" width="72" height="72">
+    <h1>{{ t("Pas de connexion") }}</h1>
+    <p class="muted">{{ t("Vérifiez votre réseau : vos fichiers et messages s'afficheront dès le retour de la connexion.") }}</p>
+    <button class="btn btn-primary" type="button" onclick="location.reload()">{{ t("Réessayer") }}</button>
+  </div>
+</body>
+</html>

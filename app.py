@@ -11,6 +11,7 @@ puis ouvre http://127.0.0.1:5000 dans ton navigateur.
 
 import json
 import io
+import re
 import os
 import sys
 import secrets
@@ -29,8 +30,10 @@ import equipe
 import factures
 import livraison_auto
 import mailer
+import mise_a_jour
 import modeles
 import pages_legales
+import push
 import relances
 import sante
 import sauvegarde_externe
@@ -45,7 +48,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.56.0"
+APP_VERSION = "1.57.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -132,7 +135,8 @@ def _refuser_requetes_inter_sites():
 # Actions réservées aux administrateurs quand des comptes atelier existent
 ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "clients_credits", "clients_facture",
                    "fs_reglages_set", "clients_smtp_set", "backups_restore", "backups_import",
-                   "equipe_creer", "equipe_modifier", "equipe_securite", "fs_sauvegarde_externe", "fs_sms_test"}
+                   "equipe_creer", "equipe_modifier", "equipe_securite", "fs_sauvegarde_externe", "fs_sms_test",
+                   "maj_etat", "maj_verifier", "maj_installer", "maj_zip", "maj_revenir", "maj_reglages"}
 
 
 def _equipe_active():
@@ -187,6 +191,8 @@ JOURNAL_ACTIONS = {
     "clients_supprimer": "Suppression de compte (RGPD)", "clients_niveau": "Niveau client",
     "fs_reglages_set": "Réglages fileservice", "clients_smtp_set": "Réglages e-mail",
     "equipe_creer": "Compte atelier créé", "equipe_modifier": "Compte atelier modifié",
+    "maj_installer": "Mise à jour du logiciel (GitHub)", "maj_zip": "Mise à jour du logiciel (fichier .zip)",
+    "maj_revenir": "Retour à la version précédente", "maj_reglages": "Réglages de mise à jour",
     "fs_modeles_enregistrer": "Réponse type enregistrée", "fs_modeles_supprimer": "Réponse type supprimée",
     "equipe_2fa_activer": "Double authentification activée", "equipe_2fa_desactiver": "Double authentification retirée",
     "equipe_securite": "Double authentification obligatoire",
@@ -1076,6 +1082,97 @@ def fs_modeles_supprimer():
     return jsonify({"ok": True})
 
 
+# --- Mise à jour du logiciel (administrateurs) -----------------------------------
+
+def _maj_confirmer():
+    """Installer du code est l'action la plus sensible : mot de passe du compte redemandé."""
+    if not getattr(g, "tech", None):
+        return None   # outil sans comptes (poste local) : l'accès à l'outil suffit
+    mdp = request.form.get("mdp") if request.files else (request.get_json(silent=True) or {}).get("mdp")
+    if not equipe.verifier_mdp(FS_DB, g.tech["id"], mdp):
+        return jsonify({"error": "Mot de passe incorrect : installation annulée."}), 403
+    return None
+
+
+def _maj_reponse(fn):
+    try:
+        res = fn()
+    except mise_a_jour.ErreurMaj as e:
+        mise_a_jour._journal(DATA_DIR, f"Échec : {e}")
+        return jsonify({"error": str(e)}), 400
+    res["redemarrage"] = ("Redémarrage automatique en cours (hébergeur)…" if PROD else
+                          "Ferme puis relance « Lancer Carto Matcher » et « Lancer le portail client » pour utiliser la nouvelle version.")
+    return jsonify({"ok": True} | res)
+
+
+@app.route("/maj")
+def maj_etat():
+    cfg = load_portal_config()
+    return jsonify({"locale": mise_a_jour.version_locale(), "en_memoire": APP_VERSION, "git": mise_a_jour.mode_git(),
+                    "reglages": mise_a_jour.reglages(cfg), "etat": mise_a_jour.etat(DATA_DIR)})
+
+
+@app.route("/maj/verifier", methods=["POST"])
+def maj_verifier():
+    try:
+        v = mise_a_jour.verifier(load_portal_config(), DATA_DIR)
+    except mise_a_jour.ErreurMaj as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(v)
+
+
+@app.route("/maj/installer", methods=["POST"])
+def maj_installer():
+    refus = _maj_confirmer()
+    if refus:
+        return refus
+    cfg = load_portal_config()
+
+    def faire():
+        v = mise_a_jour.verifier(cfg, DATA_DIR)
+        if not v["nouvelle"]:
+            raise mise_a_jour.ErreurMaj(f"Déjà à jour (version {v['locale']}).")
+        if mise_a_jour.mode_git():
+            return mise_a_jour.installer_git(v["release"]["tag"], DATA_DIR)
+        return mise_a_jour.installer_zip(mise_a_jour.telecharger(cfg, v["release"]), DATA_DIR)
+    return _maj_reponse(faire)
+
+
+@app.route("/maj/zip", methods=["POST"])
+def maj_zip():
+    refus = _maj_confirmer()
+    if refus:
+        return refus
+    f = request.files.get("zip")
+    if not f:
+        return jsonify({"error": "Choisis le fichier .zip de la release."}), 400
+    contenu = f.read()
+    return _maj_reponse(lambda: mise_a_jour.installer_zip(contenu, DATA_DIR))
+
+
+@app.route("/maj/revenir", methods=["POST"])
+def maj_revenir():
+    refus = _maj_confirmer()
+    if refus:
+        return refus
+    return _maj_reponse(lambda: mise_a_jour.revenir(DATA_DIR))
+
+
+@app.route("/maj/reglages", methods=["POST"])
+def maj_reglages():
+    b = request.json or {}
+    cfg = load_portal_config()
+    r = mise_a_jour.reglages(cfg, masquer=False)
+    depot = str(b.get("depot") or r["depot"]).strip()
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", depot):
+        return jsonify({"error": "Dépôt GitHub invalide (format propriétaire/nom)."}), 400
+    jeton = str(b.get("jeton") or "").strip()
+    cfg["mise_a_jour"] = {"depot": depot, "auto": bool(b.get("auto")),
+                          "jeton": "" if jeton == "-" else (jeton[:200] or r["jeton"])}
+    _save_portal_config(cfg)
+    return jsonify({"ok": True})
+
+
 @app.route("/fs/sante")
 def fs_sante():
     """État du service : problèmes à corriger, e-mails en échec, dernières sauvegardes."""
@@ -1320,6 +1417,7 @@ def _fs_init():
     factures.init_db(FS_DB)
     equipe.init_db(FS_DB)
     modeles.init_db(FS_DB)
+    push.init_db(FS_DB)
 
 
 def _fs_demande(did):
@@ -1337,7 +1435,8 @@ def _fs_lien(numero):
 def _fs_prevenir(d, cle, **champs):
     """E-mail au client (et à l'utilisateur qui a envoyé la demande), SMS s'il les a demandés ;
     renvoie un message à afficher à l'atelier."""
-    return _fs_vues.prevenir(load_portal_config(), d, cle, _fs_lien(d["numero"]).strip(), journal_dir=DATA_DIR, **champs)
+    return _fs_vues.prevenir(load_portal_config(), d, cle, _fs_lien(d["numero"]).strip(), journal_dir=DATA_DIR,
+                             db_path=FS_DB, config_path=PORTAL_CONFIG_PATH, **champs)
 
 
 @app.route("/fs/demandes")
@@ -1360,6 +1459,7 @@ def fs_demande(did):
     if err:
         return err
     return jsonify({"demande": d, "livrables": demandes.livrables(FS_DB, did), "annexes": demandes.annexes(FS_DB, did),
+                    "appareils_push": push.nombre(FS_DB, d["client_id"]),
                     "messages": demandes.messages(FS_DB, did, marquer_lus_pour="atelier")})
 
 

@@ -45,8 +45,12 @@ jobs:
       - name: Zip et notes de version
         run: |
           git archive --format=zip --prefix=carto_matcher/ -o "carto_matcher_${V}.zip" HEAD
+          # empreinte vérifiée par la mise à jour automatique de l'outil atelier
+          sha256sum "carto_matcher_${V}.zip" | cut -d' ' -f1 > "carto_matcher_${V}.zip.sha256"
           {
             echo "## Installation"
+            echo "**Déjà installé en v1.57 ou plus ?** Outil atelier → Fileservice → Mise à jour du logiciel → Installer (ou envoie ce zip au même endroit)."
+            echo
             echo "1. Décompresse le zip, puis **recopie ton dossier \`data/\` actuel** dans \`carto_matcher/\` (bibliothèque de solutions et réglages)."
             echo "2. Lance « Lancer Carto Matcher.bat » (outil interne, port 5000) et « Lancer le portail client.bat » (portail + espace client, port 5001)."
             echo "3. Mise en service du fileservice : voir la section « Fileservice » du README."
@@ -59,5 +63,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${V}" "carto_matcher_${V}.zip" \
+          gh release create "${V}" "carto_matcher_${V}.zip" "carto_matcher_${V}.zip.sha256" \
             --title "Carto Matcher ${V}" --notes-file notes.md --target "${GITHUB_SHA}"

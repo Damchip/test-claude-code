@@ -284,6 +284,34 @@
         <div id="fsSante" class="muted small">…</div>
       </div>
 
+      <div class="dash-card" style="margin-top:22px" id="majCard">
+        <h3 style="margin-top:0">Mise à jour du logiciel <span id="majBadge"></span></h3>
+        <div id="majEtat" class="muted small">…</div>
+        <div class="patch-row" style="margin-top:10px;align-items:center">
+          <button class="ghost sm" id="majVerifier">Rechercher une mise à jour</button>
+          <button class="patchbtn sm hidden" id="majInstaller">Installer</button>
+          <button class="ghost sm hidden" id="majRevenir">Revenir à la version précédente</button>
+        </div>
+        <details id="majNotesBloc" class="hidden" style="margin-top:8px"><summary class="muted small">Nouveautés de cette version</summary>
+          <pre id="majNotes" class="maj-notes"></pre></details>
+        <details style="margin-top:10px"><summary class="muted small">Installer depuis un fichier .zip (release téléchargée)</summary>
+          <div class="patch-row" style="margin-top:8px"><input type="file" id="majZip" accept=".zip">
+            <button class="ghost sm" id="majZipBtn">Installer ce fichier</button></div>
+        </details>
+        <details style="margin-top:6px"><summary class="muted small">Réglages</summary>
+          <div class="patch-row fs-form" style="margin-top:8px;align-items:flex-end">
+            <label>Dépôt GitHub <input type="text" id="majDepot" placeholder="propriétaire/nom" style="width:230px"></label>
+            <label>Jeton d'accès (dépôt privé) <input type="password" id="majJeton" autocomplete="new-password"></label>
+            <label class="muted small nc-check"><input type="checkbox" id="majAuto"> Installer automatiquement la nuit (2 h – 5 h)</label>
+            <button class="ghost sm" id="majSauver">Enregistrer</button>
+          </div>
+          <p class="muted small" style="margin:4px 0 0">Jeton : GitHub → Settings → Developer settings → Fine-grained tokens, accès en lecture seule
+            (« Contents: Read ») au seul dépôt. Tape « - » pour l'effacer. Sans l'option automatique, l'atelier est prévenu par e-mail
+            et installe d'un clic.</p>
+        </details>
+        <div id="majOut" class="muted small" style="margin-top:8px;white-space:pre-wrap"></div>
+      </div>
+
       <div class="dash-card" style="margin-top:22px" id="fsStatsCard">
         <div class="dash-head" style="margin:0 0 10px">
           <h3 style="margin:0">Statistiques</h3>

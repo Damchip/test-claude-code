@@ -727,6 +727,19 @@ Fileservice → **État du service** : sauvegardes, e-mails non partis, espace d
 Réglages → **Sauvegarde externe** : copie quotidienne par FTPS ou e-mail. Récapitulatif PDF de chaque
 demande (bouton « Récapitulatif » côté atelier et client).
 
+### Application mobile (PWA) et notifications
+En HTTPS, l'espace client s'installe comme une application (Android, iPhone iOS 16.4+, ordinateur) : icône,
+plein écran, page d'attente hors connexion. Dans **Paramètres → Application et notifications**, chaque client
+(et chaque utilisateur rattaché) active les notifications sur son appareil : fichier prêt, message ou précision
+demandée, refus. Envoi gratuit par le standard Web Push (paquet `cryptography`), en plus des e-mails et SMS.
+Dans l'outil, 📲 sur une demande indique que le client a l'application.
+
+### Mise à jour du logiciel
+**Fileservice → Mise à jour du logiciel** (administrateurs) : recherche sur GitHub, installation d'un clic
+(empreinte SHA-256 vérifiée, dépendances installées, essai de démarrage, sauvegarde du code, redémarrage
+automatique chez l'hébergeur), retour à la version précédente, installation depuis un fichier .zip, option
+d'installation automatique la nuit. En local, relance ensuite les deux lanceurs .bat.
+
 ### Tarifs
 Catalogue, packs, garanties et prix des packs de crédits : `catalogue.py` (prix en crédits,
 1 crédit = 2,50 € HT, TVA 20 %). Le prix de chaque demande est toujours recalculé par le serveur.

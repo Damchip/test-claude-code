@@ -392,6 +392,32 @@ EN = {
     'Numéro de mobile invalide (ex. 06 12 34 56 78 ou +33 6 12 34 56 78).': 'Invalid mobile number (e.g. +44 7700 900123).',
     'Indiquez un numéro de mobile pour recevoir les SMS.': 'Enter a mobile number to receive text messages.',
     'Traitement express (prioritaire)': 'Express processing (priority)',
+    # --- v1.57 : application et notifications ---
+    'Hors connexion': 'Offline',
+    'Pas de connexion': 'No connection',
+    "Vérifiez votre réseau : vos fichiers et messages s'afficheront dès le retour de la connexion.": 'Check your network: your files and messages will show as soon as you are back online.',
+    'Réessayer': 'Try again',
+    'Application et notifications': 'App and notifications',
+    "Installez l'espace client sur votre téléphone ou ordinateur et recevez une notification dès qu'un fichier est prêt ou que l'atelier vous écrit. Gratuit, sans e-mail à surveiller.": 'Install the client area on your phone or computer and get a notification as soon as a file is ready or the shop writes to you. Free, no email to watch.',
+    "Installer l'application": 'Install the app',
+    'Activer les notifications': 'Turn on notifications',
+    'Envoyer une notification de test': 'Send a test notification',
+    'Désactiver sur cet appareil': 'Turn off on this device',
+    'Notifications activées sur cet appareil.': 'Notifications are on for this device.',
+    'Notifications désactivées sur cet appareil.': 'Notifications are off for this device.',
+    'Notifications bloquées : autorisez-les dans les réglages du navigateur pour ce site.': 'Notifications are blocked: allow them for this site in your browser settings.',
+    "Sur iPhone : touchez Partager puis « Sur l'écran d'accueil », ouvrez l'application depuis l'icône, puis revenez ici.": 'On iPhone: tap Share then “Add to Home Screen”, open the app from its icon, then come back here.',
+    'Ce navigateur ne gère pas les notifications. Utilisez Chrome, Edge, Firefox ou Safari récent.': 'This browser does not support notifications. Use a recent Chrome, Edge, Firefox or Safari.',
+    'Notifications indisponibles pour le moment (serveur).': 'Notifications are unavailable for now (server).',
+    'Activation impossible, réessayez.': 'Could not turn them on, try again.',
+    'Notification de test envoyée.': 'Test notification sent.',
+    "Aucun appareil n'a reçu la notification.": 'No device received the notification.',
+    'Application installée.': 'App installed.',
+    'Les notifications fonctionnent sur cet appareil.': 'Notifications work on this device.',
+    'Vos fichiers moteur, préparés par des spécialistes.': 'Your engine files, prepared by specialists.',
+    "Adresse d'envoi invalide.": 'Invalid push address.',
+    "Clés d'abonnement invalides.": 'Invalid subscription keys.',
+    'Abonnement invalide.': 'Invalid subscription.',
 }
 
 TABLE = {"fr": {}, "en": EN}
@@ -572,3 +598,24 @@ SMS = {
 def sms(cle, langue, **champs):
     modele = SMS[cle].get(normaliser(langue)) or SMS[cle]["fr"]
     return modele.format_map(_Defaut(champs)).strip()
+
+
+# --- Notifications de l'application : (titre, texte) --------------------------------
+PUSH = {
+    "fichier_pret": {"fr": ("Fichier {numero} prêt", "{vehicule} · touchez pour le télécharger."),
+                     "en": ("File {numero} ready", "{vehicule} · tap to download it.")},
+    "message": {"fr": ("Nouveau message · {numero}", "L'atelier vous a écrit au sujet de {vehicule}."),
+                "en": ("New message · {numero}", "The shop wrote to you about {vehicule}.")},
+    "info_requise": {"fr": ("Précision demandée · {numero}", "L'atelier a besoin d'une information pour {vehicule}."),
+                     "en": ("Information needed · {numero}", "The shop needs more information for {vehicule}.")},
+    "refus": {"fr": ("Demande {numero} refusée", "{vehicule} · vos crédits ont été remboursés."),
+              "en": ("Request {numero} declined", "{vehicule} · your credits have been refunded.")},
+}
+
+
+def push(cle, langue, **champs):
+    modele = PUSH[cle].get(normaliser(langue)) or PUSH[cle]["fr"]
+    ch = _Defaut(champs)
+    if not champs.get("vehicule"):
+        ch["vehicule"] = "votre véhicule" if normaliser(langue) == "fr" else "your vehicle"
+    return modele[0].format_map(ch), modele[1].format_map(ch).lstrip(" ·")

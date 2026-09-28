@@ -231,6 +231,9 @@ class SauvegardeExterneTests(unittest.TestCase):
 
 class SanteTachesTests(unittest.TestCase):
     def setUp(self):
+        maj = mock.patch("mise_a_jour.automatique", return_value=None)   # pas d'appel à GitHub pendant les tests
+        maj.start()
+        self.addCleanup(maj.stop)
         import portal
         self.portal = portal
         self.tmp = tempfile.TemporaryDirectory()

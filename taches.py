@@ -13,6 +13,7 @@ import time
 
 import comptes
 import mailer
+import mise_a_jour
 import sante
 import sauvegarde_externe
 
@@ -67,6 +68,17 @@ def executer(app, base_url="", maintenant=None, journal=print):
             fait.append(f"{len(n)} relance(s)")
     except Exception as e:
         journal(f"  ⚠ Relances automatiques impossibles : {e}")
+
+    # mise à jour du logiciel : vérifiée une fois par jour, installée la nuit si l'option est active
+    atelier_mail = (cfg.get("smtp") or {}).get("atelier")
+
+    def prevenir_atelier(sujet, texte):
+        if atelier_mail:
+            mailer.envoyer(cfg.get("smtp") or {}, atelier_mail, f"{nom} · {sujet}", texte, nom_expediteur=nom,
+                           journal_dir=data_dir)
+    r = mise_a_jour.automatique(cfg, data_dir, envoyer=prevenir_atelier)
+    if r:
+        fait.append("mise à jour : " + r)
 
     # alerte e-mail à l'atelier : quand la liste des problèmes change, puis rappel une fois par jour
     s = sante.verifier(db_path, data_dir, cfg)

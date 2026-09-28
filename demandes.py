@@ -108,7 +108,9 @@ ANNEXES_MAX = 4
 
 
 def init_db(db_path):
+    import push
     comptes.init_db(db_path)
+    push.init_db(db_path)
     with connect(db_path) as con:
         con.executescript(SCHEMA)
         existantes = {r["name"] for r in con.execute("PRAGMA table_info(demandes)")}
@@ -474,6 +476,7 @@ def anonymiser_client(db_path, files_dir, client_id):
              generate_password_hash(secrets.token_hex(32)), client_id))
         con.execute("DELETE FROM jetons WHERE client_id = ?", (client_id,))
         con.execute("UPDATE clients SET sms_mobile = '', sms_actif = 0 WHERE id = ?", (client_id,))
+        con.execute("DELETE FROM abonnements_push WHERE client_id = ?", (client_id,))
         con.execute("UPDATE utilisateurs SET nom = 'Utilisateur supprimé', email = 'supprime-u' || id || '@invalid',"
                     " actif = 0 WHERE client_id = ?", (client_id,))
         for did in ids:

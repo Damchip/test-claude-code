@@ -11,3 +11,8 @@ data/portal_inbox/
 data/backups/
 data/*.log
 data/fileservice_fichiers/
+
+# Mise à jour automatique
+.fichiers_version
+tmp/
+deploy/atelier/tmp/

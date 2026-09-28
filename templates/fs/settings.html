@@ -45,6 +45,17 @@
       <div class="field"><label for="nouveau2">{{ t("Confirmation") }}</label><input class="input" type="password" id="nouveau2" name="nouveau2" minlength="10" autocomplete="new-password" required></div>
       <button class="btn btn-block" type="submit">{{ t("Changer le mot de passe") }}</button>
     </form>
+    <div class="card-body stack" style="border-top: 1px solid var(--line-soft); gap: 10px" id="application" data-push-root>
+      <h3>{{ t("Application et notifications") }}</h3>
+      <p class="muted small" style="margin: 0">{{ t("Installez l'espace client sur votre téléphone ou ordinateur et recevez une notification dès qu'un fichier est prêt ou que l'atelier vous écrit. Gratuit, sans e-mail à surveiller.") }}</p>
+      <p class="app-etat muted small" data-push-etat hidden></p>
+      <div class="app-actions">
+        <button class="btn btn-block" type="button" data-install hidden>{{ icon('download', 'icon-sm') }} {{ t("Installer l'application") }}</button>
+        <button class="btn btn-primary btn-block" type="button" data-push-on hidden>{{ icon('bell', 'icon-sm') }} {{ t("Activer les notifications") }}</button>
+        <button class="btn btn-block" type="button" data-push-test hidden>{{ t("Envoyer une notification de test") }}</button>
+        <button class="btn btn-ghost btn-block" type="button" data-push-off hidden>{{ t("Désactiver sur cet appareil") }}</button>
+      </div>
+    </div>
     {% if not moi %}
     {% if sms_dispo %}
     <div class="card-body" style="border-top: 1px solid var(--line-soft)">

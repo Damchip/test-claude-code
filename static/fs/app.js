@@ -157,3 +157,103 @@ document.addEventListener("submit", e => {
   const msg = e.target.dataset && e.target.dataset.confirm;
   if (msg && !window.confirm(msg)) e.preventDefault();
 });
+
+/* Application installable (PWA) et notifications push */
+(function () {
+  'use strict';
+  const T = window.FS_T || {};
+  const $ = s => document.querySelector(s);
+  const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  const swOk = 'serviceWorker' in navigator && window.isSecureContext;
+  const pushOk = swOk && 'PushManager' in window && 'Notification' in window;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const installee = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+  const inscription = swOk ? navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null) : Promise.resolve(null);
+
+  // Bouton « Installer l'application » (Chrome, Edge, Android) : le navigateur propose, on déclenche
+  let invite = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    invite = e;
+    const b = $('[data-install]');
+    if (b) b.hidden = false;
+  });
+  window.addEventListener('appinstalled', () => { const b = $('[data-install]'); if (b) b.hidden = true; });
+  const bInstall = $('[data-install]');
+  if (bInstall) bInstall.addEventListener('click', async () => {
+    if (!invite) return;
+    invite.prompt();
+    await invite.userChoice.catch(() => null);
+    invite = null;
+    bInstall.hidden = true;
+  });
+
+  const racine = $('[data-push-root]');
+  if (!racine) return;
+  const etat = $('[data-push-etat]');
+  const bOn = $('[data-push-on]'), bOff = $('[data-push-off]'), bTest = $('[data-push-test]');
+  const dire = txt => { etat.hidden = !txt; etat.textContent = txt || ''; };
+
+  const b64 = s => {
+    const p = '='.repeat((4 - s.length % 4) % 4);
+    const raw = atob((s + p).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
+  };
+  const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                                          body: JSON.stringify(body || {}) }).then(r => r.json());
+
+  async function actuel() {
+    const reg = await inscription;
+    return reg ? reg.pushManager.getSubscription() : null;
+  }
+
+  async function afficher() {
+    if (!pushOk) {
+      dire(ios && !installee ? T.push_ios : T.push_non);
+      [bOn, bOff, bTest].forEach(b => { b.hidden = true; });
+      return;
+    }
+    const ab = await actuel();
+    const refuse = Notification.permission === 'denied';
+    bOn.hidden = !!ab || refuse;
+    bOff.hidden = bTest.hidden = !ab;
+    dire(refuse ? T.push_refus : (ab ? T.push_on : ''));
+  }
+
+  bOn.addEventListener('click', async () => {
+    bOn.disabled = true;
+    try {
+      const cfg = await fetch('/push/cle').then(r => r.json());
+      if (!cfg.disponible) { dire(T.push_indispo); return; }
+      if (await Notification.requestPermission() !== 'granted') { await afficher(); return; }
+      const reg = await inscription;
+      const ab = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(cfg.cle) });
+      const r = await post('/push/abonnement', { abonnement: ab.toJSON() });
+      if (!r.ok) { await ab.unsubscribe(); dire(r.erreur || T.push_erreur); return; }
+      await afficher();
+    } catch (e) {
+      dire(T.push_erreur);
+    } finally {
+      bOn.disabled = false;
+    }
+  });
+
+  bOff.addEventListener('click', async () => {
+    const ab = await actuel();
+    if (ab) {
+      await post('/push/desabonnement', { endpoint: ab.endpoint }).catch(() => null);
+      await ab.unsubscribe().catch(() => null);
+    }
+    await afficher();
+    dire(T.push_off);
+  });
+
+  bTest.addEventListener('click', async () => {
+    const r = await post('/push/test').catch(() => ({}));
+    dire(r.ok ? T.push_test : T.push_test_ko);
+  });
+
+  if (installee) dire('');
+  afficher();
+})();

@@ -31,11 +31,12 @@ import demandes
 import factures
 import api
 import fileservice
+import push
 import relances
 import sante
 import taches
 
-APP_VERSION = "1.56.0"
+APP_VERSION = "1.57.0"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt
@@ -140,6 +141,7 @@ app.config["FS_CONFIG"] = CONFIG_PATH
 app.config["FS_DATA_DIR"] = DATA_DIR
 app.config["FS_PUBLIC_URL"] = os.environ.get("CARTO_PUBLIC_URL", "")   # sinon public_url de portal_config.json
 app.config["FS_CLIENT_IP"] = lambda: _client_ip()
+app.config["APP_VERSION"] = APP_VERSION
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600   # « rester connecté » : 30 jours
 if os.environ.get("CARTO_PROD") == "1":
     app.config["SESSION_COOKIE_SECURE"] = True   # derrière HTTPS uniquement
@@ -161,6 +163,7 @@ demandes.init_db(app.config["FS_DB"])
 factures.init_db(app.config["FS_DB"])
 relances.init_db(app.config["FS_DB"])
 api.init_db(app.config["FS_DB"])
+push.init_db(app.config["FS_DB"])
 app.register_blueprint(fileservice.bp)
 app.register_blueprint(api.bp)
 

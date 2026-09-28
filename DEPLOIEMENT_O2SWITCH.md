@@ -116,11 +116,36 @@ Si le serveur tombe, il ne peut pas vous prévenir lui-même. Créez un compte g
 
 La page `/sante` répond 200 quand tout fonctionne et 503 si la base ne répond plus ; elle ne donne aucun détail.
 
-## 10. Mettre à jour le logiciel
+## 10. Application mobile et notifications (clients)
 
-1. **Git** : cPanel → Git™ Version Control → *Manage* → *Pull*. **Archive** : envoyez le nouveau zip et extrayez-le par-dessus (le dossier `data/` n'est pas dans l'archive : vos données restent).
-2. *Setup Python App* → *Restart* sur les **deux** applications.
-3. Terminal : `python outils_prod.py verifier`.
+Rien à installer côté serveur : dès que le site est en HTTPS, l'espace client est une **application installable**.
+Le client ouvre `https://fichiers.e85-france.fr` sur son téléphone, puis :
+
+- **Android / ordinateur** (Chrome, Edge) : bouton « Installer l'application » dans *Paramètres*, ou menu du navigateur → *Installer* ;
+- **iPhone** (iOS 16.4 ou plus) : Safari → *Partager* → *Sur l'écran d'accueil*, puis ouvrir l'application depuis l'icône.
+
+Dans *Paramètres → Application et notifications*, il active les notifications : fichier prêt, message ou précision
+demandée par l'atelier, refus. C'est gratuit (standard Web Push). Les clés d'envoi sont créées automatiquement
+au premier usage et gardées dans `data/portal_config.json`.
+
+## 11. Mettre à jour le logiciel
+
+À partir de la v1.57, tout se fait depuis l'outil atelier (administrateur) : **Fileservice → Mise à jour du logiciel**.
+
+- **Rechercher une mise à jour** interroge GitHub ; **Installer** télécharge la release, vérifie son empreinte SHA-256,
+  installe les nouvelles dépendances (dans les environnements Python des **deux** applications), démarre la nouvelle
+  version à l'essai, sauvegarde le code actuel, puis remplace les fichiers et redémarre les applications.
+  Si une étape échoue, rien n'est modifié.
+- **Revenir à la version précédente** : un clic (les 3 dernières versions sont gardées dans `data/mises_a_jour/`).
+- **Installer depuis un fichier .zip** : la même chose avec une release téléchargée à la main.
+- **Réglages** : dépôt GitHub, jeton d'accès si le dépôt est privé (lecture seule), et option **installation automatique
+  la nuit** (sinon l'atelier reçoit un e-mail quand une version sort et installe d'un clic).
+- Installé avec **Git** (cPanel → Git™ Version Control) : la mise à jour passe sur l'étiquette de la version
+  (`git fetch` + `checkout`). N'utilisez plus alors le bouton *Pull* de cPanel.
+
+Pour passer d'une version **antérieure à la 1.57** : une dernière fois à la main (*Pull* Git, ou zip extrait par-dessus,
+le dossier `data/` n'est jamais dans l'archive), puis *Restart* des deux applications et, dans chacune,
+*Run Pip Install* (la 1.57 ajoute le paquet `cryptography` pour les notifications).
 
 ## Bon à savoir
 

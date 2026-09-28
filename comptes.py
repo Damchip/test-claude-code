@@ -482,6 +482,10 @@ def supprimer_utilisateur(db_path, client_id, utilisateur_id):
                     (f"supprime-u{int(utilisateur_id)}@invalid", generate_password_hash(secrets.token_hex(32)),
                      utilisateur_id, client_id))
         con.execute("DELETE FROM jetons WHERE utilisateur_id = ?", (utilisateur_id,))
+        try:   # ses appareils ne reçoivent plus de notifications
+            con.execute("DELETE FROM abonnements_push WHERE utilisateur_id = ?", (utilisateur_id,))
+        except sqlite3.OperationalError:
+            pass   # table pas encore créée (notifications jamais utilisées)
 
 
 def changer_mdp_utilisateur(db_path, utilisateur_id, actuel, nouveau):
