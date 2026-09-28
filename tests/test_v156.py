@@ -100,6 +100,18 @@ class ConnexionOutilTests(unittest.TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(n.get("/fs/demandes").status_code, 200)
 
+        for _ in range(8):                                                     # force brute du code : bloquée par compte
+            b = self.o.app.test_client()
+            ip = {"REMOTE_ADDR": f"10.0.0.{_}"}
+            b.post("/login", data={"identifiant": "damien", "password": "admin-solide-1"}, environ_base=ip)
+            b.post("/login", data={"code": "000000"}, environ_base=ip)
+        b = self.o.app.test_client()
+        ip = {"REMOTE_ADDR": "10.0.0.99"}
+        b.post("/login", data={"identifiant": "damien", "password": "admin-solide-1"}, environ_base=ip)
+        self.assertIn("Trop de tentatives", b.post("/login", data={"code": equipe.code_totp(secret)},
+                                                   environ_base=ip).get_data(as_text=True))
+        self.o.LIMITEUR_OUTIL._echecs.clear()
+
         s = self.o.app.test_client()                                           # code de secours
         s.post("/login", data={"identifiant": "damien", "password": "admin-solide-1"})
         self.assertEqual(s.post("/login", data={"code": codes[1]}).status_code, 302)
@@ -665,3 +677,68 @@ class AtelierPart3Tests(unittest.TestCase):
         self.assertIn("gearbox.bin", self.c.get(f"/fs/demandes/{did}/recapitulatif").get_data(as_text=True))
         comptes.creer_utilisateur(self.o.FS_DB, self.cid, nom="Thomas", email="t@garage.fr")
         self.assertEqual(self.c.get("/clients").get_json()["clients"][0]["utilisateurs"][0]["nom"], "Thomas")
+
+
+import modeles
+import statistiques
+
+
+class StatistiquesModelesTests(unittest.TestCase):
+    def setUp(self):
+        import app as outil
+        self.o = outil
+        self.tmp = tempfile.TemporaryDirectory()
+        t = self.tmp.name
+        self.saved = (outil.FS_DB, outil.FS_FILES, outil.PORTAL_CONFIG_PATH, outil.DATA_DIR)
+        outil.FS_DB, outil.FS_FILES = _base(t), os.path.join(t, "f")
+        outil.PORTAL_CONFIG_PATH, outil.DATA_DIR = os.path.join(t, "c.json"), t
+        self.c = outil.app.test_client()
+        self.db = outil.FS_DB
+
+    def tearDown(self):
+        self.o.FS_DB, self.o.FS_FILES, self.o.PORTAL_CONFIG_PATH, self.o.DATA_DIR = self.saved
+        self.tmp.cleanup()
+
+    def test_statistiques(self):
+        import factures
+        a = _client(self.db, credits=500)
+        b = _client(self.db, email="b@garage.fr", credits=500)
+        d1 = _creer(self.db, self.o.FS_FILES, a, prestations=("stage1", "e85"), garantie="g1")   # pack 99 + 20
+        d2 = _creer(self.db, self.o.FS_FILES, b, express=20)                                      # 59 + 20
+        d3 = _creer(self.db, self.o.FS_FILES, b)
+        demandes.livrer(self.db, self.o.FS_FILES, d1, "x.bin", b"\x01")
+        demandes.refuser(self.db, d3, "Illisible")
+        with comptes.connect(self.db) as con:   # livré 3 h après la réception
+            con.execute("UPDATE demandes SET cree_le = datetime(livre_le, '-3 hours') WHERE id = ?", (d1,))
+        factures.enregistrer_manuel(self.db, comptes.get_client(self.db, a), credits=100, ht=250, designation="Pack",
+                                    paiement="Virement", reference="V1", vendeur={})
+        s = statistiques.calculer(self.db, 12)
+        self.assertEqual(len(s["mois"]), 12)
+        m = s["mois"][-1]
+        self.assertEqual((m["demandes"], m["refusees"], m["express"], m["credits"], m["ca_ht"]), (3, 1, 1, 119 + 79, 250.0))
+        self.assertAlmostEqual(m["delai_moyen_h"], 3.0, places=1)
+        self.assertEqual(s["totaux"]["express_pct"], 33)
+        noms = [p["nom"] for p in s["prestations"]]
+        self.assertIn("Stage 1", noms)
+        self.assertNotIn("Traitement express (prioritaire)", noms)
+        self.assertFalse(any(n.startswith("Garantie") for n in noms))
+        self.assertEqual(s["clients"][0]["credits"], 119)                  # le refus ne compte pas pour b
+        self.assertEqual(self.c.get("/fs/statistiques?mois=6").get_json()["mois"].__len__(), 6)
+        self.assertEqual(statistiques._mois(3, __import__("datetime").date(2026, 1, 15)), ["2025-11", "2025-12", "2026-01"])
+
+    def test_modeles(self):
+        l = self.c.get("/fs/modeles").get_json()["modeles"]
+        self.assertTrue(len(l) >= 5)                                        # exemples proposés
+        self.assertTrue(all("{" not in m["titre"] for m in l))
+        r = self.c.post("/fs/modeles", json={"titre": "Relance", "texte": "Bonjour {contact}, …", "attente": True}).get_json()
+        self.assertTrue(r["ok"])
+        self.c.post("/fs/modeles", json={"id": r["id"], "titre": "Relance client", "texte": "Bonjour {contact} !"})
+        m = next(x for x in self.c.get("/fs/modeles").get_json()["modeles"] if x["id"] == r["id"])
+        self.assertEqual((m["titre"], m["attente"]), ("Relance client", 0))
+        self.assertEqual(self.c.post("/fs/modeles", json={"titre": "", "texte": "x"}).status_code, 400)
+        for x in self.c.get("/fs/modeles").get_json()["modeles"]:
+            self.c.post("/fs/modeles/supprimer", json={"id": x["id"]})
+        modeles.init_db(self.db)
+        self.assertEqual(modeles.lister(self.db), [])                       # les exemples ne reviennent pas
+        self.assertTrue(any(j["action"] == "Réponse type enregistrée" for j in
+                            self.c.get("/equipe/journal").get_json()["journal"]))

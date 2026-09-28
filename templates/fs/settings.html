@@ -78,14 +78,14 @@
   <div class="card-head"><div><h2>{{ t("Utilisateurs du compte") }}</h2>
     <p class="sub">{{ t("Vos techniciens se connectent avec leur propre e-mail et utilisent le même solde de crédits. Chaque demande indique qui l'a envoyée.") }}</p></div></div>
   {% for u in utilisateurs %}
-  <div class="file-row">
+  <div class="file-row user-row">
     <span class="avatar">{{ u.nom[:2]|upper }}</span>
     <div class="grow">
       <div class="name">{{ u.nom }} {% if not u.actif %}<span class="badge refuse">{{ t("désactivé") }}</span>{% endif %}</div>
       <div class="muted small">{{ u.email }} · {{ t("peut acheter des crédits") if u.peut_acheter else t("envoi de fichiers uniquement") }}
         · {{ (t("dernière connexion") ~ " " ~ (u.derniere_connexion|date_fr)) if u.derniere_connexion else t("jamais connecté") }}</div>
     </div>
-    <div style="display: flex; gap: 6px; flex-wrap: wrap">
+    <div class="user-actions">
       <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="utilisateur_achat">
         <input type="hidden" name="id" value="{{ u.id }}"><input type="hidden" name="valeur" value="{{ 0 if u.peut_acheter else 1 }}">
         <button class="btn btn-sm btn-ghost" type="submit">{{ t("Retirer l'achat") if u.peut_acheter else t("Autoriser l'achat") }}</button></form>

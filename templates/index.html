@@ -284,6 +284,37 @@
         <div id="fsSante" class="muted small">…</div>
       </div>
 
+      <div class="dash-card" style="margin-top:22px" id="fsStatsCard">
+        <div class="dash-head" style="margin:0 0 10px">
+          <h3 style="margin:0">Statistiques</h3>
+          <select id="stMois"><option value="6">6 derniers mois</option><option value="12" selected>12 derniers mois</option><option value="24">24 derniers mois</option></select>
+          <button class="ghost sm" id="stTable" type="button">Voir en tableau</button>
+        </div>
+        <div id="stTuiles" class="st-tuiles"></div>
+        <div class="st-grille">
+          <figure class="st-fig"><figcaption>Chiffre d'affaires HT par mois</figcaption><div id="stCa" class="st-barres"></div></figure>
+          <figure class="st-fig"><figcaption>Demandes reçues par mois</figcaption><div id="stDem" class="st-barres"></div></figure>
+          <figure class="st-fig"><figcaption>Délai moyen de livraison (heures)</figcaption><div id="stDelai" class="st-barres"></div></figure>
+          <figure class="st-fig"><figcaption>Prestations les plus demandées</figcaption><div id="stPrest" class="st-hbarres"></div></figure>
+          <figure class="st-fig"><figcaption>Meilleurs clients (crédits consommés)</figcaption><div id="stClients" class="st-hbarres"></div></figure>
+        </div>
+        <div id="stTableau" class="hidden" style="margin-top:10px"></div>
+      </div>
+
+      <div class="dash-card" style="margin-top:22px" id="fsModelesCard">
+        <h3 style="margin-top:0">Réponses types <span class="muted small">(insérées dans la conversation, relues avant envoi ; champs : {contact} {client} {numero} {vehicule} {atelier})</span></h3>
+        <div id="mdListe" class="jobs-list"></div>
+        <div class="patch-row fs-form" style="margin-top:10px;align-items:flex-start">
+          <input type="hidden" id="mdId">
+          <label style="flex:1 1 220px">Titre <input type="text" id="mdTitre" maxlength="80"></label>
+          <label style="flex:3 1 380px">Texte <textarea id="mdTexte" rows="4"></textarea></label>
+          <label class="muted small nc-check"><input type="checkbox" id="mdAttente"> passe la demande en « info requise »</label>
+          <button class="patchbtn sm" id="mdEnregistrer">Enregistrer</button>
+          <button class="ghost sm" id="mdNouveau" type="button">Nouveau</button>
+        </div>
+        <div id="mdOut" class="muted small"></div>
+      </div>
+
       <div class="dash-card" style="margin-top:22px">
         <h3 style="margin-top:0">Chiffre d'affaires &amp; comptabilité</h3>
         <div id="fsSynthese" class="muted small">…</div>
@@ -365,7 +396,7 @@
           (Paramètres de leur espace). Compte à créer chez <b>Brevo</b> (clé API « xkeysib-… ») ou <b>Twilio</b> (Account SID + Auth Token) ;
           chaque SMS est facturé par le fournisseur. Tape « - » pour effacer la clé.</p>
         <div class="patch-row fs-form" style="align-items:flex-end">
-          <label class="muted small nc-check"><input type="checkbox" id="smsActif"> Activer</label>
+          <label class="muted small nc-check"><input type="checkbox" id="smsActif"> Activer les SMS</label>
           <label>Fournisseur <select id="smsFournisseur"><option value="brevo">Brevo</option><option value="twilio">Twilio</option></select></label>
           <label>Clé API / Auth Token <input type="password" id="smsCle" autocomplete="new-password"></label>
           <label id="smsCompteLab">Account SID <input type="text" id="smsCompte" placeholder="AC…"></label>

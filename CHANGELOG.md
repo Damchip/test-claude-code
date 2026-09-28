@@ -3,6 +3,33 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.56.0
+Mise en production et nouvelles fonctions clients / atelier.
+
+**Mise en production**
+- **Hébergement O2switch** : points d'entrée `passenger_wsgi.py` (espace client) et
+  `deploy/atelier/passenger_wsgi.py` (outil atelier), guide **DEPLOIEMENT_O2SWITCH.md**,
+  `outils_prod.py` (premier administrateur, tâches cron, état, vérification). En production
+  (`CARTO_PROD=1`), l'outil atelier n'a jamais d'accès libre.
+- **Double authentification** des comptes atelier (TOTP, QR code, 8 codes de secours, anti-rejeu),
+  obligatoire sur option ; un administrateur peut la retirer d'un compte (téléphone perdu).
+- **Sauvegarde externe** quotidienne par FTPS ou e-mail, avec test depuis les réglages.
+- **État du service** dans l'outil + page `/sante` pour une surveillance externe ; **alerte e-mail** à
+  l'atelier quand un problème apparaît ; les e-mails clients qui ne partent pas sont signalés.
+
+**Clients**
+- **Option express** (supplément en crédits réglé par l'atelier) : en tête de file, remboursée en cas de refus.
+- **Fichiers complémentaires** (jusqu'à 4 par demande), sur le site et par l'API.
+- **Utilisateurs rattachés** à un compte : techniciens du garage avec leur propre connexion et le même
+  solde, achat de crédits sur autorisation, demandes signées.
+- **Alertes SMS** (Brevo ou Twilio) : fichier prêt, précision demandée.
+- **Récapitulatif PDF** de chaque demande.
+- Espace client **entièrement traduit** en anglais (messages, erreurs, API revendeur, horaires, pages légales).
+
+**Atelier**
+- **Statistiques** : CA HT, demandes, délai de livraison par mois, prestations et clients les plus actifs.
+- **Réponses types** à insérer dans la conversation, avec champs remplis automatiquement.
+
 ## v1.55.1
 - **Création manuelle d'un compte client** (onglet Clients → « ＋ Nouveau client ») : compte actif
   immédiatement, niveau, langue et crédits d'ouverture au choix. Le client reçoit une **invitation par

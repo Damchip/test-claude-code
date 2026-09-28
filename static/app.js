@@ -244,7 +244,7 @@ function showView(v) {
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
   if (v === "clients") { loadClients(); loadSmtp(); }
-  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadFsSante(); loadEquipe(); loadJournal(); }
+  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadFsSante(); loadFsStats(); loadModeles(); loadEquipe(); loadJournal(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -3321,7 +3321,7 @@ refreshClientsCount();
 const FS_STATUT = { recu: ["", "reçu"], en_cours: ["en_cours", "en traitement"], attente: ["warn", "info requise"],
                     pret: ["ok", "prêt"], refuse: ["danger", "refusé"] };
 const FS_VERDICT = { compatible: ["ok", "solution en base"], a_verifier: ["warn", "à vérifier"], non_trouve: ["", "pas en base"] };
-let fsFiltre = "ouverts", fsRows = [], fsSel = null;
+let fsFiltre = "ouverts", fsRows = [], fsSel = null, fsDetailCourant = null;
 
 function fsDate(s) { return s ? `${s.slice(8, 10)}/${s.slice(5, 7)} ${s.slice(11, 16)}` : ""; }
 function fsVeh(d) { const v = d.vehicule || {}; return [v.marque, v.modele].filter(Boolean).join(" ") || "Véhicule ?"; }
@@ -3401,6 +3401,7 @@ async function openFs(id) {
   const x = await r.json();
   if (x.error) { box.innerHTML = `<div class="empty">${esc(x.error)}</div>`; return; }
   const d = x.demande, v = d.vehicule || {}, l = d.lecture || {}, det = d.detection || {};
+  fsDetailCourant = d;
   const [cls, lbl] = FS_STATUT[d.statut] || ["", d.statut];
   const [vcls, vlbl] = FS_VERDICT[det.verdict] || ["", det.verdict || "—"];
   const kv = (k, val) => val ? `<dt>${k}</dt><dd>${esc(val)}</dd>` : "";
@@ -3449,7 +3450,8 @@ async function openFs(id) {
         + `<div class="fs-txt">${esc(m.texte)}</div>`
         + (m.pj_fichier ? `<a class="fs-link" href="/fs/demandes/${d.id}/pj/${m.id}">📎 ${esc(m.pj_nom)}</a>` : "") + `</div>`).join("")
         : `<span class="muted small">Aucun message.</span>`}</div>
-      ${ferme ? "" : `<textarea id="fsMsg" placeholder="Écrire au client…"></textarea>
+      ${ferme ? "" : `<select id="fsModele" class="fs-modele"><option value="">Réponse type…</option>${FS_MODELES.map(m => `<option value="${m.id}">${esc(m.titre)}</option>`).join("")}</select>
+      <textarea id="fsMsg" placeholder="Écrire au client…"></textarea>
       <div class="fs-actions" style="margin-top:6px"><input type="file" id="fsMsgPj">
         <label class="muted small"><input type="checkbox" id="fsMsgAttente"> demander une info (passe en « info requise »)</label>
         <button class="patchbtn sm" data-fsact="message">Envoyer</button></div>`}
@@ -3461,6 +3463,117 @@ async function openFs(id) {
     </div>`}
     <div class="fs-out muted small" style="margin-top:8px"></div>`;
 }
+
+/* ===== Réponses types ===== */
+let FS_MODELES = [], FS_ATELIER = "E85-FRANCE";
+async function loadModeles() {
+  try {
+    const d = await (await fetch("/fs/modeles")).json();
+    FS_MODELES = d.modeles || []; FS_ATELIER = d.atelier || FS_ATELIER;
+  } catch (e) { return; }
+  $("#mdListe").innerHTML = FS_MODELES.length ? FS_MODELES.map(m => `<div class="job-row" data-mdid="${m.id}">
+      <div class="job-main"><div class="job-top"><b>${esc(m.titre)}</b> ${m.attente ? '<span class="badge warn">info requise</span>' : ""}</div>
+        <div class="job-sub muted small" style="white-space:pre-wrap">${esc(m.texte.length > 180 ? m.texte.slice(0, 180) + "…" : m.texte)}</div></div>
+      <div class="inbox-actions"><button class="ghost sm" data-mdedit="1">Modifier</button><button class="ghost sm" data-mdsuppr="1">Supprimer</button></div>
+    </div>`).join("") : '<div class="empty">Aucune réponse type.</div>';
+}
+function viderModele() { $("#mdId").value = ""; $("#mdTitre").value = ""; $("#mdTexte").value = ""; $("#mdAttente").checked = false; }
+$("#mdNouveau").onclick = () => { viderModele(); $("#mdTitre").focus(); };
+$("#mdEnregistrer").onclick = async () => {
+  try {
+    await postJSON("/fs/modeles", { id: $("#mdId").value, titre: $("#mdTitre").value, texte: $("#mdTexte").value, attente: $("#mdAttente").checked });
+    $("#mdOut").textContent = "Réponse type enregistrée."; viderModele(); loadModeles();
+  } catch (err) { $("#mdOut").textContent = err.message; }
+};
+$("#mdListe").addEventListener("click", async e => {
+  const row = e.target.closest("[data-mdid]");
+  if (!row || e.target.tagName !== "BUTTON") return;
+  const m = FS_MODELES.find(x => x.id === +row.dataset.mdid);
+  if (!m) return;
+  if (e.target.dataset.mdedit) {
+    $("#mdId").value = m.id; $("#mdTitre").value = m.titre; $("#mdTexte").value = m.texte; $("#mdAttente").checked = !!m.attente;
+    $("#mdTitre").focus();
+  } else if (confirm(`Supprimer la réponse type « ${m.titre} » ?`)) {
+    await postJSON("/fs/modeles/supprimer", { id: m.id }); loadModeles();
+  }
+});
+function remplirModele(m, d) {
+  const champs = { contact: (d.contact || d.societe || "").split(" ")[0] || d.societe, client: d.societe, numero: d.numero,
+                   vehicule: fsVeh(d), atelier: FS_ATELIER };
+  return m.texte.replace(/\{(contact|client|numero|vehicule|atelier)\}/g, (_, k) => champs[k] || "");
+}
+document.addEventListener("change", e => {
+  if (e.target.id !== "fsModele" || !e.target.value) return;
+  const m = FS_MODELES.find(x => x.id === +e.target.value);
+  const d = fsRows.find(x => x.id === fsSel) || fsDetailCourant;
+  if (m && d) {
+    const zone = $("#fsMsg");
+    zone.value = (zone.value.trim() ? zone.value.trim() + "\n\n" : "") + remplirModele(m, d);
+    if (m.attente && $("#fsMsgAttente")) $("#fsMsgAttente").checked = true;
+    zone.style.height = Math.min(360, zone.scrollHeight + 4) + "px";
+    zone.focus();
+  }
+  e.target.value = "";
+});
+
+/* ===== Statistiques ===== */
+let ST_DONNEES = null;
+const MOIS_COURTS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const moisCourt = m => MOIS_COURTS[+m.slice(5, 7) - 1] + " " + m.slice(2, 4);
+const nbFr = (v, dec = 0) => v.toLocaleString("fr-FR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+function barresVerticales(el, points, fmt) {
+  const max = Math.max(...points.map(p => p.v || 0), 0);
+  if (points.every(p => p.v == null || (!p.v && !max))) { el.innerHTML = '<div class="empty">Pas encore de données sur la période.</div>'; return; }
+  const dernier = points.length - 1, pas = Math.ceil(points.length / 6);   // une étiquette de mois sur deux (ou quatre)
+  el.innerHTML = points.map((p, i) => {
+    const h = p.v && max ? Math.max(2, Math.round((p.v / max) * 100)) : 0;
+    // étiquette directe : le maximum et le mois en cours seulement (pas de chiffre sur chaque barre)
+    const etiquette = p.v && (p.v === max || i === dernier) ? `<span class="st-val">${esc(fmt(p.v))}</span>` : "";
+    return `<div class="st-col" tabindex="0" data-tip="${esc(moisCourt(p.m) + " : " + (p.v == null ? "—" : fmt(p.v)))}">
+      <div class="st-piste">${etiquette}<div class="st-barre" style="height:${h}%"></div></div>
+      <span class="st-lab">${(dernier - i) % pas === 0 ? esc(moisCourt(p.m)) : ""}</span></div>`;
+  }).join("");
+}
+function barresHorizontales(el, items, fmt) {
+  if (!items.length) { el.innerHTML = '<div class="empty">Pas encore de données sur la période.</div>'; return; }
+  const max = Math.max(...items.map(x => x.v));
+  el.innerHTML = items.map(x => `<div class="st-ligne" tabindex="0" data-tip="${esc(x.tip)}">
+      <span class="st-nom" title="${esc(x.nom)}">${esc(x.nom)}</span>
+      <span class="st-hpiste"><span class="st-hbarre" style="width:${Math.max(1, Math.round(x.v / max * 100))}%"></span></span>
+      <span class="st-hval">${esc(fmt(x.v))}</span></div>`).join("");
+}
+async function loadFsStats() {
+  let d;
+  try { d = await (await fetch("/fs/statistiques?mois=" + $("#stMois").value)).json(); } catch (e) { return; }
+  ST_DONNEES = d;
+  const t = d.totaux;
+  const tuile = (lbl, val, sous) => `<div class="st-tuile"><span class="muted small">${lbl}</span><b>${val}</b>${sous ? `<span class="muted small">${sous}</span>` : ""}</div>`;
+  $("#stTuiles").innerHTML = tuile("Chiffre d'affaires HT", nbFr(t.ca_ht) + " €")
+    + tuile("Demandes", nbFr(t.demandes), t.refusees ? `${t.refusees} refusée(s)` : "")
+    + tuile("Crédits consommés", nbFr(t.credits), `≈ ${nbFr(t.credits * 2.5)} € HT`)
+    + tuile("Délai médian de livraison", t.delai_median_h == null ? "—" : (t.delai_median_h < 1 ? Math.round(t.delai_median_h * 60) + " min" : nbFr(t.delai_median_h, 1) + " h"))
+    + tuile("Clients actifs", nbFr(t.clients_actifs), t.express_pct ? `${t.express_pct} % en express` : "");
+  barresVerticales($("#stCa"), d.mois.map(m => ({ m: m.mois, v: m.ca_ht })), v => nbFr(v) + " €");
+  barresVerticales($("#stDem"), d.mois.map(m => ({ m: m.mois, v: m.demandes })), v => nbFr(v));
+  barresVerticales($("#stDelai"), d.mois.map(m => ({ m: m.mois, v: m.delai_moyen_h })), v => nbFr(v, 1) + " h");
+  barresHorizontales($("#stPrest"), d.prestations.map(p => ({ nom: p.nom, v: p.nombre, tip: `${p.nom} : ${p.nombre} demande(s), ${nbFr(p.credits)} crédits` })), v => nbFr(v));
+  barresHorizontales($("#stClients"), d.clients.map(c => ({ nom: c.societe, v: c.credits, tip: `${c.societe} : ${nbFr(c.credits)} crédits, ${c.demandes} demande(s)` })), v => nbFr(v) + " cr.");
+  if (!$("#stTableau").classList.contains("hidden")) stTableau();
+}
+function stTableau() {
+  const d = ST_DONNEES;
+  if (!d) return;
+  $("#stTableau").innerHTML = `<table class="fs-table"><thead><tr><th>Mois</th><th>CA HT</th><th>Factures</th><th>Demandes</th><th>Refusées</th><th>Express</th><th>Crédits consommés</th><th>Délai moyen</th></tr></thead><tbody>`
+    + d.mois.map(m => `<tr><td>${esc(moisCourt(m.mois))}</td><td>${nbFr(m.ca_ht, 2)} €</td><td>${m.factures}</td><td>${m.demandes}</td><td>${m.refusees}</td>
+      <td>${m.express}</td><td>${nbFr(m.credits)}</td><td>${m.delai_moyen_h == null ? "—" : nbFr(m.delai_moyen_h, 1) + " h"}</td></tr>`).join("") + "</tbody></table>";
+}
+$("#stMois").onchange = loadFsStats;
+$("#stTable").onclick = () => {
+  const cache = !$("#stTableau").classList.toggle("hidden");
+  $("#stTable").textContent = cache ? "Masquer le tableau" : "Voir en tableau";
+  if (cache) stTableau();
+};
 
 async function fsPostForm(url, fd) {
   const r = await fetch(url, { method: "POST", body: fd });
@@ -3862,6 +3975,7 @@ async function loadEquipe() {
   } else {
     intro.textContent = MOI && MOI.role !== "admin" ? "Seul un administrateur peut gérer les comptes."
       : "Administrateur : tout, dont crédits, factures, suppressions et réglages. Technicien : traitement des demandes et validation des inscriptions.";
+    if ($("#eqRole").disabled) $("#eqRole").value = "technicien";   // après le 1er compte (forcément admin)
     $("#eqRole").disabled = false;
     $("#eqCreer").textContent = "Créer le compte";
   }

@@ -567,7 +567,14 @@ affiche les meilleurs résultats sous la demande ; **Télécharger** récupère 
 fichier déposé (pour le passer dans Recherche ou Auto-patch) ; **Marquer traité**
 classe la demande ; **Supprimer** retire la demande et son fichier.
 
-## Mise en ligne du portail (accès clients depuis internet)
+## Mise en ligne chez un hébergeur (O2switch)
+
+Espace client et outil atelier en HTTPS, chacun sur son sous-domaine, avec comptes atelier +
+double authentification, tâches planifiées (cron), sauvegarde externe et surveillance :
+**guide pas à pas dans [DEPLOIEMENT_O2SWITCH.md](DEPLOIEMENT_O2SWITCH.md)**.
+Commandes serveur : `python outils_prod.py admin | taches | sante | verifier`.
+
+## Mise en ligne du portail depuis un poste de l'atelier
 
 Le portail est prêt techniquement : serveur de production (waitress), taille de
 dépôt plafonnée (64 Mo), limitation anti-spam par adresse (10 dépôts/heure par
@@ -594,8 +601,9 @@ Plus de contrôle, mais plus de maintenance et ta box est exposée.
 ### Dans les deux cas
 - Lance toujours le portail avec le **lanceur production** (waitress), jamais le
   serveur de développement, pour une exposition continue.
-- N'expose QUE le portail (port 5001). L'outil interne (5000) ne doit **jamais**
-  être accessible depuis internet, même avec le verrou.
+- N'expose QUE le portail (port 5001). Depuis un poste de l'atelier, l'outil interne (5000) ne doit
+  **jamais** être accessible depuis internet. Pour le mettre en ligne, passe par l'hébergement décrit
+  dans DEPLOIEMENT_O2SWITCH.md (comptes atelier obligatoires + double authentification).
 - Le poste doit rester allumé ; pense aux mises à jour Windows programmées.
 - Intégration à ton site WordPress : le plus simple est un lien/bouton vers
   `https://portail.tondomaine.fr` (ou une iframe si tu veux l'intégrer visuellement).
@@ -686,6 +694,38 @@ recalculé, remise, crédits débités, livraison automatique éventuelle.
 ### Langue
 L'espace client existe en français et en anglais (sélecteur FR / EN en haut de page). La langue est
 mémorisée par client et ses e-mails partent dans cette langue. Les textes sont dans `traductions.py`.
+
+### Option express
+Fileservice → Réglages → **Option express** : supplément en crédits (réglable). Les demandes express
+passent en tête de la file « À traiter » avec un badge ⚡ ; le supplément est remboursé en cas de refus.
+
+### Fichiers complémentaires
+Le client peut joindre jusqu'à 4 fichiers en plus de la lecture d'origine (EEPROM, boîte, sauvegarde…),
+sur le site comme par l'API (`annexes`). Ils apparaissent en 📎 sur la demande dans l'outil.
+
+### Utilisateurs d'un compte client
+Dans ses **Paramètres**, le titulaire invite ses techniciens (lien par e-mail, 7 jours) : même solde,
+connexion propre, demandes signées « envoyé par … ». L'achat de crédits et les factures leur sont
+fermés sauf autorisation ; réglages du compte, API et export RGPD restent au titulaire. Les e-mails
+« fichier prêt » partent au titulaire **et** à la personne qui a envoyé la demande.
+
+### Alertes SMS
+Fileservice → Réglages → **Alertes SMS** : compte Brevo (clé API) ou Twilio (Account SID + Auth Token),
+expéditeur, bouton de test. Chaque client active les SMS et son mobile dans ses Paramètres ; il reçoit
+un SMS quand un fichier est prêt ou qu'une précision est demandée (coût facturé par le fournisseur).
+
+### Statistiques et réponses types
+Fileservice → **Statistiques** : chiffre d'affaires HT, demandes et délai de livraison par mois,
+prestations les plus demandées, meilleurs clients (6, 12 ou 24 mois, vue tableau).
+Fileservice → **Réponses types** : messages préenregistrés (champs `{contact}`, `{numero}`,
+`{vehicule}`…) à insérer dans la conversation depuis la liste « Réponse type… », relus avant envoi.
+
+### Double authentification et état du service
+Fileservice → **Équipe** : chaque compte atelier peut activer un code à 6 chiffres (Google/Microsoft
+Authenticator, 2FAS) avec 8 codes de secours ; un administrateur peut la rendre obligatoire.
+Fileservice → **État du service** : sauvegardes, e-mails non partis, espace disque, tâches planifiées.
+Réglages → **Sauvegarde externe** : copie quotidienne par FTPS ou e-mail. Récapitulatif PDF de chaque
+demande (bouton « Récapitulatif » côté atelier et client).
 
 ### Tarifs
 Catalogue, packs, garanties et prix des packs de crédits : `catalogue.py` (prix en crédits,

@@ -29,11 +29,13 @@ import equipe
 import factures
 import livraison_auto
 import mailer
+import modeles
 import pages_legales
 import relances
 import sante
 import sauvegarde_externe
 import sms
+import statistiques
 import stripe_api
 import taches
 import traductions
@@ -43,7 +45,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.55.1"
+APP_VERSION = "1.56.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -185,6 +187,7 @@ JOURNAL_ACTIONS = {
     "clients_supprimer": "Suppression de compte (RGPD)", "clients_niveau": "Niveau client",
     "fs_reglages_set": "Réglages fileservice", "clients_smtp_set": "Réglages e-mail",
     "equipe_creer": "Compte atelier créé", "equipe_modifier": "Compte atelier modifié",
+    "fs_modeles_enregistrer": "Réponse type enregistrée", "fs_modeles_supprimer": "Réponse type supprimée",
     "equipe_2fa_activer": "Double authentification activée", "equipe_2fa_desactiver": "Double authentification retirée",
     "equipe_securite": "Double authentification obligatoire",
     "settings_set": "Réglages de l'outil", "backups_restore": "Restauration de la bibliothèque",
@@ -210,6 +213,8 @@ def _journaliser(resp):
             cible = b["identifiant"]
         elif b.get("societe"):
             cible = b["societe"]
+        elif b.get("titre"):
+            cible = b["titre"]
         detail = " · ".join(str(x) for x in (b.get("statut"), b.get("motif"), b.get("montant"), b.get("libelle"),
                                              b.get("niveau"), b.get("credits") and f"{b.get('credits')} cr.",
                                              b.get("ht") and f"{b.get('ht')} € HT", b.get("reference"),
@@ -243,6 +248,8 @@ def login():
     if request.method == "POST":
         pw = request.form.get("password", "")
         cles = ("ip:" + (request.remote_addr or "?"),)
+        if attente and "code" in request.form:
+            cles += (f"code:{attente}",)   # limite aussi par compte : le code à 6 chiffres ne se devine pas depuis plusieurs IP
         if LIMITEUR_OUTIL.bloque(*cles):
             error = "Trop de tentatives, réessaie dans 15 minutes."
         elif avec_equipe and attente and "code" in request.form:
@@ -1035,6 +1042,40 @@ def fs_sauvegarde():
                     "dossier_fichiers": FS_FILES})
 
 
+@app.route("/fs/statistiques")
+def fs_statistiques():
+    _fs_init()
+    try:
+        mois = int(request.args.get("mois") or 12)
+    except ValueError:
+        mois = 12
+    return jsonify(statistiques.calculer(FS_DB, mois))
+
+
+@app.route("/fs/modeles")
+def fs_modeles():
+    _fs_init()
+    return jsonify({"modeles": modeles.lister(FS_DB), "atelier": load_portal_config().get("shop_name") or "E85-FRANCE"})
+
+
+@app.route("/fs/modeles", methods=["POST"])
+def fs_modeles_enregistrer():
+    _fs_init()
+    b = request.json or {}
+    try:
+        mid = modeles.enregistrer(FS_DB, b.get("titre"), b.get("texte"), bool(b.get("attente")),
+                                  int(b.get("id") or 0) or None)
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "id": mid})
+
+
+@app.route("/fs/modeles/supprimer", methods=["POST"])
+def fs_modeles_supprimer():
+    modeles.supprimer(FS_DB, int((request.json or {}).get("id") or 0))
+    return jsonify({"ok": True})
+
+
 @app.route("/fs/sante")
 def fs_sante():
     """État du service : problèmes à corriger, e-mails en échec, dernières sauvegardes."""
@@ -1278,6 +1319,7 @@ def _fs_init():
     demandes.init_db(FS_DB)
     factures.init_db(FS_DB)
     equipe.init_db(FS_DB)
+    modeles.init_db(FS_DB)
 
 
 def _fs_demande(did):

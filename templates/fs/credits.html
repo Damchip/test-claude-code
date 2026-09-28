@@ -44,7 +44,7 @@
   {% endfor %}
 </div>
 
-<div class="split" style="margin-top: 32px">
+<div class="{{ 'stack' if restreint else 'split' }}" style="margin-top: 32px">
   <section class="card">
     <div class="card-head"><div><h2>{{ t("Mouvements") }}</h2><p class="sub">{{ t("Achats, débits et remboursements") }}</p></div></div>
     <div class="table-wrap">
