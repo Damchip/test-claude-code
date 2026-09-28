@@ -39,8 +39,43 @@ def configure(cfg):
     return bool(cfg.get("host") and cfg.get("user") and cfg.get("password"))
 
 
-def envoyer(cfg, a, sujet, texte, nom_expediteur="E85-FRANCE", journal_dir=None):
-    """Envoie un e-mail texte. Renvoie (ok, message_erreur)."""
+ECHECS = "mails_echecs.jsonl"   # envois ratés alors que le SMTP est configuré (alerte dans l'outil atelier)
+
+
+def _noter_echec(journal_dir, a, sujet, texte, erreur):
+    if not journal_dir:
+        return
+    try:
+        os.makedirs(journal_dir, exist_ok=True)
+        now = f"{dt.datetime.now():%Y-%m-%d %H:%M:%S}"
+        with open(os.path.join(journal_dir, "mails_non_envoyes.log"), "a", encoding="utf-8") as fh:
+            fh.write(f"--- {now} · à {a} · {sujet} · ÉCHEC : {erreur}\n{texte}\n\n")
+        with open(os.path.join(journal_dir, ECHECS), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"date": now, "a": a, "sujet": sujet, "erreur": erreur}, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def echecs(journal_dir, limite=50):
+    """Envois ratés pas encore vus par l'atelier (les plus récents d'abord)."""
+    try:
+        with open(os.path.join(journal_dir, ECHECS), encoding="utf-8") as fh:
+            lignes = [json.loads(l) for l in fh if l.strip()]
+    except (OSError, ValueError):
+        return []
+    return lignes[::-1][:limite]
+
+
+def acquitter_echecs(journal_dir):
+    try:
+        os.remove(os.path.join(journal_dir, ECHECS))
+    except OSError:
+        pass
+
+
+def envoyer(cfg, a, sujet, texte, nom_expediteur="E85-FRANCE", journal_dir=None, pieces=None):
+    """Envoie un e-mail texte, avec d'éventuelles pièces jointes [(nom, octets, type/soustype)].
+    Renvoie (ok, message_erreur)."""
     # Pas de retour à la ligne dans les en-têtes (le sujet peut contenir un nom saisi par un client)
     a = " ".join(str(a or "").split())
     sujet = " ".join(str(sujet or "").split())[:200]
@@ -54,6 +89,9 @@ def envoyer(cfg, a, sujet, texte, nom_expediteur="E85-FRANCE", journal_dir=None)
     msg["Subject"] = sujet
     msg["Message-ID"] = make_msgid(domain=expediteur.split("@")[-1])
     msg.set_content(texte)
+    for nom, contenu, mime in pieces or []:
+        maintype, _, subtype = (mime or "application/octet-stream").partition("/")
+        msg.add_attachment(contenu, maintype=maintype, subtype=subtype or "octet-stream", filename=nom)
 
     if not configure(cfg):
         if journal_dir:
@@ -76,4 +114,6 @@ def envoyer(cfg, a, sujet, texte, nom_expediteur="E85-FRANCE", journal_dir=None)
                 s.send_message(msg)
         return True, ""
     except (smtplib.SMTPException, OSError) as e:
-        return False, f"Envoi impossible : {e.__class__.__name__}: {e}"
+        erreur = f"Envoi impossible : {e.__class__.__name__}: {e}"
+        _noter_echec(journal_dir, a, sujet, texte, erreur)
+        return False, erreur

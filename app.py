@@ -31,7 +31,10 @@ import livraison_auto
 import mailer
 import pages_legales
 import relances
+import sante
+import sauvegarde_externe
 import stripe_api
+import taches
 import traductions
 
 app = Flask(__name__)
@@ -80,6 +83,9 @@ app.secret_key = get_secret_key()
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+PROD = os.environ.get("CARTO_PROD") == "1"   # outil publié sur internet (O2switch…) : HTTPS et comptes obligatoires
+if PROD:
+    app.config["SESSION_COOKIE_SECURE"] = True
 
 
 def access_password_set():
@@ -122,7 +128,7 @@ def _refuser_requetes_inter_sites():
 # Actions réservées aux administrateurs quand des comptes atelier existent
 ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "clients_credits", "clients_facture",
                    "fs_reglages_set", "clients_smtp_set", "backups_restore", "backups_import",
-                   "equipe_creer", "equipe_modifier"}
+                   "equipe_creer", "equipe_modifier", "equipe_securite", "fs_sauvegarde_externe"}
 
 
 def _equipe_active():
@@ -133,19 +139,33 @@ def _equipe_active():
         return False
 
 
+# Tant que la double authentification obligatoire n'est pas activée par le technicien, seules ces routes répondent
+ENDPOINTS_SANS_DOUBLE_AUTH = {"index", "logout", "equipe_liste", "equipe_2fa_debut", "equipe_2fa_activer"}
+
+
+def exiger_double_auth():
+    return bool(load_config().get("exiger_double_auth"))
+
+
 @app.before_request
 def _require_login():
     g.tech = None
-    if request.endpoint in ("login", "static"):
+    if request.endpoint in ("login", "static", "sante"):
         return None
     if _equipe_active():
         t = equipe.get(FS_DB, session.get("tech_id") or 0)
         if t and t["actif"]:
             g.tech = t
+            if exiger_double_auth() and not t["double_auth"] and request.endpoint not in ENDPOINTS_SANS_DOUBLE_AUTH:
+                return jsonify({"error": "Active d'abord la double authentification (onglet Fileservice → Équipe).",
+                                "double_auth_requise": True}), 403
             if request.endpoint in ADMIN_ENDPOINTS and t["role"] != "admin":
                 return jsonify({"error": "Action réservée à un administrateur de l'atelier."}), 403
             return None
         session.pop("tech_id", None)
+    elif PROD:
+        # en ligne, jamais d'accès libre ni de mot de passe unique : le premier compte se crée en ligne de commande
+        return render_template("login.html", error=None, version=APP_VERSION, equipe=True, installation=True), 503
     elif not access_password_set():
         return None  # ni comptes ni mot de passe -> accès libre (comportement d'origine)
     elif session.get("authed"):
@@ -163,6 +183,8 @@ JOURNAL_ACTIONS = {
     "clients_supprimer": "Suppression de compte (RGPD)", "clients_niveau": "Niveau client",
     "fs_reglages_set": "Réglages fileservice", "clients_smtp_set": "Réglages e-mail",
     "equipe_creer": "Compte atelier créé", "equipe_modifier": "Compte atelier modifié",
+    "equipe_2fa_activer": "Double authentification activée", "equipe_2fa_desactiver": "Double authentification retirée",
+    "equipe_securite": "Double authentification obligatoire",
     "settings_set": "Réglages de l'outil", "backups_restore": "Restauration de la bibliothèque",
 }
 
@@ -196,23 +218,47 @@ def _journaliser(resp):
     return resp
 
 
+DOUBLE_AUTH_DELAI = 300   # secondes pour saisir le code après le mot de passe
+
+
+def _ouvrir_session_tech(tech_id):
+    session.clear()
+    session["tech_id"] = tech_id
+    session.permanent = True
+    return redirect(_safe_next(request.args.get("next"), url_for("index")))
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
     avec_equipe = _equipe_active()
+    if PROD and not avec_equipe:
+        return render_template("login.html", error=None, version=APP_VERSION, equipe=True, installation=True), 503
+    attente = session.get("tech_2fa")
+    if attente and time.time() - session.get("tech_2fa_t", 0) > DOUBLE_AUTH_DELAI:
+        session.pop("tech_2fa", None)
+        attente = None
     if request.method == "POST":
         pw = request.form.get("password", "")
         cles = ("ip:" + (request.remote_addr or "?"),)
         if LIMITEUR_OUTIL.bloque(*cles):
             error = "Trop de tentatives, réessaie dans 15 minutes."
+        elif avec_equipe and attente and "code" in request.form:
+            # 2e étape : code de l'application (ou code de secours)
+            if equipe.verifier_second_facteur(FS_DB, attente, request.form.get("code", "")):
+                LIMITEUR_OUTIL.reussite(*cles)
+                return _ouvrir_session_tech(attente)
+            LIMITEUR_OUTIL.echec(*cles)
+            error = "Code incorrect ou déjà utilisé."
         elif avec_equipe:
             t = equipe.authentifier(FS_DB, request.form.get("identifiant", ""), pw)
+            if t and t["double_auth"]:
+                session.clear()
+                session["tech_2fa"], session["tech_2fa_t"] = t["id"], time.time()
+                return render_template("login.html", error=None, version=APP_VERSION, equipe=True, code=True)
             if t:
                 LIMITEUR_OUTIL.reussite(*cles)
-                session.clear()
-                session["tech_id"] = t["id"]
-                session.permanent = True
-                return redirect(_safe_next(request.args.get("next"), url_for("index")))
+                return _ouvrir_session_tech(t["id"])
             LIMITEUR_OUTIL.echec(*cles)
             error = "Identifiant ou mot de passe incorrect."
         elif check_access_password(pw):
@@ -223,13 +269,17 @@ def login():
         else:
             LIMITEUR_OUTIL.echec(*cles)
             error = "Mot de passe incorrect."
-    return render_template("login.html", error=error, version=APP_VERSION, equipe=avec_equipe)
+    code = bool(avec_equipe and session.get("tech_2fa") and request.args.get("recommencer") is None)
+    if request.args.get("recommencer") is not None:
+        session.pop("tech_2fa", None)
+    return render_template("login.html", error=error, version=APP_VERSION, equipe=avec_equipe, code=code)
 
 
 @app.route("/logout")
 def logout():
     session.pop("authed", None)
     session.pop("tech_id", None)
+    session.pop("tech_2fa", None)
     return redirect(url_for("login"))
 
 
@@ -246,10 +296,63 @@ def _auteur_nom():
 @app.route("/equipe")
 def equipe_liste():
     _fs_init()
-    moi = g.tech
-    return jsonify({"moi": moi, "active": equipe.existe(FS_DB),
+    moi = dict(g.tech) if g.tech else None
+    if moi:
+        moi["double_auth"] = bool(moi["double_auth"])
+        moi["codes_secours"] = equipe.codes_secours_restants(FS_DB, moi["id"]) if moi["double_auth"] else 0
+    return jsonify({"moi": moi, "active": equipe.existe(FS_DB), "exiger_double_auth": exiger_double_auth(),
                     "techniciens": equipe.lister(FS_DB) if (not moi or moi["role"] == "admin") else [],
                     "roles": list(equipe.ROLES)})
+
+
+@app.route("/equipe/2fa/debut", methods=["POST"])
+def equipe_2fa_debut():
+    """Nouveau secret (gardé en session tant qu'il n'est pas confirmé par un code)."""
+    if not g.tech:
+        return jsonify({"error": "Crée d'abord ton compte atelier."}), 400
+    secret = equipe.nouveau_secret()
+    session["totp_en_cours"] = secret
+    nom = (load_portal_config().get("shop_name") or "E85-FRANCE") + " atelier"
+    return jsonify({"secret": secret, "uri": equipe.uri_otpauth(secret, g.tech["identifiant"], nom)})
+
+
+@app.route("/equipe/2fa/activer", methods=["POST"])
+def equipe_2fa_activer():
+    secret = session.get("totp_en_cours")
+    if not g.tech or not secret:
+        return jsonify({"error": "Recommence la configuration (bouton « Activer »)."}), 400
+    try:
+        codes = equipe.activer_double_auth(FS_DB, g.tech["id"], secret, (request.json or {}).get("code"))
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    session.pop("totp_en_cours", None)
+    return jsonify({"ok": True, "codes_secours": codes})
+
+
+@app.route("/equipe/2fa/desactiver", methods=["POST"])
+def equipe_2fa_desactiver():
+    b = request.json or {}
+    if not g.tech:
+        return jsonify({"error": "Aucun compte connecté."}), 400
+    if exiger_double_auth():
+        return jsonify({"error": "La double authentification est obligatoire dans cet atelier."}), 400
+    if not equipe.verifier_mdp(FS_DB, g.tech["id"], b.get("mdp")):
+        return jsonify({"error": "Mot de passe incorrect."}), 400
+    equipe.desactiver_double_auth(FS_DB, g.tech["id"])
+    return jsonify({"ok": True})
+
+
+@app.route("/equipe/securite", methods=["POST"])
+def equipe_securite():
+    """Double authentification obligatoire pour tous les comptes (administrateur)."""
+    b = request.json or {}
+    exiger = bool(b.get("exiger_double_auth"))
+    if exiger and g.tech and not g.tech["double_auth"]:
+        return jsonify({"error": "Active d'abord la double authentification sur ton propre compte."}), 400
+    cfg = load_config()
+    cfg["exiger_double_auth"] = exiger
+    save_config(cfg)
+    return jsonify({"ok": True})
 
 
 @app.route("/equipe/creer", methods=["POST"])
@@ -274,7 +377,8 @@ def equipe_modifier():
     b = request.json or {}
     try:
         equipe.modifier(FS_DB, int(b.get("id") or 0), nom=b.get("nom"), role=b.get("role"),
-                        actif=bool(b.get("actif", True)), mdp=b.get("mdp") or None)
+                        actif=bool(b.get("actif", True)), mdp=b.get("mdp") or None,
+                        retirer_double_auth=bool(b.get("retirer_double_auth")))
     except comptes.ErreurCompte as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True})
@@ -925,6 +1029,34 @@ def fs_sauvegarde():
                     "dossier_fichiers": FS_FILES})
 
 
+@app.route("/fs/sante")
+def fs_sante():
+    """État du service : problèmes à corriger, e-mails en échec, dernières sauvegardes."""
+    _fs_init()
+    cfg = load_portal_config()
+    s = sante.verifier(FS_DB, DATA_DIR, cfg)
+    return jsonify(s | {"mails_echecs": mailer.echecs(DATA_DIR, 20),
+                        "sauvegarde_externe": sauvegarde_externe.derniere(DATA_DIR),
+                        "taches": taches.derniere_execution(DATA_DIR)})
+
+
+@app.route("/fs/sante/acquitter", methods=["POST"])
+def fs_sante_acquitter():
+    mailer.acquitter_echecs(DATA_DIR)
+    return jsonify({"ok": True})
+
+
+@app.route("/fs/sauvegarde-externe", methods=["POST"])
+def fs_sauvegarde_externe():
+    """Lance la sauvegarde externe maintenant (test des réglages)."""
+    _fs_init()
+    cfg = load_portal_config()
+    if not sauvegarde_externe.reglages(cfg)["mode"]:
+        return jsonify({"error": "Choisis d'abord un mode (FTP ou e-mail) et enregistre les réglages."}), 400
+    r = sauvegarde_externe.executer(cfg, FS_DB, FS_FILES, DATA_DIR, cfg.get("shop_name") or "E85-FRANCE")
+    return jsonify(r), (200 if r["ok"] else 400)
+
+
 @app.route("/fs/reglages", methods=["GET"])
 def fs_reglages_get():
     cfg = load_portal_config()
@@ -942,6 +1074,7 @@ def fs_reglages_get():
                     "api_active": bool(cfg.get("api_active")),
                     "remises": catalogue.remises(cfg),
                     "relances": relances.reglages(cfg),
+                    "sauvegarde_externe": sauvegarde_externe.reglages(cfg),
                     "pages": {k: {"titre": t, "texte": pages_legales.texte(cfg, k),
                                   "a_completer": pages_legales.a_completer(cfg, k)}
                               for k, t in pages_legales.PAGES.items()}})
@@ -990,6 +1123,32 @@ def fs_reglages_set():
                                "seuil": max(0, int(rr.get("seuil", 50))), "delai_h": max(1, int(rr.get("delai_h", 48)))}
         except (TypeError, ValueError):
             return jsonify({"error": "Relances : seuil et délai doivent être des nombres entiers."}), 400
+    if isinstance(b.get("sauvegarde_externe"), dict):
+        se, ancien = b["sauvegarde_externe"], sauvegarde_externe.reglages(cfg, masquer=False)
+        if se.get("mode") not in ("", "ftp", "email"):
+            return jsonify({"error": "Mode de sauvegarde externe inconnu."}), 400
+        ftp = dict(ancien["ftp"])
+        for k in ("host", "user", "dossier"):
+            if k in (se.get("ftp") or {}):
+                ftp[k] = str(se["ftp"][k] or "").strip()[:200]
+        try:
+            ftp["port"] = int((se.get("ftp") or {}).get("port") or ftp.get("port") or 21)
+            garder = max(1, min(365, int(se.get("garder") or 14)))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Sauvegarde externe : port et nombre d'archives gardées doivent être des nombres."}), 400
+        ftp["tls"] = bool((se.get("ftp") or {}).get("tls", True))
+        mdp = str((se.get("ftp") or {}).get("password") or "").strip()
+        if mdp == "-":
+            ftp.pop("password", None)
+        elif mdp:
+            ftp["password"] = mdp
+        email = str(se.get("email") or "").strip()
+        if se.get("mode") == "email" and not comptes.email_valide(email):
+            return jsonify({"error": "Sauvegarde externe : adresse e-mail de réception invalide."}), 400
+        if se.get("mode") == "ftp" and not ftp.get("host"):
+            return jsonify({"error": "Sauvegarde externe : indique le serveur FTP."}), 400
+        cfg["sauvegarde_externe"] = {"mode": se.get("mode"), "ftp": ftp, "email": email,
+                                     "fichiers": bool(se.get("fichiers")), "garder": garder}
     if isinstance(b.get("remises"), dict):
         rem = {}
         for k, v in b["remises"].items():
@@ -1105,7 +1264,7 @@ def fs_demandes():
 @app.route("/fs/alertes")
 def fs_alertes():
     _fs_init()
-    return jsonify(demandes.alertes(FS_DB))
+    return jsonify(demandes.alertes(FS_DB) | {"mails_echecs": len(mailer.echecs(DATA_DIR))})
 
 
 @app.route("/fs/demandes/<int:did>")

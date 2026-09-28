@@ -279,6 +279,11 @@
         <div id="fsDetail" class="dash-card fs-detail"><div class="empty">Choisis une demande dans la liste.</div></div>
       </div>
 
+      <div class="dash-card" style="margin-top:22px" id="fsSanteCard">
+        <h3 style="margin-top:0">État du service <span id="fsSanteBadge"></span></h3>
+        <div id="fsSante" class="muted small">…</div>
+      </div>
+
       <div class="dash-card" style="margin-top:22px">
         <h3 style="margin-top:0">Chiffre d'affaires &amp; comptabilité</h3>
         <div id="fsSynthese" class="muted small">…</div>
@@ -301,6 +306,30 @@
           <button class="patchbtn sm" id="eqCreer">Créer le compte</button>
         </div>
         <div id="eqOut" class="muted small"></div>
+        <div id="dfaBloc" class="hidden" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+          <h4 style="margin-top:0">Double authentification <span class="muted small">(code à 6 chiffres sur le téléphone, en plus du mot de passe)</span></h4>
+          <div class="patch-row" style="align-items:center">
+            <span id="dfaEtat" class="muted small"></span>
+            <button class="patchbtn sm" id="dfaActiver">Activer sur mon compte</button>
+            <button class="ghost sm hidden" id="dfaDesactiver">Désactiver</button>
+          </div>
+          <div id="dfaConfig" class="hidden dfa-config">
+            <div id="dfaQr" class="dfa-qr"></div>
+            <div class="muted small">
+              <ol style="margin:0 0 8px;padding-left:18px">
+                <li>Installe une application d'authentification (Google Authenticator, Microsoft Authenticator, 2FAS…).</li>
+                <li>Scanne ce QR code (ou saisis la clé <code id="dfaSecret"></code>).</li>
+                <li>Tape le code à 6 chiffres affiché :</li>
+              </ol>
+              <div class="patch-row"><input type="text" id="dfaCode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:110px">
+                <button class="patchbtn sm" id="dfaValider">Valider</button></div>
+            </div>
+          </div>
+          <div id="dfaCodes" class="hidden"></div>
+          <label class="muted small hidden" id="dfaExigerLab" style="display:flex;gap:8px;align-items:center;margin-top:10px">
+            <input type="checkbox" id="dfaExiger"> Obliger tous les comptes de l'atelier à l'activer (recommandé si l'outil est en ligne)</label>
+          <div id="dfaOut" class="muted small"></div>
+        </div>
       </div>
 
       <div class="dash-card" style="margin-top:22px">
@@ -357,6 +386,23 @@
           dans ta sauvegarde externe (OneDrive, disque USB…).</p>
         <div class="patch-row"><button id="fsBackup" class="ghost sm">Sauvegarder maintenant</button>
           <span id="fsBackupOut" class="muted small"></span></div>
+        <h4>Sauvegarde externe <span class="muted small">(chaque nuit, une copie hors du serveur)</span></h4>
+        <div class="patch-row fs-form" style="align-items:flex-end">
+          <label>Mode <select id="seMode"><option value="">Désactivée</option><option value="ftp">FTP (FTPS)</option><option value="email">E-mail (base seule)</option></select></label>
+          <span id="seEmailBloc" class="patch-row fs-form" style="margin:0"><label>Adresse de réception <input type="text" id="seEmail" placeholder="sauvegardes@…"></label></span>
+          <span id="seFtpBloc" class="patch-row fs-form" style="margin:0">
+            <label>Serveur <input type="text" id="seHost" placeholder="ftp.exemple.fr"></label>
+            <label>Port <input type="text" id="sePort" style="width:60px"></label>
+            <label>Utilisateur <input type="text" id="seUser" autocomplete="off"></label>
+            <label>Mot de passe <input type="password" id="sePass" autocomplete="new-password"></label>
+            <label>Dossier <input type="text" id="seDossier"></label>
+            <label>Archives gardées <input type="text" id="seGarder" style="width:60px"></label>
+            <label class="muted small nc-check"><input type="checkbox" id="seTls"> Chiffré (FTPS)</label>
+            <label class="muted small nc-check"><input type="checkbox" id="seFichiers"> Inclure les fichiers clients</label>
+          </span>
+        </div>
+        <div class="patch-row"><button id="seTest" class="ghost sm">Enregistrer et tester maintenant</button>
+          <span id="seOut" class="muted small"></span></div>
         <div class="patch-row" style="margin-top:10px"><button id="fsSaveReglages" class="patchbtn sm">Enregistrer les réglages</button>
           <span id="fsReglagesOut" class="muted small"></span></div>
       </div>
@@ -850,6 +896,7 @@
     </div>
   </div>
 
+  <script src="{{ url_for('static', filename='vendor/qrcode.js') }}?v={{ version }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}?v={{ version }}"></script>
 </body>
 </html>

@@ -32,6 +32,8 @@ import factures
 import api
 import fileservice
 import relances
+import sante
+import taches
 
 APP_VERSION = "1.55.1"
 
@@ -179,7 +181,7 @@ def _maybe_require_login():
     cfg = load_config()
     if not cfg.get("access_password_hash"):
         return None
-    if request.endpoint in ("portal_login", "static", "espace_legacy") or (request.endpoint or "").startswith(("fs.", "api.")):
+    if request.endpoint in ("portal_login", "static", "espace_legacy", "sante_publique") or (request.endpoint or "").startswith(("fs.", "api.")):
         return None   # l'espace client a ses propres comptes
     if session.get("authed"):
         return None
@@ -402,27 +404,29 @@ def order():
     return jsonify({"ok": True, "prestas": wanted, "updated": updated})
 
 
+@app.route("/sante")
+def sante_publique():
+    """Pour un service de surveillance externe (UptimeRobot…) : 200 si le portail et sa base répondent.
+    Aucun détail n'est exposé ; le détail est dans l'outil atelier."""
+    ok = sante.base_ok(app.config["FS_DB"])
+    return jsonify({"ok": ok, "version": APP_VERSION}), (200 if ok else 503)
+
+
 def _sauvegardes_quotidiennes():
-    """Fil en arrière-plan : sauvegarde de la base au démarrage puis toutes les 24 h,
-    relances automatiques toutes les heures."""
+    """Fil en arrière-plan (python portal.py) : tâches planifiées toutes les heures — sauvegarde
+    quotidienne, sauvegarde externe, relances, alertes. Chez un hébergeur (Passenger), c'est une
+    tâche cron qui les lance : python outils_prod.py taches."""
     import threading
 
     def boucle():
-        derniere_sauvegarde = 0
         while True:
-            if time.time() - derniere_sauvegarde >= 24 * 3600:
-                try:
-                    comptes.sauvegarder(app.config["FS_DB"])
-                    derniere_sauvegarde = time.time()
-                except Exception as e:   # une sauvegarde ratée ne doit jamais arrêter le portail
-                    print(f"  ⚠ Sauvegarde du fileservice impossible : {e}")
             try:
-                fileservice.executer_relances(app, f"http://127.0.0.1:{os.environ.get('PORT', '5001')}")
-            except Exception as e:
-                print(f"  ⚠ Relances automatiques impossibles : {e}")
+                taches.executer(app, f"http://127.0.0.1:{os.environ.get('PORT', '5001')}")
+            except Exception as e:   # une tâche ratée ne doit jamais arrêter le portail
+                print(f"  ⚠ Tâches planifiées : {e}")
             time.sleep(3600)
 
-    threading.Thread(target=boucle, name="sauvegardes-fileservice", daemon=True).start()
+    threading.Thread(target=boucle, name="taches-fileservice", daemon=True).start()
 
 
 if __name__ == "__main__":

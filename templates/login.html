@@ -19,6 +19,8 @@
              border-radius:9px; font-size:1rem; font-weight:600; cursor:pointer; }
     .err { color:var(--err); text-align:center; font-size:.88rem; margin:-6px 0 14px; }
     .lock { text-align:center; font-size:1.8rem; margin-bottom:6px; }
+    a { color:var(--accent); }
+    code.cmd { display:block; padding:10px 12px; background:var(--bg); border:1px solid var(--line); border-radius:8px; font-size:.9rem; }
   </style>
 </head>
 <body>
@@ -26,6 +28,21 @@
     <div class="lock">🔒</div>
     <h1>Carto Matcher</h1>
     <p class="sub">{{ 'Compte atelier' if equipe else 'Accès réseau protégé' }} — v{{ version }}</p>
+    {% if installation %}
+    <p class="sub" style="text-align:left">Aucun compte atelier n'existe encore. Pour des raisons de sécurité, le premier
+      compte administrateur se crée sur le serveur (cPanel → Terminal), dans le dossier du logiciel :</p>
+    <code class="cmd">python outils_prod.py admin</code>
+    <p class="sub" style="text-align:left;margin-top:14px">Recharge ensuite cette page.</p>
+    {% elif code %}
+    <form method="post">
+      {% if error %}<p class="err">{{ error }}</p>{% endif %}
+      <p class="sub" style="margin-top:-8px">Double authentification : saisis le code à 6 chiffres affiché par ton application
+        (ou un code de secours).</p>
+      <input type="text" name="code" placeholder="123 456" autofocus autocomplete="one-time-code" inputmode="numeric" maxlength="12">
+      <button type="submit">Valider</button>
+      <p class="sub" style="margin:14px 0 0"><a href="?recommencer=1">Changer de compte</a></p>
+    </form>
+    {% else %}
     <form method="post">
       {% if error %}<p class="err">{{ error }}</p>{% endif %}
       {% if equipe %}
@@ -36,6 +53,7 @@
       {% endif %}
       <button type="submit">Se connecter</button>
     </form>
+    {% endif %}
   </div>
 </body>
 </html>

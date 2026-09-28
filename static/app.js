@@ -244,7 +244,7 @@ function showView(v) {
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
   if (v === "clients") { loadClients(); loadSmtp(); }
-  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadEquipe(); loadJournal(); }
+  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadFsSante(); loadEquipe(); loadJournal(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -3566,6 +3566,52 @@ async function loadFsReglages() {
   $("#fsStripeWh").placeholder = st.webhook_secret_set ? "enregistré (vide = inchangé)" : "whsec_…";
   $("#fsStripeEtat").textContent = st.secret_key_set ? `Paiement en ligne actif (${st.mode === "test" ? "mode test" : "mode réel"})${st.webhook_secret_set ? "" : " · webhook non configuré"}` : "Paiement en ligne désactivé";
   $("#fsWebhookUrl").textContent = (d.public_url || "https://portail.ton-domaine.fr") + "/stripe/webhook";
+  const se = d.sauvegarde_externe;
+  $("#seMode").value = se.mode; $("#seEmail").value = se.email;
+  $("#seHost").value = se.ftp.host || ""; $("#sePort").value = se.ftp.port || 21; $("#seUser").value = se.ftp.user || "";
+  $("#seDossier").value = se.ftp.dossier || ""; $("#seGarder").value = se.garder; $("#seTls").checked = se.ftp.tls !== false;
+  $("#seFichiers").checked = !!se.fichiers; $("#sePass").value = "";
+  $("#sePass").placeholder = se.ftp.password_set ? "enregistré (vide = inchangé)" : "";
+  majSeMode();
+}
+
+function majSeMode() {
+  $("#seFtpBloc").classList.toggle("hidden", $("#seMode").value !== "ftp");
+  $("#seEmailBloc").classList.toggle("hidden", $("#seMode").value !== "email");
+}
+$("#seMode").onchange = majSeMode;
+function sauvegardeExterneForm() {
+  return { mode: $("#seMode").value, email: $("#seEmail").value, garder: $("#seGarder").value, fichiers: $("#seFichiers").checked,
+           ftp: { host: $("#seHost").value, port: $("#sePort").value, user: $("#seUser").value, password: $("#sePass").value,
+                  dossier: $("#seDossier").value, tls: $("#seTls").checked } };
+}
+$("#seTest").onclick = async () => {
+  const out = $("#seOut");
+  out.innerHTML = '<span class="spin"></span> Envoi en cours…';
+  try {
+    await postJSON("/fs/reglages", { sauvegarde_externe: sauvegardeExterneForm() });
+    const r = await postJSON("/fs/sauvegarde-externe", {});
+    out.innerHTML = `<span class="badge ok">OK</span> ${esc(r.message)}`;
+  } catch (err) { out.innerHTML = `<span class="badge danger">échec</span> ${esc(err.message)}`; }
+  loadFsSante();
+};
+
+async function loadFsSante() {
+  let d;
+  try { d = await (await fetch("/fs/sante")).json(); } catch (e) { return; }
+  $("#fsSanteBadge").innerHTML = d.ok ? '<span class="badge ok">tout va bien</span>' : `<span class="badge danger">${d.problemes.length} problème(s)</span>`;
+  const ext = d.sauvegarde_externe;
+  $("#fsSante").innerHTML = (d.problemes.length ? `<ul class="fs-sante-liste">${d.problemes.map(p => `<li class="danger">⚠ ${esc(p)}</li>`).join("")}</ul>` : "")
+    + (d.avertissements.length ? `<ul class="fs-sante-liste">${d.avertissements.map(p => `<li>· ${esc(p)}</li>`).join("")}</ul>` : "")
+    + `<div>Tâches planifiées : ${d.taches ? "dernière exécution " + esc(d.taches) : "jamais exécutées (portail arrêté ou tâche cron absente)"}`
+    + (ext ? ` · Sauvegarde externe : ${ext.ok ? "OK" : "échec"} le ${esc(ext.date)}` : "") + "</div>"
+    + (d.mails_echecs.length ? `<details style="margin-top:8px"><summary>${d.mails_echecs.length} e-mail(s) non envoyé(s)</summary>
+        <table class="fs-table"><thead><tr><th>Date</th><th>À</th><th>Sujet</th><th>Erreur</th></tr></thead><tbody>`
+        + d.mails_echecs.map(m => `<tr><td style="white-space:nowrap">${esc(m.date)}</td><td>${esc(m.a)}</td><td>${esc(m.sujet)}</td><td>${esc(m.erreur)}</td></tr>`).join("")
+        + `</tbody></table><button class="ghost sm" id="fsSanteVu" style="margin-top:6px">Marquer comme vus</button>
+        <span class="muted small">Le texte des e-mails est gardé dans data/mails_non_envoyes.log.</span></details>` : "");
+  const vu = $("#fsSanteVu");
+  if (vu) vu.onclick = async () => { await postJSON("/fs/sante/acquitter", {}); loadFsSante(); };
 }
 
 async function loadFsBackups(post) {
@@ -3612,7 +3658,7 @@ $("#fsSaveReglages").onclick = async () => {
     if ($("#fsNiveauNom").value.trim()) remises[$("#fsNiveauNom").value.trim()] = $("#fsNiveauPct").value || "0";
     const relances = { solde_bas: $("#rlSolde").checked, seuil: $("#rlSeuil").value,
                        non_telecharge: $("#rlDl").checked, delai_h: $("#rlDelai").value };
-    await postJSON("/fs/reglages", { societe, horaires, pages, remises, relances, livraison_auto: $("#fsAutoLivraison").checked, api_active: $("#fsApiActive").checked, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
+    await postJSON("/fs/reglages", { societe, horaires, pages, remises, relances, sauvegarde_externe: sauvegardeExterneForm(), livraison_auto: $("#fsAutoLivraison").checked, api_active: $("#fsApiActive").checked, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
     $("#fsReglagesOut").textContent = "Réglages enregistrés.";
     loadFsReglages();
   } catch (err) { $("#fsReglagesOut").textContent = err.message; }
@@ -3679,6 +3725,10 @@ async function surveiller() {
   el.textContent = nFs; el.classList.toggle("hidden", !nFs);
   const ec = $("#clientsCount");
   ec.textContent = a.inscriptions; ec.classList.toggle("hidden", !a.inscriptions);
+  if (alerteEtat && a.mails_echecs > (alerteEtat.mails_echecs || 0)) {
+    notifier("Fileservice : e-mail non envoyé", "Un e-mail aux clients n'est pas parti : voir Fileservice → État du service.");
+    if (!$("#view-fs").classList.contains("hidden")) loadFsSante();
+  }
   if (alerteEtat) {
     const msgs = [];
     if (a.derniere_demande > alerteEtat.derniere_demande) msgs.push(`${a.derniere_demande - alerteEtat.derniere_demande} nouveau(x) fichier(s)`);
@@ -3716,9 +3766,63 @@ async function initSession() {
         ["#fsReglages", "#fsEquipeForm"].forEach(sel => { const el = $(sel); if (el) el.classList.add("hidden"); });
         document.body.classList.add("role-technicien");
       }
+      majDoubleAuth(d);
+      if (d.exiger_double_auth && !MOI.double_auth) {
+        // double authentification obligatoire et pas encore activée : on amène le technicien au bon endroit
+        document.querySelector('.tab[data-view="fs"]').click();
+        $("#dfaOut").innerHTML = '<span class="badge danger">obligatoire</span> L\'atelier exige la double authentification : active-la pour continuer.';
+        setTimeout(() => $("#dfaBloc").scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+      }
     }
   } catch (e) { /* outil sans comptes */ }
 }
+
+/* Double authentification (TOTP) du compte connecté */
+function majDoubleAuth(d) {
+  const bloc = $("#dfaBloc");
+  if (!MOI) { bloc.classList.add("hidden"); return; }
+  bloc.classList.remove("hidden");
+  $("#dfaEtat").innerHTML = MOI.double_auth
+    ? `<span class="badge ok">activée</span> ${MOI.codes_secours} code(s) de secours restant(s)`
+    : '<span class="badge warn">non activée</span>';
+  $("#dfaActiver").textContent = MOI.double_auth ? "Changer de téléphone" : "Activer sur mon compte";
+  $("#dfaDesactiver").classList.toggle("hidden", !MOI.double_auth || d.exiger_double_auth);
+  $("#dfaExigerLab").classList.toggle("hidden", MOI.role !== "admin");
+  $("#dfaExiger").checked = !!d.exiger_double_auth;
+}
+$("#dfaActiver").onclick = async () => {
+  try {
+    const d = await postJSON("/equipe/2fa/debut", {});
+    const qr = qrcode(0, "M"); qr.addData(d.uri); qr.make();
+    $("#dfaQr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    $("#dfaSecret").textContent = d.secret.replace(/(.{4})/g, "$1 ").trim();
+    $("#dfaConfig").classList.remove("hidden"); $("#dfaCodes").classList.add("hidden");
+    $("#dfaCode").value = ""; $("#dfaCode").focus();
+  } catch (err) { $("#dfaOut").textContent = err.message; }
+};
+$("#dfaValider").onclick = async () => {
+  try {
+    const d = await postJSON("/equipe/2fa/activer", { code: $("#dfaCode").value });
+    $("#dfaConfig").classList.add("hidden");
+    $("#dfaCodes").classList.remove("hidden");
+    $("#dfaCodes").innerHTML = `<p class="muted small"><b>Codes de secours</b> (un seul usage chacun, si tu perds ton téléphone) :
+      note-les maintenant, ils ne seront plus affichés.</p><div class="dfa-liste">${d.codes_secours.map(c => `<code>${esc(c)}</code>`).join("")}</div>`;
+    $("#dfaOut").textContent = "Double authentification activée : le code sera demandé à chaque connexion.";
+    await initSession(); loadEquipe();
+  } catch (err) { $("#dfaOut").textContent = err.message; }
+};
+$("#dfaCode").addEventListener("keydown", e => { if (e.key === "Enter") $("#dfaValider").click(); });
+$("#dfaDesactiver").onclick = async () => {
+  const mdp = prompt("Pour désactiver la double authentification, saisis ton mot de passe :");
+  if (!mdp) return;
+  try { await postJSON("/equipe/2fa/desactiver", { mdp }); $("#dfaOut").textContent = "Double authentification désactivée."; await initSession(); loadEquipe(); }
+  catch (err) { $("#dfaOut").textContent = err.message; }
+};
+$("#dfaExiger").onchange = async e => {
+  try { await postJSON("/equipe/securite", { exiger_double_auth: e.target.checked });
+        $("#dfaOut").textContent = e.target.checked ? "Double authentification obligatoire pour tous les comptes." : "Double authentification facultative."; }
+  catch (err) { e.target.checked = !e.target.checked; $("#dfaOut").textContent = err.message; }
+};
 
 async function loadEquipe() {
   const d = await (await fetch("/equipe")).json();
@@ -3738,12 +3842,14 @@ async function loadEquipe() {
   $("#fsEquipeListe").innerHTML = (d.techniciens || []).map(t => `<div class="job-row" data-tid="${t.id}">
     <div class="job-main"><div class="job-top"><b>${esc(t.nom)}</b> <span class="muted small">${esc(t.identifiant)}</span>
       <span class="badge ${t.role === "admin" ? "ok" : ""}">${t.role === "admin" ? "administrateur" : "technicien"}</span>
-      ${t.actif ? "" : '<span class="badge danger">désactivé</span>'}</div>
+      ${t.actif ? "" : '<span class="badge danger">désactivé</span>'}
+      ${t.double_auth ? '<span class="badge ok" title="Double authentification activée">2FA</span>' : ""}</div>
       <div class="job-sub muted small">Dernière connexion : ${esc(t.derniere_connexion || "jamais")}</div></div>
     <div class="inbox-actions">
       <button class="ghost sm" data-eqrole="${t.role === "admin" ? "technicien" : "admin"}">${t.role === "admin" ? "Passer technicien" : "Passer admin"}</button>
       <button class="ghost sm" data-eqactif="${t.actif ? 0 : 1}">${t.actif ? "Désactiver" : "Réactiver"}</button>
       <button class="ghost sm" data-eqmdp="1">Nouveau mot de passe</button>
+      ${t.double_auth ? '<button class="ghost sm" data-eq2fa="1" title="Téléphone perdu : le technicien devra la réactiver">Retirer la 2FA</button>' : ""}
     </div></div>`).join("");
   window.fsEquipe = d.techniciens || [];
 }
@@ -3767,6 +3873,10 @@ $("#fsEquipeListe").addEventListener("click", async e => {
   const body = { id: t.id, nom: t.nom, role: t.role, actif: !!t.actif };
   if (e.target.dataset.eqrole) body.role = e.target.dataset.eqrole;
   if (e.target.dataset.eqactif) body.actif = e.target.dataset.eqactif === "1";
+  if (e.target.dataset.eq2fa) {
+    if (!confirm(`Retirer la double authentification de ${t.nom} ? (téléphone perdu) Il pourra se connecter avec son seul mot de passe puis la réactiver.`)) return;
+    body.retirer_double_auth = true;
+  }
   if (e.target.dataset.eqmdp) {
     const mdp = prompt(`Nouveau mot de passe pour ${t.nom} (10 caractères minimum) :`);
     if (!mdp) return;
