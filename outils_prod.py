@@ -7,6 +7,7 @@ Outils de mise en production (hébergeur type O2switch, cPanel → Terminal ou t
                                      relances, alerte e-mail si problème — à lancer toutes les heures (cron)
     python outils_prod.py sante      affiche l'état du service
     python outils_prod.py verifier   vérifie l'installation (dossiers, droits, réglages)
+    python outils_prod.py droits     corrige les droits des fichiers (erreur « Passenger error #2 … Permission denied »)
 
 Les variables d'environnement sont les mêmes que pour les applications (CARTO_DB,
 CARTO_PUBLIC_URL…) : dans une tâche cron, précise-les sur la ligne de commande si tu les as changées.
@@ -95,7 +96,34 @@ def cmd_verifier():
     return 0 if ok and admin else 1
 
 
-COMMANDES = {"admin": cmd_admin, "taches": cmd_taches, "sante": cmd_sante, "verifier": cmd_verifier}
+def cmd_droits():
+    """Droits d'accès attendus par Apache/Passenger : dossiers 755, fichiers 644 ; data/ reste privé (700/600).
+    Corrige l'erreur « Passenger error #2 … Permission denied (errno=13) »."""
+    import stat
+    racine = os.path.dirname(os.path.abspath(__file__))
+    donnees = os.path.join(racine, "data")
+    n = 0
+    for base, dossiers, fichiers in os.walk(racine):
+        prive = os.path.realpath(base).startswith(os.path.realpath(donnees))
+        os.chmod(base, 0o700 if prive else 0o755)
+        n += 1
+        for f in fichiers:
+            p = os.path.join(base, f)
+            if os.path.islink(p):
+                continue
+            os.chmod(p, 0o600 if prive else 0o644)
+            n += 1
+    maison = os.path.expanduser("~")
+    mode = stat.S_IMODE(os.stat(maison).st_mode)
+    print(f"✓ Droits corrigés sur {n} dossiers et fichiers ({racine}) ; data/ reste privé.")
+    if not mode & 0o001:
+        print(f"⚠ Votre dossier personnel {maison} est en {oct(mode)} : Apache ne peut pas le traverser.")
+        print(f"  Corrigez avec : chmod 711 {maison}")
+    print("Redémarrez ensuite les deux applications (Setup Python App → Restart).")
+    return 0
+
+
+COMMANDES = {"admin": cmd_admin, "taches": cmd_taches, "sante": cmd_sante, "verifier": cmd_verifier, "droits": cmd_droits}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in COMMANDES:

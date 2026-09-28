@@ -153,3 +153,19 @@ le dossier `data/` n'est jamais dans l'archive), puis *Restart* des deux applica
 - **Taille des fichiers** : 64 Mo par envoi, comme en local.
 - **Ne jamais publier** `data/` (comptes, factures, mots de passe SMTP/Stripe) : il est déjà exclu de Git et de l'archive de release.
 - En local, rien ne change : `python portal.py` et `python app.py` fonctionnent comme avant (le portail lance lui-même les tâches toutes les heures).
+
+## Dépannage
+
+**« Passenger error #2 … Passengerfile.json … Permission denied (errno=13) »** : Apache n'a pas le droit de lire le
+dossier du logiciel (dossier créé ou décompressé avec des droits trop stricts). Dans cPanel → **Terminal** :
+
+```
+cd ~/carto_matcher          # ou le nom de votre dossier (ex. carto-matcher)
+python3 outils_prod.py droits
+```
+
+(ou, sans ce script : `chmod 755 ~/carto_matcher`, puis dossiers en 755 et fichiers en 644 ; `data/` peut rester en 700).
+Puis *Setup Python App* → **Restart** sur les deux applications.
+
+**Le dossier ne s'appelle pas `carto_matcher`** : remplacez le nom partout dans ce guide, y compris dans le chemin
+de l'environnement Python de la tâche cron (`~/virtualenv/<nom du dossier>/<version>/bin/python`).
