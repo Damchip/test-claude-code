@@ -506,6 +506,15 @@ def file_detail(numero):
                            categorie_nom=next((c["nom"] for c in catalogue.CATEGORIES if c["code"] == d["categorie"]), ""))
 
 
+@bp.route("/fichiers/<numero>/recapitulatif")
+def file_recap(numero):
+    """Récapitulatif imprimable (PDF via le navigateur) d'une demande."""
+    d = _demande_ou_404(numero)
+    return render_template("fs/recapitulatif.html", f=d, livrables=demandes.livrables(_db(), d["id"]),
+                           annexes=[], vendeur=reglages().get("societe") or {},
+                           prix_credit=catalogue.PRIX_CREDIT_EUR)
+
+
 @bp.route("/fichiers/<numero>/message", methods=["POST"])
 def file_message(numero):
     d = _demande_ou_404(numero)

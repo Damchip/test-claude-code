@@ -1,5 +1,5 @@
 {% extends "fs/base.html" %}
-{% block title %}{{ titre }}{% endblock %}
+{% block title %}{{ t(titre) }}{% endblock %}
 {% block body %}
 <div class="legal-page">
   <header class="legal-head">
@@ -8,13 +8,14 @@
       <span><span class="brand-name">{{ shop.name }}</span><span class="brand-sub">File service</span></span>
     </a>
     <nav class="legal-nav">
-      {% for k, t in pages.items() %}<a href="{{ url_for('fs.legal', cle=k) }}" class="{{ 'active' if k == cle }}">{{ t }}</a>{% endfor %}
+      {% for k, nom in pages.items() %}<a href="{{ url_for('fs.legal', cle=k) }}" class="{{ 'active' if k == cle }}">{{ t(nom) }}</a>{% endfor %}
     </nav>
   </header>
   <article class="card legal-body">
-    <h1>{{ titre }}</h1>
+    <h1>{{ t(titre) }}</h1>
+    {% if langue != 'fr' %}<p class="muted small">{{ t("Texte en français, seule version faisant foi.") }}</p>{% endif %}
     {{ contenu }}
   </article>
-  <p class="legal-back"><a class="link" href="{{ url_for('fs.dashboard') }}">← Retour à l'espace client</a></p>
+  <p class="legal-back"><a class="link" href="{{ url_for('fs.dashboard') }}">← {{ t("Retour à l'espace client") }}</a></p>
 </div>
 {% endblock %}

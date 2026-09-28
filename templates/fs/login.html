@@ -1,5 +1,5 @@
 {% extends "fs/base.html" %}
-{% block title %}{{ {'register': 'Créer un compte', 'registered': 'Demande envoyée', 'forgot': 'Mot de passe oublié', 'reset': 'Nouveau mot de passe'}.get(mode, 'Connexion') }}{% endblock %}
+{% block title %}{{ t({'register': 'Créer un compte', 'registered': 'Demande envoyée', 'forgot': 'Mot de passe oublié', 'reset': 'Nouveau mot de passe'}.get(mode, 'Connexion')) }}{% endblock %}
 {% block body %}
 <div class="auth">
   <section class="auth-brand">
@@ -33,8 +33,8 @@
 
   <section class="auth-form">
     <div class="auth-card">
-      {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="flash {{ 'flash-err' if cat == 'erreur' }}">{{ icon('info' if cat == 'erreur' else 'check') }} {{ msg }}</div>{% endfor %}
-      {% if erreur %}<div class="note warn" style="margin-bottom: 18px">{{ icon('info') }}<span>{{ erreur }}</span></div>{% endif %}
+      {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="flash {{ 'flash-err' if cat == 'erreur' }}">{{ icon('info' if cat == 'erreur' else 'check') }} {{ t(msg) }}</div>{% endfor %}
+      {% if erreur %}<div class="note warn" style="margin-bottom: 18px">{{ icon('info') }}<span>{{ t(erreur) }}</span></div>{% endif %}
 
       {% if mode == 'register' %}
       <h2>{{ t('Créer un compte pro') }}</h2>
@@ -44,7 +44,7 @@
         <div class="form-grid">
           <div class="field full"><label for="societe">{{ t('Société') }}</label><input class="input" id="societe" name="societe" value="{{ form.societe }}" autocomplete="organization" required></div>
           <div class="field"><label for="siret">{{ t('SIRET') }}</label><input class="input" id="siret" name="siret" value="{{ form.siret }}" inputmode="numeric" maxlength="20" required></div>
-          <div class="field"><label for="tva">N° TVA</label><input class="input" id="tva" name="tva" value="{{ form.tva }}" placeholder="FR…"></div>
+          <div class="field"><label for="tva">{{ t("N° TVA") }}</label><input class="input" id="tva" name="tva" value="{{ form.tva }}" placeholder="FR…"></div>
           <div class="field"><label for="contact">{{ t('Nom et prénom') }}</label><input class="input" id="contact" name="contact" value="{{ form.contact }}" autocomplete="name"></div>
           <div class="field"><label for="tel">{{ t('Téléphone') }}</label><input class="input" type="tel" id="tel" name="tel" value="{{ form.tel }}" autocomplete="tel"></div>
           <div class="field full"><label for="adresse">{{ t('Adresse') }}</label><input class="input" id="adresse" name="adresse" value="{{ form.adresse }}" autocomplete="street-address" required></div>
@@ -52,7 +52,7 @@
           <div class="field"><label for="ville">{{ t('Ville') }}</label><input class="input" id="ville" name="ville" value="{{ form.ville }}" autocomplete="address-level2" required></div>
           <div class="field full"><label for="pays">{{ t('Pays') }}</label><input class="input" id="pays" name="pays" value="{{ form.pays or 'France' }}" autocomplete="country-name"></div>
           <div class="field full"><label for="email">{{ t('E-mail professionnel') }}</label><input class="input" type="email" id="email" name="email" value="{{ form.email }}" autocomplete="email" required></div>
-          <div class="field full"><label for="pw">Mot de passe</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required><span class="hint">{{ t('10 caractères minimum.') }}</span></div>
+          <div class="field full"><label for="pw">{{ t("Mot de passe") }}</label><input class="input" type="password" id="pw" name="password" minlength="10" autocomplete="new-password" required><span class="hint">{{ t('10 caractères minimum.') }}</span></div>
         </div>
         <label class="checkbox"><input type="checkbox" name="cgv" required> {{ t("J'accepte les") }} <a class="link" href="{{ url_for('fs.legal', cle='cgv') }}" target="_blank" rel="noopener">{{ t('conditions générales de vente') }}</a></label>
         <button class="btn btn-primary btn-lg btn-block" type="submit">{{ t("Demander l'ouverture du compte") }}</button>

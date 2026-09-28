@@ -20,7 +20,7 @@
       <span><span class="brand-name">{{ shop.name }}</span><span class="brand-sub">{{ t('File service') }}</span></span>
     </a>
 
-    <nav class="nav" aria-label="Navigation principale">
+    <nav class="nav" aria-label="{{ t('Navigation principale') }}">
       <a href="{{ url_for('fs.dashboard') }}" class="{{ 'active' if nav == 'dashboard' }}">{{ icon('home') }} {{ t('Tableau de bord') }}</a>
       <a href="{{ url_for('fs.new_file') }}" class="{{ 'active' if nav == 'new' }}">{{ icon('upload') }} {{ t('Nouveau fichier') }}</a>
       <a href="{{ url_for('fs.files') }}" class="{{ 'active' if nav == 'files' }}">{{ icon('files') }} {{ t('Mes fichiers') }} <span class="count">{{ user.open_count }}</span></a>
@@ -43,19 +43,19 @@
 
   <div class="main">
     <header class="top">
-      <button class="icon-btn menu-btn" type="button" data-open-nav aria-label="Ouvrir le menu">{{ icon('menu') }}</button>
+      <button class="icon-btn menu-btn" type="button" data-open-nav aria-label="{{ t('Ouvrir le menu') }}">{{ icon('menu') }}</button>
       <span class="status-pill">
         <span class="dot {{ 'on' if service.open else 'off' }}"></span>
         {% if service.open %}{{ t('Service ouvert') }}
         {% else %}{{ t('Service fermé') }}<span class="hide-sm"> · {{ service.next_open }}</span>{% endif %}
       </span>
       <span class="top-spacer"></span>
-      <a class="credit-chip" href="{{ url_for('fs.credits') }}" title="Recharger">
+      <a class="credit-chip" href="{{ url_for('fs.credits') }}" title="{{ t('Recharger') }}">
         <span class="num">{{ user.credits }}</span><span class="muted small hide-sm">{{ t('crédits') }}</span>
         <span class="plus">{{ icon('plus', 'icon-sm') }}</span>
       </a>
       <div class="lang-switch hide-sm">{% for code, nom in langues.items() %}<a href="{{ url_for('fs.set_langue', code=code, next=request.full_path) }}" class="{{ 'on' if code == langue }}">{{ code|upper }}</a>{% endfor %}</div>
-      <button class="icon-btn hide-sm" type="button" data-theme-toggle aria-label="Changer de thème">
+      <button class="icon-btn hide-sm" type="button" data-theme-toggle aria-label="{{ t('Changer de thème') }}">
         <span class="ti-sun">{{ icon('sun') }}</span><span class="ti-moon">{{ icon('moon') }}</span>
       </button>
       <form method="post" action="{{ url_for('fs.logout') }}" class="logout-form">
@@ -67,7 +67,7 @@
 
     <main class="content">
       {% for cat, msg in get_flashed_messages(with_categories=true) %}
-      <div class="flash {{ 'flash-err' if cat == 'erreur' }}">{{ icon('info' if cat == 'erreur' else 'check') }} {{ msg }}</div>
+      <div class="flash {{ 'flash-err' if cat == 'erreur' }}">{{ icon('info' if cat == 'erreur' else 'check') }} {{ t(msg) }}</div>
       {% endfor %}
       {% block content %}{% endblock %}
     </main>

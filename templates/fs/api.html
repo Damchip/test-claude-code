@@ -5,50 +5,50 @@
   <div>
     <div class="crumbs"><a href="{{ url_for('fs.settings') }}">{{ t("Paramètres") }}</a>{{ icon('chevron-right', 'icon-sm') }}<span>{{ t("API revendeur") }}</span></div>
     <h1>{{ t("API revendeur") }}</h1>
-    <p>Connectez votre logiciel ou votre site à {{ shop.name }} : envoi de fichiers, suivi et téléchargement automatiques.</p>
+    <p>{{ t("Connectez votre logiciel ou votre site à {atelier} : envoi de fichiers, suivi et téléchargement automatiques.").format(atelier=shop.name) }}</p>
   </div>
 </div>
 
 {% if not api_active %}
-<div class="note warn" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>L'API n'est pas encore activée pour votre compte. Contactez l'atelier{% if shop.email %} ({{ shop.email }}){% endif %} pour l'activer.</span></div>
+<div class="note warn" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>{{ t("L'API n'est pas encore activée pour votre compte. Contactez l'atelier pour l'activer.") }}{% if shop.email %} ({{ shop.email }}){% endif %}</span></div>
 {% endif %}
 
 {% if nouvelle %}
 <div class="card card-pad" style="margin-bottom: 20px; border-color: var(--accent-line)">
-  <h3>Votre nouvelle clé</h3>
-  <p class="muted small" style="margin: 6px 0 10px">Copiez-la maintenant : pour votre sécurité, elle ne sera plus jamais affichée.</p>
+  <h3>{{ t("Votre nouvelle clé") }}</h3>
+  <p class="muted small" style="margin: 6px 0 10px">{{ t("Copiez-la maintenant : pour votre sécurité, elle ne sera plus jamais affichée.") }}</p>
   <code class="mono" style="display:block; padding:12px 14px; background:var(--surface-2); border-radius:10px; word-break:break-all; user-select:all">{{ nouvelle }}</code>
 </div>
 {% endif %}
 
 <div class="split">
   <section class="card">
-    <div class="card-head"><div><h2>Mes clés</h2></div></div>
+    <div class="card-head"><div><h2>{{ t("Mes clés") }}</h2></div></div>
     {% for c in cles %}
     <div class="file-row">
       <span class="file-ic">{{ icon('lock') }}</span>
       <div class="grow"><div class="name mono">{{ c.prefixe }}…{% if c.nom %} · {{ c.nom }}{% endif %}</div>
-        <div class="muted small">créée le {{ c.cree_le|date_fr(false) }} · {{ 'utilisée le ' ~ (c.derniere_utilisation|date_fr) if c.derniere_utilisation else 'jamais utilisée' }}</div></div>
-      <form method="post" onsubmit="return confirm('Révoquer cette clé ? Tout logiciel qui l\'utilise cessera de fonctionner.')">
+        <div class="muted small">{{ t("créée le") }} {{ c.cree_le|date_fr(false) }} · {{ (t('utilisée le') ~ ' ' ~ (c.derniere_utilisation|date_fr)) if c.derniere_utilisation else t('jamais utilisée') }}</div></div>
+      <form method="post" data-confirm="{{ t('Révoquer cette clé ? Tout logiciel qui l\'utilise cessera de fonctionner.') }}">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="revoquer"><input type="hidden" name="id" value="{{ c.id }}">
-        <button class="btn btn-sm" type="submit">Révoquer</button>
+        <button class="btn btn-sm" type="submit">{{ t("Révoquer") }}</button>
       </form>
     </div>
     {% else %}
-    <p class="empty">Aucune clé pour l'instant.</p>
+    <p class="empty">{{ t("Aucune clé pour l'instant.") }}</p>
     {% endfor %}
     {% if api_active %}
     <form method="post" class="composer">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-      <input class="input" name="nom" placeholder="Nom (ex. mon site, KESS3 atelier)" maxlength="60">
-      <button class="btn btn-primary" type="submit">{{ icon('plus', 'icon-sm') }} Générer une clé</button>
+      <input class="input" name="nom" placeholder="{{ t('Nom (ex. mon site, KESS3 atelier)') }}" maxlength="60">
+      <button class="btn btn-primary" type="submit">{{ icon('plus', 'icon-sm') }} {{ t("Générer une clé") }}</button>
     </form>
     {% endif %}
   </section>
 
   <aside class="card card-pad">
-    <h3>Prise en main</h3>
-    <p class="muted small" style="margin-top:6px">Envoyez la clé dans l'en-tête <code>Authorization</code>. Base : <code class="mono">{{ base }}/api/v1</code></p>
+    <h3>{{ t("Prise en main") }}</h3>
+    <p class="muted small" style="margin-top:6px">{{ t("Envoyez la clé dans l'en-tête") }} <code>Authorization</code>. {{ t("Base :") }} <code class="mono">{{ base }}/api/v1</code></p>
     <pre class="api-code">curl -H "Authorization: Bearer VOTRE_CLE" \
   {{ base }}/api/v1/compte</pre>
     <h4>{{ t("Envoyer un fichier") }}</h4>
@@ -57,14 +57,14 @@
   -F marque=Audi -F modele="A3" -F outil=KESS3 \
   -F file=@lecture_ori.bin \
   {{ base }}/api/v1/demandes</pre>
-    <p class="muted small">Types de véhicule : {% for c in categories %}<code>{{ c.code }}</code>{{ ', ' if not loop.last }}{% endfor %}. Codes des prestations et prix : <code>GET /api/v1/catalogue</code>.</p>
+    <p class="muted small">{{ t("Types de véhicule :") }} {% for c in categories %}<code>{{ c.code }}</code>{{ ', ' if not loop.last }}{% endfor %}. {{ t("Codes des prestations et prix :") }} <code>GET /api/v1/catalogue</code>.</p>
   </aside>
 </div>
 
 <section class="card" style="margin-top:20px">
-  <div class="card-head"><div><h2>Points d'accès</h2></div></div>
+  <div class="card-head"><div><h2>{{ t("Points d'accès") }}</h2></div></div>
   <div class="table-wrap"><table class="table">
-    <thead><tr><th>{{ t("Méthode") }}</th><th>Chemin</th><th>Rôle</th></tr></thead>
+    <thead><tr><th>{{ t("Méthode") }}</th><th>{{ t("Chemin") }}</th><th>{{ t("Rôle") }}</th></tr></thead>
     <tbody>
       {% for m, ch, r in [
         ('GET', '/compte', 'Solde, niveau, remise'),
@@ -77,10 +77,10 @@
         ('GET', '/demandes/{n°}/livrables/{version}', 'Télécharger le fichier livré'),
         ('POST', '/demandes/{n°}/messages', 'Écrire à l\'atelier (JSON : texte)'),
       ] %}
-      <tr><td><span class="tag">{{ m }}</span></td><td class="mono">{{ ch }}</td><td class="muted">{{ r }}</td></tr>
+      <tr><td><span class="tag">{{ m }}</span></td><td class="mono">{{ ch }}</td><td class="muted">{{ t(r) }}</td></tr>
       {% endfor %}
     </tbody>
   </table></div>
-  <div class="card-body muted small">Réponses en JSON. Limite : 120 requêtes par minute. Une erreur renvoie un code HTTP 4xx et <code>{"erreur": "…"}</code>.</div>
+  <div class="card-body muted small">{{ t("Réponses en JSON. Limite : 120 requêtes par minute. Une erreur renvoie un code HTTP 4xx et") }} <code>{"erreur": "…"}</code>.</div>
 </section>
 {% endblock %}

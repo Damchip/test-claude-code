@@ -39,7 +39,7 @@
       <div class="card-body stack" style="gap: 18px">
         <div class="form-grid">
           <div class="field"><label for="outil">{{ t("Outil de lecture") }}</label>
-            <select class="select" id="outil" name="outil">{% for outil in tools %}<option>{{ outil }}</option>{% endfor %}</select></div>
+            <select class="select" id="outil" name="outil">{% for outil in tools %}<option value="{{ outil }}">{{ t(outil) }}</option>{% endfor %}</select></div>
           <div class="field"><label for="ecu">{{ t("Calculateur") }}</label><input class="input" id="ecu" name="ecu" placeholder="{{ t('Détecté automatiquement si vide') }}"></div>
         </div>
         <div class="field">

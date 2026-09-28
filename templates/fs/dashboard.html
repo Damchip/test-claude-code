@@ -4,8 +4,8 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Bonjour {{ user.contact.split(' ')[0] }}</h1>
-    <p>{{ user.company }} · compte {{ user.level }}{% if remise %} · <span class="amount-plus">−{{ '%g'|format(remise) }} % sur vos prestations</span>{% endif %}</p>
+    <h1>{{ t("Bonjour") }} {{ user.contact.split(' ')[0] }}</h1>
+    <p>{{ user.company }} · {{ t("compte") }} {{ user.level }}{% if remise %} · <span class="amount-plus">{{ t("−{p} % sur vos prestations").format(p='%g'|format(remise)) }}</span>{% endif %}</p>
   </div>
   <a class="btn btn-primary btn-lg" href="{{ url_for('fs.new_file') }}">{{ icon('upload') }} {{ t("Envoyer un fichier") }}</a>
 </div>
@@ -40,7 +40,7 @@
   <section class="card">
     <div class="card-head">
       <div><h2>{{ t("Fichiers récents") }}</h2><p class="sub">{{ t("Vos dernières demandes") }}</p></div>
-      {% if files %}<a class="btn btn-sm btn-ghost" href="{{ url_for('fs.files') }}">Tout voir {{ icon('chevron-right', 'icon-sm') }}</a>{% endif %}
+      {% if files %}<a class="btn btn-sm btn-ghost" href="{{ url_for('fs.files') }}">{{ t("Tout voir") }} {{ icon('chevron-right', 'icon-sm') }}</a>{% endif %}
     </div>
     {% if files %}
     <div class="table-wrap">
@@ -78,7 +78,7 @@
       </div>
       <div class="hours" style="margin-top: 14px">
         {% for h in hours %}
-        <span class="{{ 'today' if h.today }}">{{ h.jour }}</span><span class="{{ 'today' if h.today }}">{{ h.plage }}</span>
+        <span class="{{ 'today' if h.today }}">{{ t(h.jour) }}</span><span class="{{ 'today' if h.today }}">{{ t(h.plage) }}</span>
         {% endfor %}
       </div>
     </section>

@@ -3420,6 +3420,7 @@ async function openFs(id) {
     </div>
     <div class="fs-sec fs-actions">
       <a class="ghost sm btn-link" href="/fs/demandes/${d.id}/original">Télécharger l'original</a>
+      <a class="ghost sm btn-link" href="/fs/demandes/${d.id}/recapitulatif" target="_blank" rel="noopener">Récapitulatif</a>
       <button class="ghost sm" data-fsact="analyser">Analyser</button>
       ${ferme ? "" : `<button class="patchbtn sm" data-fsact="unclic" title="Solution même stock en bibliothèque + patch propre + checksums prêts">⚡ Livrer en un clic</button>`}
       <button class="ghost sm" data-fsact="autopatch">Auto-patch</button>

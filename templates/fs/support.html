@@ -42,7 +42,7 @@
       </div>
       <div class="hours" style="margin-top: 14px">
         {% for h in hours %}
-        <span class="{{ 'today' if h.today }}">{{ h.jour }}</span><span class="{{ 'today' if h.today }}">{{ h.plage }}</span>
+        <span class="{{ 'today' if h.today }}">{{ t(h.jour) }}</span><span class="{{ 'today' if h.today }}">{{ t(h.plage) }}</span>
         {% endfor %}
       </div>
     </section>

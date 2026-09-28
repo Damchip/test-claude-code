@@ -314,3 +314,58 @@ class DeploiementTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FinitionsTests(unittest.TestCase):
+    def setUp(self):
+        import portal
+        self.portal = portal
+        self.tmp = tempfile.TemporaryDirectory()
+        t = self.tmp.name
+        app = portal.app
+        self.saved = {k: app.config.get(k) for k in ("FS_DB", "FS_FILES", "FS_DATA_DIR", "FS_CONFIG", "FS_DETECT")}
+        cfg = os.path.join(t, "c.json")
+        with open(cfg, "w", encoding="utf-8") as fh:
+            json.dump({"api_active": True, "societe": {"raison_sociale": "E85 SAS", "siret": "73282932000074"}}, fh)
+        app.config.update(FS_DB=_base(t), FS_FILES=os.path.join(t, "f"), FS_DATA_DIR=t, FS_CONFIG=cfg, FS_DETECT=None)
+        import api
+        api.init_db(app.config["FS_DB"])
+        self.cid = _client(app.config["FS_DB"])
+        self.did = _creer(app.config["FS_DB"], app.config["FS_FILES"], self.cid)
+        portal.fileservice.LIMITEUR._echecs.clear()
+        self.c = app.test_client()
+        self.c.post("/connexion", data={"csrf": self._tok("/connexion"), "email": "jean@garage.fr", "password": "motdepasse-solide"})
+
+    def tearDown(self):
+        self.portal.app.config.update(self.saved)
+        self.tmp.cleanup()
+
+    def _tok(self, p):
+        return re.search(r'name="csrf" value="([^"]+)"', self.c.get(p).get_data(as_text=True)).group(1)
+
+    def test_recapitulatif(self):
+        h = self.c.get("/fichiers/F-00001/recapitulatif").get_data(as_text=True)
+        self.assertIn("Récapitulatif de demande", h)
+        self.assertIn("E85 SAS", h)
+        self.assertIn("SHA-256", h)
+        self.assertIn("147,50 €", h)                       # 59 crédits × 2,50 € HT
+        self.c.set_cookie("lang", "en")
+        self.assertIn("Request summary", self.c.get("/fichiers/F-00001/recapitulatif").get_data(as_text=True))
+        autre = _client(self.portal.app.config["FS_DB"], email="autre@garage.fr")
+        _creer(self.portal.app.config["FS_DB"], self.portal.app.config["FS_FILES"], autre)
+        self.assertEqual(self.c.get("/fichiers/F-00002/recapitulatif").status_code, 404)   # pas la sienne
+
+    def test_anglais_messages_et_api(self):
+        self.c.set_cookie("lang", "en")
+        h = self.c.get("/parametres/api").get_data(as_text=True)
+        for fr in ("Mes clés", "Générer une clé", "Points d'accès", "Prise en main"):
+            self.assertNotIn(fr, h)
+        self.assertIn("Generate a key", h)
+        r = self.c.post("/nouveau", data={"csrf": self._tok("/nouveau"), "categorie": "vl", "prestas": ["stage1"],
+                                          "file": (__import__("io").BytesIO(b"\x02" * 4096), "lecture.bin")},
+                        content_type="multipart/form-data", follow_redirects=True)
+        self.assertIn("Request F-00002 sent: 59 credits charged.", r.get_data(as_text=True))
+        h = self.c.get("/").get_data(as_text=True)
+        self.assertIn("Monday", h)
+        self.assertNotIn("Lundi", h)
+        self.assertIn("% bonus", self.c.get("/credits").get_data(as_text=True))

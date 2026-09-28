@@ -26,7 +26,7 @@
     {% if p.vedette %}<span class="ribbon">{{ t("LE PLUS CHOISI") }}</span>{% endif %}
     <span class="muted small">{{ t("Pack") }}</span>
     <span class="qty">{{ p.credits }} <small>{{ t("crédits") }}</small></span>
-    {% if p.bonus %}<span class="amount-plus small">+ {{ p.bonus }} offerts · {{ ((p.bonus / p.credits) * 100)|round|int }} % de bonus</span>{% else %}<span class="muted small">&nbsp;</span>{% endif %}
+    {% if p.bonus %}<span class="amount-plus small">{{ t('+ {n} offerts · {p} % de bonus').format(n=p.bonus, p=((p.bonus / p.credits) * 100)|round|int) }}</span>{% else %}<span class="muted small">&nbsp;</span>{% endif %}
     <span class="price">{{ p.prix_eur|euros }} {{ t("HT") }}</span>
     <span class="muted small">{% if autoliquidation %}{{ t("TVA autoliquidée") }}{% else %}{{ (p.prix_eur * (1 + tva))|euros }} {{ t("TTC") }}{% endif %}</span>
     <span class="unit">{{ t('soit {prix} € HT / crédit reçu').format(prix='%.2f'|format(p.prix_eur / (p.credits + p.bonus))|replace('.', ',')) }}</span>
@@ -69,7 +69,7 @@
     <div class="file-row">
       <span class="file-ic">{{ icon('receipt') }}</span>
       <div class="grow"><div class="name mono">{{ fa.numero }}</div><div class="muted small">{{ fa.date|date_fr(false) }} · {{ fa.ht|euros }} {{ t('HT') }} · {{ fa.ttc|euros }} {{ t('TTC') }}</div></div>
-      <a class="icon-btn" href="{{ url_for('fs.invoice', numero=fa.numero) }}" target="_blank" rel="noopener" aria-label="Ouvrir {{ fa.numero }}">{{ icon('download', 'icon-sm') }}</a>
+      <a class="icon-btn" href="{{ url_for('fs.invoice', numero=fa.numero) }}" target="_blank" rel="noopener" aria-label="{{ t('Ouvrir') }} {{ fa.numero }}">{{ icon('download', 'icon-sm') }}</a>
     </div>
     {% else %}
     <p class="empty">{{ t("Aucune facture pour l'instant.") }}</p>

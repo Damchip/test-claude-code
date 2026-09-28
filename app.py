@@ -40,7 +40,8 @@ import traductions
 app = Flask(__name__)
 # Filtres d'affichage partagés avec l'espace client (facture vue par l'atelier)
 import fileservice as _fs_vues  # noqa: E402
-app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits)
+app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
+                             taille=_fs_vues._fmt_taille)
 APP_VERSION = "1.55.1"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
@@ -1299,6 +1300,17 @@ def fs_livre(did, version):
 def fs_pj(did, mid):
     m = next((m for m in demandes.messages(FS_DB, did) if m["id"] == mid and m["pj_fichier"]), None)
     return _fs_send(did, m["pj_fichier"], m["pj_nom"]) if m else (jsonify({"error": "Pièce jointe introuvable."}), 404)
+
+
+@app.route("/fs/demandes/<int:did>/recapitulatif")
+def fs_recapitulatif(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    cfg = load_portal_config()
+    return render_template("fs/recapitulatif.html", f=d, livrables=demandes.livrables(FS_DB, did), annexes=[],
+                           vendeur=cfg.get("societe") or {}, prix_credit=catalogue.PRIX_CREDIT_EUR,
+                           shop={"name": cfg.get("shop_name") or "E85-FRANCE"}, t=lambda x: x, langue="fr")
 
 
 @app.route("/fs/demandes/<int:did>/analyser", methods=["POST"])

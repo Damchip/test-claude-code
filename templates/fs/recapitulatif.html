@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="{{ langue }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t("Récapitulatif") }} {{ f.numero }}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon.png') }}">
+  <style>
+    @font-face { font-family: "Inter"; font-weight: 400; src: url("{{ url_for('static', filename='fonts/inter-400.woff2') }}") format("woff2"); }
+    @font-face { font-family: "Inter"; font-weight: 600; src: url("{{ url_for('static', filename='fonts/inter-600.woff2') }}") format("woff2"); }
+    :root { --ink: #111418; --muted: #5d6673; --line: #dfe3e8; --accent: #3a7810; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eef0f3; color: var(--ink); font: 13px/1.5 "Inter", system-ui, sans-serif; }
+    .page { max-width: 820px; margin: 28px auto; background: #fff; padding: 48px 52px; box-shadow: 0 6px 28px rgba(0,0,0,.08); }
+    .bar { max-width: 820px; margin: 20px auto 0; display: flex; justify-content: flex-end; gap: 10px; padding: 0 16px; }
+    .bar button { font: 600 13px "Inter", sans-serif; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+    .bar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+    header img { height: 64px; }
+    h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+    .muted { color: var(--muted); }
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin: 34px 0 28px; }
+    .parties h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 2px solid var(--ink); padding: 8px 6px; }
+    td { padding: 12px 6px; border-bottom: 1px solid var(--line); }
+    .r { text-align: right; font-variant-numeric: tabular-nums; }
+    .totaux { margin: 18px 0 0 auto; width: 300px; }
+    .totaux td { border: none; padding: 5px 6px; }
+    .totaux tr.ttc td { border-top: 2px solid var(--ink); font-weight: 600; font-size: 15px; padding-top: 10px; }
+    .mentions { margin-top: 36px; font-size: 11px; color: var(--muted); }
+    .mentions p { margin: 0 0 6px; }
+    .grille { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; margin: 0 0 26px; }
+    .grille div span { color: var(--muted); display: inline-block; min-width: 120px; }
+    h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 28px 0 10px; }
+    .mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; word-break: break-all; }
+    .alerte { background: #fff5e0; border: 1px solid #f1d38a; padding: 10px 14px; border-radius: 8px; margin-bottom: 20px; }
+    @media (max-width: 640px) { .page { padding: 24px 18px; margin: 12px; } .parties { grid-template-columns: 1fr; } .totaux { width: 100%; } }
+    @media print { body { background: #fff; } .bar, .alerte { display: none; } .page { box-shadow: none; margin: 0; max-width: none; padding: 0; } }
+  </style>
+</head>
+<body>
+  {% set v = vendeur %}
+  <div class="bar">
+    <button type="button" onclick="history.length > 1 ? history.back() : window.close()">{{ t("Retour") }}</button>
+    <button type="button" class="primary" onclick="window.print()">{{ t("Imprimer / enregistrer en PDF") }}</button>
+  </div>
+  <div class="page">
+    <header>
+      <div><img src="{{ url_for('static', filename='brand/badge.png') }}" alt=""></div>
+      <div style="text-align: right">
+        <h1>{{ t("Récapitulatif de demande") }} {{ f.numero }}</h1>
+        <div class="muted">{{ t("Envoyée le") }} {{ f.cree_le|date_fr }}</div>
+        <div class="muted">{{ t("Statut") }} : {{ t(f.statut_label) }}{% if f.livre_le %} · {{ t("livrée le") }} {{ f.livre_le|date_fr }}{% endif %}</div>
+      </div>
+    </header>
+
+    <div class="parties">
+      <div>
+        <h3>{{ t("Atelier") }}</h3>
+        <strong>{{ v.raison_sociale or shop.name }}</strong><br>
+        {% if v.adresse %}{{ v.adresse }}<br>{% endif %}
+        {% if v.code_postal or v.ville %}{{ v.code_postal }} {{ v.ville }}<br>{% endif %}
+        {% if v.siret %}SIRET {{ v.siret }}<br>{% endif %}
+        {% if v.email or v.tel %}{{ [v.email, v.tel]|select|join(' · ') }}{% endif %}
+      </div>
+      <div>
+        <h3>{{ t("Client") }}</h3>
+        <strong>{{ f.societe }}</strong><br>
+        {% if f.contact %}{{ f.contact }}<br>{% endif %}
+        {{ f.email }}{% if f.tel %} · {{ f.tel }}{% endif %}
+      </div>
+    </div>
+
+    <h2>{{ t("Véhicule") }}</h2>
+    <div class="grille">
+      {% for label, key in [('Marque', 'marque'), ('Modèle', 'modele'), ('Moteur', 'moteur'), ('Année', 'annee'), ('Boîte', 'boite'), ('Kilométrage', 'km'), ('VIN', 'vin'), ('Immatriculation', 'immat')] %}
+        {% if f.vehicule[key] %}<div><span>{{ t(label) }}</span>{{ f.vehicule[key] }}{{ ' km' if key == 'km' }}</div>{% endif %}
+      {% endfor %}
+      {% if f.lecture.ecu or f.detection.plateforme %}<div><span>{{ t("Calculateur") }}</span>{{ f.lecture.ecu or f.detection.plateforme }}</div>{% endif %}
+      {% if f.lecture.outil %}<div><span>{{ t("Outil") }}</span>{{ f.lecture.outil }}{% if f.lecture.methode %} ({{ f.lecture.methode }}){% endif %}</div>{% endif %}
+    </div>
+
+    <h2>{{ t("Prestations") }}</h2>
+    <table>
+      <thead><tr><th>{{ t("Désignation") }}</th><th class="r">{{ t("Crédits") }}</th></tr></thead>
+      <tbody>
+        {% for l in f.lignes %}<tr><td>{{ t(l.nom) if not l.nom.startswith('Remise ') else l.nom.replace('Remise ', t('Remise') ~ ' ', 1) }}</td><td class="r">{{ l.credits }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <table class="totaux">
+      <tr class="ttc"><td>{{ t("Total débité") }}</td><td class="r">{{ f.total }} {{ t("crédits") }}</td></tr>
+      <tr><td class="muted">{{ t("Valeur indicative") }}</td><td class="r muted">{{ (f.total * prix_credit)|euros }} {{ t("HT") }}</td></tr>
+      {% if f.rembourse %}<tr><td>{{ t("Remboursé") }}</td><td class="r">{{ f.total }} {{ t("crédits") }}</td></tr>{% endif %}
+    </table>
+    {% if f.siege %}<p class="muted">{{ t("Ouverture du boîtier au siège") }}{% if f.retour %} · {{ t("retour") }} {{ f.retour|capitalize }}{% endif %}</p>{% endif %}
+    {% if f.motif_refus %}<p><strong>{{ t("Motif du refus") }} :</strong> {{ f.motif_refus }}</p>{% endif %}
+
+    <h2>{{ t("Fichiers") }}</h2>
+    <table>
+      <thead><tr><th>{{ t("Fichier") }}</th><th>{{ t("Date") }}</th><th class="r">{{ t("Taille") }}</th></tr></thead>
+      <tbody>
+        <tr><td>{{ t("Lecture d'origine") }} · {{ f.fichier_nom }}<div class="mono muted">SHA-256 {{ f.fichier_sha256 }}</div></td><td>{{ f.cree_le|date_fr }}</td><td class="r">{{ f.fichier_taille|taille }}</td></tr>
+        {% for a in annexes %}<tr><td>{{ t("Fichier complémentaire") }} · {{ a.nom }}</td><td>{{ a.cree_le|date_fr }}</td><td class="r">{{ a.taille|taille }}</td></tr>{% endfor %}
+        {% for l in livrables|reverse %}<tr><td>{{ t("Fichier livré") }} v{{ l.version }} · {{ l.nom }}{% if l.note %}<div class="muted">{{ l.note }}</div>{% endif %}</td><td>{{ l.cree_le|date_fr }}</td><td class="r">{{ l.taille|taille }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% if f.commentaire %}<h2>{{ t("Commentaire") }}</h2><p style="white-space: pre-wrap">{{ f.commentaire }}</p>{% endif %}
+
+    <div class="mentions">
+      <p>{{ t("Document récapitulatif, sans valeur de facture : les crédits sont facturés à leur achat (Crédits & factures).") }}</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -6,6 +6,8 @@ textes français. `t("Se connecter")` renvoie la traduction dans la langue
 courante, ou le texte français si la traduction manque (jamais de clé nue à
 l'écran). La langue est mémorisée dans un cookie « lang ».
 """
+import re
+
 LANGUES = {"fr": "Français", "en": "English"}
 DEFAUT = "fr"
 
@@ -231,6 +233,121 @@ EN = {
     "Comment obtenir une facture ?": "How do I get an invoice?",
     "Chaque achat de crédits génère une facture, disponible dans « Crédits & factures ». Ouvrez-la puis « Imprimer / enregistrer en PDF ».":
         "Every credit purchase generates an invoice, available in “Credits & invoices”. Open it, then “Print / save as PDF”.",
+    # --- v1.56 : API revendeur, messages et erreurs ---
+    'Ouvrir le menu': 'Open menu',
+    'Changer de thème': 'Toggle theme',
+    'Téléchargé': 'Downloaded',
+    'Joindre un fichier (lecture EEPROM, photo…)': 'Attach a file (EEPROM read, photo…)',
+    'Joindre': 'Attach',
+    'Type': 'Type',
+    'Moteur': 'Engine',
+    'VIN': 'VIN',
+    'retour': 'return',
+    'Révision gratuite pendant {n} jours': 'Free revision for {n} days',
+    '+ {n} offerts · {p} % de bonus': '+ {n} free · {p}% bonus',
+    'Ouvrir': 'Open',
+    'Connectez votre logiciel ou votre site à {atelier} : envoi de fichiers, suivi et téléchargement automatiques.': 'Connect your software or website to {atelier}: automatic file upload, tracking and download.',
+    "L'API n'est pas encore activée pour votre compte. Contactez l'atelier pour l'activer.": 'The API is not enabled for your account yet. Contact the shop to enable it.',
+    'Votre nouvelle clé': 'Your new key',
+    'Copiez-la maintenant : pour votre sécurité, elle ne sera plus jamais affichée.': 'Copy it now: for your security, it will never be shown again.',
+    'Mes clés': 'My keys',
+    'créée le': 'created',
+    'utilisée le': 'used',
+    'jamais utilisée': 'never used',
+    "Révoquer cette clé ? Tout logiciel qui l'utilise cessera de fonctionner.": 'Revoke this key? Any software using it will stop working.',
+    'Révoquer': 'Revoke',
+    "Aucune clé pour l'instant.": 'No keys yet.',
+    'Nom (ex. mon site, KESS3 atelier)': 'Name (e.g. my website, workshop KESS3)',
+    'Générer une clé': 'Generate a key',
+    'Prise en main': 'Getting started',
+    "Envoyez la clé dans l'en-tête": 'Send the key in the',
+    'Base :': 'Base URL:',
+    'Types de véhicule :': 'Vehicle types:',
+    'Codes des prestations et prix :': 'Service codes and prices:',
+    "Points d'accès": 'Endpoints',
+    'Chemin': 'Path',
+    'Rôle': 'Purpose',
+    'Solde, niveau, remise': 'Balance, level, discount',
+    'Prestations, packs, garanties et prix': 'Services, packs, warranties and prices',
+    "Tarif d'une sélection (JSON : categorie, prestations[])": 'Price of a selection (JSON: categorie, prestations[])',
+    'Liste de vos demandes (filtre ?statut=)': 'List of your requests (filter ?statut=)',
+    'Envoyer un fichier (multipart : file + champs) — débite les crédits': 'Upload a file (multipart: file + fields) — charges credits',
+    'Détail : statut, fichiers livrés, messages': 'Details: status, delivered files, messages',
+    "Télécharger la lecture d'origine": 'Download the original read',
+    'Télécharger le fichier livré': 'Download the delivered file',
+    "Écrire à l'atelier (JSON : texte)": 'Message the shop (JSON: texte)',
+    'Réponses en JSON. Limite : 120 requêtes par minute. Une erreur renvoie un code HTTP 4xx et': 'JSON responses. Limit: 120 requests per minute. Errors return an HTTP 4xx code and',
+    'Session expirée, merci de réessayer.': 'Session expired, please try again.',
+    'Mot de passe modifié. Vous pouvez vous connecter.': 'Password changed. You can now log in.',
+    "Demande de révision envoyée à l'atelier.": 'Revision request sent to the shop.',
+    "Le paiement en ligne n'est pas encore activé : contactez l'atelier pour un virement.": 'Online payment is not enabled yet: contact the shop to pay by bank transfer.',
+    "Le paiement est momentanément indisponible. Réessayez ou contactez l'atelier.": 'Payment is temporarily unavailable. Try again or contact the shop.',
+    'Paiement en cours de confirmation : vos crédits apparaîtront dans quelques instants.': 'Payment being confirmed: your credits will appear in a moment.',
+    'Mot de passe modifié.': 'Password changed.',
+    'Coordonnées enregistrées.': 'Details saved.',
+    'Clé révoquée : elle ne fonctionne plus.': 'Key revoked: it no longer works.',
+    'Trop de tentatives. Réessayez dans 15 minutes ou réinitialisez votre mot de passe.': 'Too many attempts. Try again in 15 minutes or reset your password.',
+    'E-mail ou mot de passe incorrect.': 'Incorrect email or password.',
+    "Votre compte est en attente de validation par l'atelier. Vous recevrez un e-mail dès son ouverture.": 'Your account is awaiting approval by the shop. You will get an email as soon as it is opened.',
+    "Ce compte est suspendu. Contactez l'atelier.": 'This account is suspended. Contact the shop.',
+    "Merci d'accepter les conditions générales de vente.": 'Please accept the terms and conditions of sale.',
+    'Trop de demandes depuis votre connexion. Réessayez plus tard.': 'Too many requests from your connection. Try again later.',
+    'Les deux mots de passe ne correspondent pas.': 'The two passwords do not match.',
+    'Les deux nouveaux mots de passe ne correspondent pas.': 'The two new passwords do not match.',
+    'Le fichier est vide.': 'The file is empty.',
+    'Fichier trop volumineux (64 Mo maximum).': 'File too large (64 MB maximum).',
+    'Choisissez au moins une prestation.': 'Choose at least one service.',
+    'Compte inactif.': 'Inactive account.',
+    'Mot de passe trop long.': 'Password too long.',
+    'Indiquez le nom de la société.': 'Enter the company name.',
+    'SIRET invalide : 14 chiffres attendus.': 'Invalid SIRET: 14 digits expected.',
+    'Numéro de TVA invalide (ex. FR12345678901).': 'Invalid VAT number (e.g. FR12345678901).',
+    'Adresse e-mail invalide.': 'Invalid email address.',
+    'Un compte existe déjà avec cette adresse e-mail.': 'An account already exists with this email address.',
+    'Message vide.': 'Empty message.',
+    'Pièce jointe trop volumineuse (64 Mo maximum).': 'Attachment too large (64 MB maximum).',
+    'Demande introuvable.': 'Request not found.',
+    'Mot de passe actuel incorrect.': 'Current password is incorrect.',
+    'Ce lien a expiré ou a déjà servi. Refaites une demande.': 'This link has expired or was already used. Please request a new one.',
+    'Décrivez ce qui doit être revu.': 'Describe what needs to be revised.',
+    'Type de véhicule inconnu.': 'Unknown vehicle type.',
+    "L'API n'est pas activée par l'atelier.": 'The API is not enabled by the shop.',
+    'Session expirée, rechargez la page.': 'Session expired, reload the page.',
+    'Connexion requise.': 'Login required.',
+    'Lundi': 'Monday',
+    'Mardi': 'Tuesday',
+    'Mercredi': 'Wednesday',
+    'Jeudi': 'Thursday',
+    'Vendredi': 'Friday',
+    'Samedi': 'Saturday',
+    'Dimanche': 'Sunday',
+    'Navigation principale': 'Main navigation',
+    'N° TVA': 'VAT number',
+    '−{p} % sur vos prestations': '−{p}% on your services',
+    'Autre': 'Other',
+    'Créer un compte': 'Create an account',
+    'Conditions générales de vente': 'Terms and conditions of sale',
+    'Politique de confidentialité': 'Privacy policy',
+    "Retour à l'espace client": 'Back to the client area',
+    'Texte en français, seule version faisant foi.': 'French text, the only legally binding version.',
+    'Récapitulatif PDF': 'PDF summary',
+    'Retour': 'Back',
+    'Imprimer / enregistrer en PDF': 'Print / save as PDF',
+    'Récapitulatif de demande': 'Request summary',
+    'Envoyée le': 'Sent on',
+    'livrée le': 'delivered on',
+    'Client': 'Client',
+    'Outil': 'Tool',
+    'Désignation': 'Description',
+    'Total débité': 'Total charged',
+    'Valeur indicative': 'Indicative value',
+    'Motif du refus': 'Reason for declining',
+    'Fichier': 'File',
+    'Taille': 'Size',
+    'Fichier complémentaire': 'Additional file',
+    'Fichier livré': 'Delivered file',
+    'Commentaire': 'Comment',
+    'Document récapitulatif, sans valeur de facture : les crédits sont facturés à leur achat (Crédits & factures).': 'Summary document, not an invoice: credits are invoiced when purchased (Credits & invoices).',
 }
 
 TABLE = {"fr": {}, "en": EN}
@@ -240,10 +357,36 @@ def normaliser(code):
     return code if code in LANGUES else DEFAUT
 
 
+# Messages dont une partie varie (numéro, montant…) : motif français -> gabarit anglais
+MOTIFS_EN = [
+    (re.compile(r"^Demande (F-\d+) : votre fichier est déjà prêt ! (\d+) crédits débités\.$"),
+     "Request {0}: your file is already ready! {1} credits charged."),
+    (re.compile(r"^Demande (F-\d+) envoyée : (\d+) crédits débités\. Vous serez prévenu par e-mail\.$"),
+     "Request {0} sent: {1} credits charged. You will be notified by email."),
+    (re.compile(r"^Paiement reçu, merci ! Crédits ajoutés, facture (\S+) disponible ci-dessous\.$"),
+     "Payment received, thank you! Credits added, invoice {0} available below."),
+    (re.compile(r"^Solde insuffisant : (\d+) crédits nécessaires, (-?\d+) disponibles\.$"),
+     "Insufficient balance: {0} credits needed, {1} available."),
+    (re.compile(r"^Le mot de passe doit faire au moins (\d+) caractères\.$"), "The password must be at least {0} characters long."),
+    (re.compile(r"^Révision possible uniquement dans les (\d+) jours suivant la livraison\.$"),
+     "A revision is only possible within {0} days of delivery."),
+    (re.compile(r"^Prestation indisponible pour ce véhicule : (.+)$"), "Service unavailable for this vehicle: {0}"),
+    (re.compile(r"^(\d+) clés actives au maximum : révoquez-en une\.$"), "{0} active keys at most: revoke one."),
+]
+
+
 def traduire(texte, langue):
-    if langue == "fr":
+    if langue == "fr" or not isinstance(texte, str):
         return texte
-    return TABLE.get(langue, {}).get(texte, texte)
+    table = TABLE.get(langue, {})
+    if texte in table:
+        return table[texte]
+    if langue == "en":
+        for motif, gabarit in MOTIFS_EN:
+            m = motif.match(texte)
+            if m:
+                return gabarit.format(*m.groups())
+    return texte
 
 
 # --- E-mails aux clients : (sujet, corps) par langue ----------------------------
