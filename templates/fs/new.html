@@ -63,6 +63,11 @@
             <span class="btn btn-sm btn-ghost">{{ t("Changer") }}</span>
           </span>
         </label>
+        <div class="field">
+          <label for="annexes">{{ t("Fichiers complémentaires") }} <span class="muted small">({{ t("optionnel, {n} max.").format(n=annexes_max) }})</span></label>
+          <input class="input" type="file" id="annexes" name="annexes" multiple data-annexes="{{ annexes_max }}">
+          <span class="hint">{{ t("Lecture EEPROM, boîte de vitesses, sauvegarde complète, photo de l'étiquette… Précisez dans le commentaire.") }}</span>
+        </div>
       </div>
     </section>
 
@@ -120,6 +125,12 @@
           </select>
         </div>
       </div>
+      {% if express.actif %}
+      <label class="switch">
+        <span><strong>⚡ {{ t("Traitement express") }}</strong><span class="muted small" style="display:block">{{ t("Traité en priorité pendant nos horaires d'ouverture") }} · +{{ express.credits }} cr.</span></span>
+        <input type="checkbox" name="express" id="express" value="1"><span class="track"></span>
+      </label>
+      {% endif %}
       <div class="field">
         <span class="label">{{ t("Garantie") }}</span>
         <div class="chips" role="radiogroup">

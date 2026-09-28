@@ -6,10 +6,11 @@
   <div>
     <div class="crumbs"><a href="{{ url_for('fs.files') }}">{{ t("Mes fichiers") }}</a>{{ icon('chevron-right', 'icon-sm') }}<span class="mono">{{ f.numero }}</span></div>
     <h1>{{ vehicule(f) }} <span class="muted" style="font-weight: 500">{{ f.vehicule.moteur }}</span></h1>
-    <p>{{ calculateur(f) }}{% if f.lecture.outil %} · {{ f.lecture.outil }}{% if f.lecture.methode %} ({{ f.lecture.methode }}){% endif %}{% endif %} · {{ t('envoyé le') }} {{ f.cree_le|date_fr }}</p>
+    <p>{{ calculateur(f) }}{% if f.lecture.outil %} · {{ f.lecture.outil }}{% if f.lecture.methode %} ({{ f.lecture.methode }}){% endif %}{% endif %} · {{ t('envoyé le') }} {{ f.cree_le|date_fr }}{% if f.envoye_par %} {{ t('par') }} {{ f.envoye_par }}{% endif %}</p>
   </div>
   <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
     <a class="btn btn-sm btn-ghost" href="{{ url_for('fs.file_recap', numero=f.numero) }}" target="_blank" rel="noopener">{{ icon('receipt', 'icon-sm') }} {{ t("Récapitulatif PDF") }}</a>
+    {% if f.express %}<span class="badge attente" style="font-size: .85rem; padding: 6px 12px">⚡ {{ t("Express") }}</span>{% endif %}
     <span class="badge {{ f.statut }}" style="font-size: .85rem; padding: 6px 14px 6px 12px">{{ t(f.statut_label) }}</span>
   </div>
 </div>
@@ -25,9 +26,9 @@
     {% endfor %}
   </div>
   {% if f.statut == 'attente' %}
-  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>{{ t("L'atelier attend une précision de votre part.") }}</strong> Répondez dans la conversation ci-dessous, le traitement reprend aussitôt.</div></div>
+  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>{{ t("L'atelier attend une précision de votre part.") }}</strong> {{ t("Répondez dans la conversation ci-dessous, le traitement reprend aussitôt.") }}</div></div>
   {% elif f.statut == 'refuse' %}
-  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>Fichier refusé : {{ f.motif_refus }}</strong>{% if f.rembourse %} Vos {{ f.total }} crédits ont été remboursés.{% endif %}</div></div>
+  <div class="note warn" style="margin-top: 20px">{{ icon('info') }}<div><strong>{{ t("Fichier refusé :") }} {{ f.motif_refus }}</strong>{% if f.rembourse %} {{ t("Vos {n} crédits ont été remboursés.").format(n=f.total) }}{% endif %}</div></div>
   {% endif %}
 </section>
 
@@ -50,6 +51,13 @@
         <div class="grow"><div class="name">{{ f.fichier_nom }}</div><div class="muted small">{{ t("Lecture d'origine") }} · {{ f.fichier_taille|taille }}</div></div>
         <a class="btn btn-sm" href="{{ url_for('fs.file_original', numero=f.numero) }}">{{ icon('download', 'icon-sm') }}<span class="hide-sm">{{ t("Télécharger") }}</span></a>
       </div>
+      {% for a in annexes %}
+      <div class="file-row">
+        <span class="file-ic">{{ icon('files') }}</span>
+        <div class="grow"><div class="name">{{ a.nom }}</div><div class="muted small">{{ t("Fichier complémentaire") }} · {{ a.taille|taille }}</div></div>
+        <a class="btn btn-sm" href="{{ url_for('fs.file_annexe', numero=f.numero, aid=a.id) }}">{{ icon('download', 'icon-sm') }}<span class="hide-sm">{{ t("Télécharger") }}</span></a>
+      </div>
+      {% endfor %}
     </section>
 
     <section class="card" id="conversation">
@@ -61,7 +69,7 @@
         <div class="msg {{ 'me' if me }}">
           <span class="avatar">{{ user.initials if me else 'AT' }}</span>
           <div>
-            <div class="meta">{{ t('Vous') if me else (t('Atelier') ~ ' · ' ~ m.auteur_nom if m.auteur_nom else t('Atelier')) }} · {{ m.cree_le|date_fr }}</div>
+            <div class="meta">{{ (t('Vous') if m.auteur_nom in ('', user.contact) else m.auteur_nom) if me else (t('Atelier') ~ ' · ' ~ m.auteur_nom if m.auteur_nom else t('Atelier')) }} · {{ m.cree_le|date_fr }}</div>
             <div class="bubble">{% if m.texte %}<div style="white-space: pre-wrap">{{ m.texte }}</div>{% endif %}
               {% if m.pj_fichier %}<a class="link small" href="{{ url_for('fs.file_pj', numero=f.numero, mid=m.id) }}">{{ icon('download', 'icon-sm') }} {{ m.pj_nom }}</a>{% endif %}
             </div>

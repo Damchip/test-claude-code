@@ -354,6 +354,25 @@
           <span>Autoriser les clients à connecter leur logiciel (clés générées dans leur espace, Paramètres → API revendeur).
             Documentation visible par le client sur <code>/parametres/api</code>.</span>
         </label>
+        <h4>Option express</h4>
+        <div class="patch-row fs-form" style="align-items:flex-end">
+          <label class="muted small nc-check"><input type="checkbox" id="exActif"> Proposer le traitement express (prioritaire) aux clients</label>
+          <label>Supplément <span><input type="text" id="exCredits" style="width:60px"> crédits</span></label>
+        </div>
+        <p class="muted small" style="margin-top:0">Les demandes express passent en tête de la file « À traiter » avec un badge ⚡ ; le supplément est remboursé en cas de refus.</p>
+        <h4>Alertes SMS aux clients</h4>
+        <p class="muted small" style="margin-top:0">Un SMS quand le fichier est prêt ou qu'une précision est demandée, aux clients qui l'ont activé
+          (Paramètres de leur espace). Compte à créer chez <b>Brevo</b> (clé API « xkeysib-… ») ou <b>Twilio</b> (Account SID + Auth Token) ;
+          chaque SMS est facturé par le fournisseur. Tape « - » pour effacer la clé.</p>
+        <div class="patch-row fs-form" style="align-items:flex-end">
+          <label class="muted small nc-check"><input type="checkbox" id="smsActif"> Activer</label>
+          <label>Fournisseur <select id="smsFournisseur"><option value="brevo">Brevo</option><option value="twilio">Twilio</option></select></label>
+          <label>Clé API / Auth Token <input type="password" id="smsCle" autocomplete="new-password"></label>
+          <label id="smsCompteLab">Account SID <input type="text" id="smsCompte" placeholder="AC…"></label>
+          <label>Expéditeur <input type="text" id="smsExp" placeholder="E85FRANCE" style="width:120px"></label>
+        </div>
+        <div class="patch-row"><input type="text" id="smsTestNum" placeholder="ton mobile pour tester" style="width:180px">
+          <button id="smsTest" class="ghost sm">Enregistrer et envoyer un SMS de test</button><span id="smsOut" class="muted small"></span></div>
         <h4>Relances automatiques par e-mail</h4>
         <div class="patch-row fs-form" style="align-items:flex-end">
           <label class="muted small" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" id="rlSolde"> Solde bas sous</label>

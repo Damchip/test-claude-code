@@ -108,7 +108,7 @@ def _auth():
     if len(fenetre) >= LIMITE_MINUTE:
         return _erreur("Trop de requêtes : 120 par minute au maximum.", 429)
     _appels[cid] = fenetre + [now]
-    g.client = c
+    g.client, g.utilisateur = c, None
     return None
 
 
@@ -117,7 +117,7 @@ def _demande_publique(d, detail=False):
            "categorie": d["categorie"], "prestations": d["prestations"], "lignes": d["lignes"], "total": d["total"],
            "vehicule": d["vehicule"], "lecture": d["lecture"], "fichier": d["fichier_nom"],
            "livre_le": d["livre_le"], "telecharge_le": d["telecharge_le"],
-           "motif_refus": d["motif_refus"] or None, "messages_non_lus": d.get("non_lus")}
+           "motif_refus": d["motif_refus"] or None, "messages_non_lus": d.get("non_lus"), "express": bool(d.get("express"))}
     if detail:
         db = current_app.config["FS_DB"]
         out["livrables"] = [{"version": l["version"], "nom": l["nom"], "taille": l["taille"], "note": l["note"],
@@ -158,6 +158,7 @@ def api_catalogue():
                                                     "prix": p["prix"], "prix_siege": p.get("prix_siege")}
                                                    for k, lst in catalogue.PACKS.items() for p in lst],
                     "garanties": catalogue.GARANTIES, "retours": catalogue.RETOURS,
+                    "express": catalogue.express(fileservice.reglages()),
                     "remise_pct": fileservice._remise_client()["remise"]})
 
 
@@ -167,6 +168,7 @@ def api_devis():
     codes = b.get("prestations") if isinstance(b.get("prestations"), list) else []
     return jsonify(catalogue.devis(str(b.get("categorie", "")), [str(x) for x in codes][:20],
                                    siege=bool(b.get("siege")), garantie=str(b.get("garantie") or ""),
+                                   express=catalogue.supplement_express(fileservice.reglages(), bool(b.get("express"))),
                                    **fileservice._remise_client()))
 
 
@@ -181,13 +183,15 @@ def api_liste():
 @bp.route("/demandes", methods=["POST"])
 def api_creer():
     """multipart/form-data : file (obligatoire), categorie, prestations (codes séparés par des virgules),
-    marque, modele, moteur, annee, boite, km, vin, immat, outil, ecu, methode, siege, retour, garantie, commentaire."""
+    marque, modele, moteur, annee, boite, km, vin, immat, outil, ecu, methode, siege, retour, garantie, commentaire,
+    express (1 = traitement prioritaire, si proposé), annexes (0 à 4 fichiers complémentaires)."""
     f = request.files.get("file")
     if not f:
         return _erreur("Champ « file » manquant (lecture d'origine).", 400)
     codes = [c.strip() for c in (request.form.get("prestations") or "").split(",") if c.strip()]
     try:
-        d, livre = fileservice.creer_demande(request.form, codes, f.filename, f.read(), source="api")
+        d, livre = fileservice.creer_demande(request.form, codes, f.filename, f.read(), source="api",
+                                             annexes=fileservice._annexes_envoyees(request.files.getlist("annexes")))
     except ErreurCompte as e:
         return _erreur(str(e), 400)
     return jsonify({"demande": _demande_publique(d), "livree_automatiquement": livre,

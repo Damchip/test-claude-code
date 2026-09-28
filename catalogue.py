@@ -92,10 +92,14 @@ def _prix(item, siege):
     return item["prix_siege"] if siege and item.get("prix_siege") is not None else item["prix"]
 
 
-def devis(categorie, codes, siege=False, garantie=None, remise=0, niveau=""):
+EXPRESS_NOM = "Traitement express (prioritaire)"
+
+
+def devis(categorie, codes, siege=False, garantie=None, remise=0, niveau="", express=0):
     """Tarif le plus avantageux pour la sélection.
 
-    remise : pourcentage accordé au niveau du client (sur les prestations, pas sur la garantie).
+    remise  : pourcentage accordé au niveau du client (sur les prestations, pas sur la garantie).
+    express : supplément en crédits de l'option express (0 = non demandée), hors remise.
     Retourne {"lignes": [{"nom", "credits"}], "total", "economie", "remise", "siege_possible", "erreur"}.
     """
     if categorie not in PRESTATIONS:
@@ -151,11 +155,33 @@ def devis(categorie, codes, siege=False, garantie=None, remise=0, niveau=""):
     if g and choix:
         lignes.append({"nom": g["nom"], "credits": g["prix"]})
         total += g["prix"]
+    if express and choix:
+        lignes.append({"nom": EXPRESS_NOM, "credits": int(express), "code": "express"})
+        total += int(express)
     return {"lignes": lignes, "total": total, "economie": somme_seules - best[full][0],
             "remise": montant_remise, "siege_possible": siege_possible, "erreur": ""}
 
 
 NIVEAUX_DEFAUT = {"Standard": 0, "Partenaire": 10, "VIP": 20}
+EXPRESS_DEFAUT = {"actif": False, "credits": 20}
+
+
+def express(cfg):
+    """Réglages de l'option express : {"actif", "credits"} (supplément en crédits, réglé par l'atelier)."""
+    r = dict(EXPRESS_DEFAUT)
+    brut = cfg.get("express") if isinstance(cfg.get("express"), dict) else {}
+    r["actif"] = bool(brut.get("actif", r["actif"]))
+    try:
+        r["credits"] = max(1, min(int(brut.get("credits", r["credits"])), 1000))
+    except (TypeError, ValueError):
+        pass
+    return r
+
+
+def supplement_express(cfg, demande):
+    """Crédits à ajouter si le client demande l'express et que l'option est active, sinon 0."""
+    r = express(cfg)
+    return r["credits"] if demande and r["actif"] else 0
 
 
 def remises(cfg):

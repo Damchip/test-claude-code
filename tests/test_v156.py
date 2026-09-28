@@ -369,3 +369,299 @@ class FinitionsTests(unittest.TestCase):
         self.assertIn("Monday", h)
         self.assertNotIn("Lundi", h)
         self.assertIn("% bonus", self.c.get("/credits").get_data(as_text=True))
+
+
+import catalogue
+import demandes
+import sms
+import traductions
+
+
+class ExpressAnnexesTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = _base(self.tmp.name)
+        self.files = os.path.join(self.tmp.name, "f")
+        self.cid = _client(self.db)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_devis_et_reglages(self):
+        d = catalogue.devis("vl", ["stage1"], express=20, remise=10, niveau="VIP")
+        self.assertEqual(d["lignes"][-1]["nom"], catalogue.EXPRESS_NOM)
+        self.assertEqual(d["total"], 59 - 6 + 20)                      # la remise ne touche pas l'express
+        self.assertEqual(catalogue.supplement_express({}, True), 0)     # désactivée par défaut
+        self.assertEqual(catalogue.supplement_express({"express": {"actif": True, "credits": 25}}, True), 25)
+        self.assertEqual(catalogue.supplement_express({"express": {"actif": True, "credits": 25}}, False), 0)
+
+    def test_priorite_et_remboursement(self):
+        normal = _creer(self.db, self.files, self.cid)
+        urgent = _creer(self.db, self.files, self.cid, express=20)
+        self.assertEqual([d["id"] for d in demandes.lister(self.db)][:2], [urgent, normal])
+        demandes.changer_statut(self.db, normal, "en_cours")
+        ancien = _creer(self.db, self.files, self.cid)
+        self.assertEqual(demandes.lister(self.db)[0]["id"], urgent)     # express en tête tant qu'il est ouvert
+        self.assertEqual(demandes.get(self.db, urgent)["total"], 79)
+        self.assertEqual(demandes.refuser(self.db, urgent, "Illisible"), 79)   # supplément remboursé
+        self.assertEqual(demandes.lister(self.db)[0]["id"], ancien)
+
+    def test_annexes(self):
+        did = _creer(self.db, self.files, self.cid, annexes=[("../eeprom.bin", b"\x05" * 100), ("vide.bin", b"")])
+        a = demandes.annexes(self.db, did)
+        self.assertEqual(len(a), 1)                                     # fichier vide ignoré
+        self.assertEqual(a[0]["nom"], "eeprom.bin")                     # pas de chemin
+        self.assertIsNotNone(demandes.chemin(self.files, did, a[0]["fichier"]))
+        with self.assertRaises(comptes.ErreurCompte):
+            _creer(self.db, self.files, self.cid, annexes=[(f"a{i}.bin", b"1") for i in range(5)])
+        self.assertEqual(demandes.export_client(self.db, self.cid)["demandes"][0]["fichiers_complementaires"], ["eeprom.bin"])
+
+
+class PortailPart3Base(unittest.TestCase):
+    def setUp(self):
+        import portal
+        self.portal = portal
+        self.tmp = tempfile.TemporaryDirectory()
+        t = self.tmp.name
+        self.cfg = os.path.join(t, "c.json")
+        self.ecrire_cfg({"public_url": "https://fichiers.exemple.fr", "express": {"actif": True, "credits": 20},
+                         "smtp": {"atelier": "atelier@exemple.fr"}})
+        app = portal.app
+        self.saved = {k: app.config.get(k) for k in ("FS_DB", "FS_FILES", "FS_DATA_DIR", "FS_CONFIG", "FS_DETECT", "FS_SOLUTIONS_DB")}
+        app.config.update(FS_DB=_base(t), FS_FILES=os.path.join(t, "f"), FS_DATA_DIR=t, FS_CONFIG=self.cfg, FS_DETECT=None,
+                          FS_SOLUTIONS_DB=None)
+        import api
+        api.init_db(app.config["FS_DB"])
+        self.db = app.config["FS_DB"]
+        self.cid = _client(self.db)
+        portal.fileservice.LIMITEUR._echecs.clear()
+        self.c = app.test_client()
+        self.login(self.c, "jean@garage.fr", "motdepasse-solide")
+
+    def tearDown(self):
+        self.portal.app.config.update(self.saved)
+        self.tmp.cleanup()
+
+    def ecrire_cfg(self, d):
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            json.dump(d, fh)
+
+    @staticmethod
+    def tok(c, p):
+        return re.search(r'name="csrf" value="([^"]+)"', c.get(p).get_data(as_text=True)).group(1)
+
+    def login(self, c, email, mdp):
+        return c.post("/connexion", data={"csrf": self.tok(c, "/connexion"), "email": email, "password": mdp})
+
+    def envoyer(self, c, **extra):
+        data = {"csrf": self.tok(c, "/nouveau"), "categorie": "vl", "prestas": ["stage1"],
+                "file": (__import__("io").BytesIO(b"\x02" * 4096), "lecture.bin")}
+        data.update(extra)
+        return c.post("/nouveau", data=data, content_type="multipart/form-data")
+
+    def mails(self):
+        with open(os.path.join(self.tmp.name, "mails_non_envoyes.log"), encoding="utf-8") as fh:
+            return fh.read()
+
+
+class ExpressPortailTests(PortailPart3Base):
+    def test_express_et_annexes_depuis_le_site(self):
+        self.assertIn("Traitement express", self.c.get("/nouveau").get_data(as_text=True))
+        r = self.c.post("/tarif", json={"categorie": "vl", "prestations": ["stage1"], "express": True},
+                        headers={"X-CSRF-Token": self.tok(self.c, "/nouveau")}).get_json()
+        self.assertEqual(r["total"], 79)
+        self.envoyer(self.c, express="1", annexes=[(__import__("io").BytesIO(b"\x07" * 64), "eeprom.bin")])
+        d = demandes.lister(self.db, self.cid)[0]
+        self.assertEqual((d["express"], d["total"]), (1, 79))
+        h = self.c.get(f"/fichiers/{d['numero']}").get_data(as_text=True)
+        self.assertIn("eeprom.bin", h)
+        a = demandes.annexes(self.db, d["id"])[0]
+        self.assertEqual(self.c.get(f"/fichiers/{d['numero']}/annexe/{a['id']}").data, b"\x07" * 64)
+        self.assertIn("EXPRESS", self.mails())
+        # option désactivée par l'atelier : la case envoyée est ignorée
+        self.ecrire_cfg({"express": {"actif": False, "credits": 20}})
+        self.envoyer(self.c, express="1")
+        self.assertEqual(demandes.lister(self.db, self.cid)[0]["total"], 59)
+        self.assertNotIn("Traitement express", self.c.get("/nouveau").get_data(as_text=True))
+
+
+class SousComptesTests(PortailPart3Base):
+    def ajouter(self, nom="Thomas", email="thomas@garage.fr", achat=False):
+        data = {"csrf": self.tok(self.c, "/parametres"), "action": "utilisateur_ajout", "nom": nom, "email": email}
+        if achat:
+            data["peut_acheter"] = "1"
+        return self.c.post("/parametres", data=data)
+
+    def activer(self, email="thomas@garage.fr", mdp="mdp-du-technicien"):
+        lien = re.findall(r"https://fichiers\.exemple\.fr(/reinitialiser/[\w-]+)", self.mails())[-1]
+        m = self.portal.app.test_client()
+        m.post(lien, data={"csrf": self.tok(m, lien), "password": mdp, "password2": mdp})
+        self.login(m, email, mdp)
+        return m
+
+    def test_parcours_utilisateur(self):
+        self.ajouter()
+        self.assertIn("vous a ajouté au compte fileservice de Garage Test", self.mails())
+        m = self.activer()
+        self.assertIsNotNone(comptes.authentifier(self.db, "jean@garage.fr", "motdepasse-solide"))  # titulaire intact
+        self.assertIn("Thomas", m.get("/").get_data(as_text=True))
+        self.envoyer(m)
+        d = demandes.lister(self.db, self.cid)[0]
+        self.assertEqual(d["envoye_par"], "Thomas")
+        self.assertIn("par Thomas", self.c.get(f"/fichiers/{d['numero']}").get_data(as_text=True))   # le titulaire voit tout
+        # droits : pas d'achat, pas de factures, pas de réglages du compte
+        self.assertIn("titulaire du compte", m.get("/credits").get_data(as_text=True))
+        self.assertEqual(m.post("/credits/acheter/0", data={"csrf": self.tok(m, "/credits")}).status_code, 403)
+        self.assertEqual(m.get("/parametres/mes-donnees").status_code, 403)
+        self.assertEqual(m.get("/parametres/api").status_code, 302)
+        self.assertEqual(m.post("/parametres", data={"csrf": self.tok(m, "/parametres"), "action": "profil",
+                                                     "contact": "Pirate"}).status_code, 403)
+        self.assertEqual(m.post("/parametres", data={"csrf": self.tok(m, "/parametres"), "action": "utilisateur_ajout",
+                                                     "nom": "X", "email": "x@x.fr"}).status_code, 403)
+        # son mot de passe à lui
+        m.post("/parametres", data={"csrf": self.tok(m, "/parametres"), "action": "mdp", "actuel": "mdp-du-technicien",
+                                    "nouveau": "nouveau-mdp-tech", "nouveau2": "nouveau-mdp-tech"})
+        self.assertIsNotNone(comptes.authentifier_compte(self.db, "thomas@garage.fr", "nouveau-mdp-tech"))
+        # le titulaire désactive puis retire l'utilisateur : sa session tombe
+        uid = comptes.lister_utilisateurs(self.db, self.cid)[0]["id"]
+        self.c.post("/parametres", data={"csrf": self.tok(self.c, "/parametres"), "action": "utilisateur_actif",
+                                         "id": uid, "valeur": "0"})
+        self.assertEqual(m.get("/").status_code, 302)
+        self.c.post("/parametres", data={"csrf": self.tok(self.c, "/parametres"), "action": "utilisateur_suppr", "id": uid})
+        self.assertIsNone(comptes.utilisateur_par_email(self.db, "thomas@garage.fr"))
+        self.assertEqual(demandes.get(self.db, d["id"])["envoye_par"], "Thomas")        # l'historique reste
+
+    def test_achat_autorise_et_emails(self):
+        self.ajouter(achat=True)
+        m = self.activer()
+        self.assertNotIn("titulaire du compte", m.get("/credits").get_data(as_text=True))
+        r = self.ajouter(nom="Doublon", email="Jean@Garage.fr")                         # e-mail du titulaire
+        self.assertIn("existe déjà", self.c.get(r.headers["Location"]).get_data(as_text=True))
+        with self.assertRaises(comptes.ErreurCompte):
+            comptes.creer_client(self.db, societe="X", siret="73282932000074", tva="", contact="", email="thomas@garage.fr",
+                                 tel="", mdp="0123456789ab")
+        # mot de passe oublié pour un utilisateur : le lien ne touche que lui
+        self.c.post("/mot-de-passe-oublie", data={"csrf": self.tok(self.c, "/mot-de-passe-oublie"), "email": "thomas@garage.fr"})
+        lien = re.findall(r"https://fichiers\.exemple\.fr(/reinitialiser/[\w-]+)", self.mails())[-1]
+        self.assertIsNotNone(comptes.jeton_utilisateur(self.db, lien.rsplit("/", 1)[1]))
+        m2 = self.portal.app.test_client()
+        m2.post(lien, data={"csrf": self.tok(m2, lien), "password": "encore-un-mdp", "password2": "encore-un-mdp"})
+        self.assertIsNotNone(comptes.authentifier_compte(self.db, "thomas@garage.fr", "encore-un-mdp"))
+        self.assertIsNotNone(comptes.authentifier(self.db, "jean@garage.fr", "motdepasse-solide"))
+        # e-mail « fichier prêt » : au titulaire ET à l'utilisateur qui a envoyé
+        self.envoyer(m)
+        d = demandes.lister(self.db, self.cid)[0]
+        with open(self.cfg, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        from fileservice import prevenir
+        prevenir(cfg, demandes.get(self.db, d["id"]), "fichier_pret", "https://x/f", journal_dir=self.tmp.name)
+        log = self.mails()
+        self.assertIn("à jean@garage.fr · E85-FRANCE — F-00001 : fichier prêt", log)
+        self.assertIn("à thomas@garage.fr · E85-FRANCE — F-00001 : fichier prêt", log)
+
+    def test_rgpd(self):
+        self.ajouter()
+        demandes.anonymiser_client(self.db, self.portal.app.config["FS_FILES"], self.cid)
+        self.assertIsNone(comptes.utilisateur_par_email(self.db, "thomas@garage.fr"))
+
+
+class SmsTests(PortailPart3Base):
+    def test_preferences_client(self):
+        r = self.c.post("/parametres", data={"csrf": self.tok(self.c, "/parametres"), "action": "sms",
+                                             "mobile": "06 12 34 56 78", "sms_actif": "1"})
+        self.assertEqual(r.status_code, 302)
+        c = comptes.get_client(self.db, self.cid)
+        self.assertEqual((c["sms_mobile"], c["sms_actif"]), ("+33612345678", 1))
+        with self.assertRaises(comptes.ErreurCompte):
+            comptes.changer_sms(self.db, self.cid, "12", True)
+        with self.assertRaises(comptes.ErreurCompte):
+            comptes.changer_sms(self.db, self.cid, "", True)
+
+    def test_envoi_brevo_et_twilio(self):
+        appels = []
+
+        class Rep:
+            def __init__(self, *a):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b'{"messageId": 1}'
+
+        def faux_urlopen(req, timeout=0):
+            appels.append((req.full_url, dict(req.header_items()), req.data))
+            return Rep()
+
+        brevo = {"sms": {"actif": True, "fournisseur": "brevo", "cle": "xkeysib-1", "expediteur": "E85FRANCE"}}
+        twilio = {"sms": {"actif": True, "fournisseur": "twilio", "cle": "tok", "compte": "AC123", "expediteur": "+33700000000"}}
+        self.assertFalse(sms.configure({"sms": {"actif": True, "fournisseur": "twilio", "cle": "tok", "expediteur": "E85"}}))
+        with mock.patch("urllib.request.urlopen", faux_urlopen):
+            self.assertEqual(sms.envoyer(brevo, "+33612345678", "Bonjour")[0], True)
+            self.assertEqual(sms.envoyer(twilio, "+33612345678", "Bonjour")[0], True)
+        self.assertIn("brevo.com", appels[0][0])
+        self.assertEqual(json.loads(appels[0][2])["recipient"], "33612345678")
+        self.assertIn("/Accounts/AC123/Messages.json", appels[1][0])
+        self.assertTrue(appels[1][1]["Authorization"].startswith("Basic "))
+        self.assertEqual(sms.envoyer({}, "+33612345678", "x"), (False, "SMS non configurés."))
+
+    def test_prevenir_envoie_le_sms(self):
+        comptes.changer_sms(self.db, self.cid, "0612345678", True)
+        did = _creer(self.db, self.portal.app.config["FS_FILES"], self.cid)
+        envoyes = []
+        cfg = {"sms": {"actif": True, "fournisseur": "brevo", "cle": "k", "expediteur": "E85FRANCE"}}
+        from fileservice import prevenir
+        with mock.patch("sms.envoyer", lambda cfg, num, txt: envoyes.append((num, txt)) or (True, "")):
+            info = prevenir(cfg, demandes.get(self.db, did), "fichier_pret", "https://x/f/F-00001")
+            prevenir(cfg, demandes.get(self.db, did), "message", "https://x")        # pas de SMS pour un simple message
+        self.assertEqual(envoyes, [("+33612345678", "E85-FRANCE : votre fichier F-00001 est prêt. https://x/f/F-00001")])
+        self.assertIn("SMS envoyé", info)
+        self.assertEqual(traductions.sms("info_requise", "en", atelier="A", numero="F-1", lien="L"),
+                         "A: we need more information for your file F-1. L")
+
+
+class AtelierPart3Tests(unittest.TestCase):
+    def setUp(self):
+        import app as outil
+        self.o = outil
+        self.tmp = tempfile.TemporaryDirectory()
+        t = self.tmp.name
+        self.saved = (outil.FS_DB, outil.FS_FILES, outil.PORTAL_CONFIG_PATH, outil.DATA_DIR)
+        outil.FS_DB, outil.FS_FILES = _base(t), os.path.join(t, "f")
+        outil.PORTAL_CONFIG_PATH, outil.DATA_DIR = os.path.join(t, "c.json"), t
+        self.c = outil.app.test_client()
+        self.cid = _client(outil.FS_DB)
+
+    def tearDown(self):
+        self.o.FS_DB, self.o.FS_FILES, self.o.PORTAL_CONFIG_PATH, self.o.DATA_DIR = self.saved
+        self.tmp.cleanup()
+
+    def test_reglages_express_sms(self):
+        self.assertEqual(self.c.post("/fs/reglages", json={"express": {"actif": True, "credits": "0"}}).status_code, 400)
+        self.assertTrue(self.c.post("/fs/reglages", json={"express": {"actif": True, "credits": "25"}}).get_json()["ok"])
+        self.assertEqual(self.c.get("/fs/reglages").get_json()["express"], {"actif": True, "credits": 25})
+        r = self.c.post("/fs/reglages", json={"sms": {"actif": True, "fournisseur": "brevo", "cle": "k", "expediteur": "E85 FRANCE"}})
+        self.assertEqual(r.status_code, 400)                                # espace interdit chez Brevo
+        self.assertTrue(self.c.post("/fs/reglages", json={"sms": {"actif": True, "fournisseur": "brevo", "cle": "xkeysib-9",
+                                                                  "expediteur": "E85FRANCE"}}).get_json()["ok"])
+        g = self.c.get("/fs/reglages").get_json()["sms"]
+        self.assertTrue(g["cle_set"])
+        self.assertNotIn("cle", g)
+        self.assertEqual(self.c.post("/fs/sms/test", json={"numero": "123"}).status_code, 400)
+
+    def test_detail_annexes_et_express(self):
+        did = _creer(self.o.FS_DB, self.o.FS_FILES, self.cid, express=20, annexes=[("gearbox.bin", b"\x08" * 10)])
+        x = self.c.get(f"/fs/demandes/{did}").get_json()
+        self.assertEqual(x["demande"]["express"], 1)
+        aid = x["annexes"][0]["id"]
+        r = self.c.get(f"/fs/demandes/{did}/annexe/{aid}")
+        self.assertEqual(r.data, b"\x08" * 10)
+        r.close()
+        self.assertEqual(self.c.get(f"/fs/demandes/{did}/annexe/999").status_code, 404)
+        self.assertIn("gearbox.bin", self.c.get(f"/fs/demandes/{did}/recapitulatif").get_data(as_text=True))
+        comptes.creer_utilisateur(self.o.FS_DB, self.cid, nom="Thomas", email="t@garage.fr")
+        self.assertEqual(self.c.get("/clients").get_json()["clients"][0]["utilisateurs"][0]["nom"], "Thomas")

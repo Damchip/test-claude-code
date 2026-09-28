@@ -15,11 +15,13 @@
 {% if autoliquidation %}
 <div class="note" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>{{ t('Client professionnel UE hors France : facturation HT, TVA autoliquidée.') }}</span></div>
 {% endif %}
-{% if not paiement_en_ligne %}
+{% if restreint %}
+<div class="note" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>{{ t("L'achat de crédits et les factures sont gérés par le titulaire du compte. Demandez-lui de recharger si besoin.") }}</span></div>
+{% elif not paiement_en_ligne %}
 <div class="note warn" style="margin-bottom: 20px">{{ icon('info', 'icon-sm') }}<span>{{ t("Paiement en ligne bientôt disponible. En attendant, commandez votre pack auprès de l'atelier : les crédits et la facture sont ajoutés à réception du virement.") }}{% if shop.email or shop.tel %} ({{ [shop.email, shop.tel]|select|join(' · ') }}){% endif %}</span></div>
 {% endif %}
 
-<h2 style="margin-bottom: 18px">{{ t("Recharger") }}</h2>
+{% if not restreint %}<h2 style="margin-bottom: 18px">{{ t("Recharger") }}</h2>{% endif %}
 <div class="packs">
   {% for p in packs %}
   <div class="card pack {{ 'featured' if p.vedette }}">
@@ -63,6 +65,7 @@
     </div>
   </section>
 
+  {% if not restreint %}
   <section class="card">
     <div class="card-head"><div><h2>{{ t("Factures") }}</h2><p class="sub">{{ t("Ouvrez-les pour les imprimer ou les enregistrer en PDF") }}</p></div></div>
     {% for fa in factures %}
@@ -75,5 +78,6 @@
     <p class="empty">{{ t("Aucune facture pour l'instant.") }}</p>
     {% endfor %}
   </section>
+  {% endif %}
 </div>
 {% endblock %}

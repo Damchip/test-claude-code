@@ -87,13 +87,34 @@ CREATE TABLE IF NOT EXISTS messages (
     lu INTEGER NOT NULL DEFAULT 0      -- lu par le destinataire
 );
 CREATE INDEX IF NOT EXISTS messages_demande ON messages(demande_id, id);
+CREATE TABLE IF NOT EXISTS annexes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    demande_id INTEGER NOT NULL REFERENCES demandes(id),
+    nom TEXT NOT NULL,
+    fichier TEXT NOT NULL,
+    taille INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    cree_le TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS annexes_demande ON annexes(demande_id, id);
 """
+
+# Colonnes ajoutées après coup (migration douce des bases existantes)
+COLONNES_AJOUTEES = [
+    ("express", "INTEGER NOT NULL DEFAULT 0"),      # option express : traitée en priorité
+    ("utilisateur_id", "INTEGER"),                  # envoyée par un utilisateur rattaché (sinon le titulaire)
+]
+ANNEXES_MAX = 4
 
 
 def init_db(db_path):
     comptes.init_db(db_path)
     with connect(db_path) as con:
         con.executescript(SCHEMA)
+        existantes = {r["name"] for r in con.execute("PRAGMA table_info(demandes)")}
+        for nom, decl in COLONNES_AJOUTEES:
+            if nom not in existantes:
+                con.execute(f"ALTER TABLE demandes ADD COLUMN {nom} {decl}")
 
 
 def _now():
@@ -138,13 +159,17 @@ def _decoder(row):
 
 def creer(db_path, files_dir, client_id, *, categorie, prestations, siege=False, garantie="",
           retour="", vehicule=None, lecture=None, commentaire="", fichier_nom, contenu, detection=None,
-          remise=0, niveau=""):
+          remise=0, niveau="", express=0, annexes=None, utilisateur_id=None):
+    """express : supplément en crédits (0 = sans option) ; annexes : [(nom, octets)] fichiers complémentaires."""
     if not contenu:
         raise ErreurCompte("Le fichier est vide.")
-    if len(contenu) > TAILLE_MAX:
+    annexes = [(nom_sur(n, "annexe.bin"), c) for n, c in (annexes or []) if c]
+    if len(annexes) > ANNEXES_MAX:
+        raise ErreurCompte(f"{ANNEXES_MAX} fichiers complémentaires au maximum.")
+    if len(contenu) + sum(len(c) for _, c in annexes) > TAILLE_MAX:
         raise ErreurCompte("Fichier trop volumineux (64 Mo maximum).")
     devis = catalogue.devis(categorie, prestations, siege=siege, garantie=garantie or None,
-                            remise=remise, niveau=niveau)
+                            remise=remise, niveau=niveau, express=express)
     if devis["erreur"]:
         raise ErreurCompte(devis["erreur"])
     if not prestations or not devis["lignes"]:
@@ -167,13 +192,13 @@ def creer(db_path, files_dir, client_id, *, categorie, prestations, siege=False,
             raise ErreurCompte(f"Solde insuffisant : {total} crédits nécessaires, {row['credits']} disponibles.")
         cur = con.execute(
             "INSERT INTO demandes (client_id, cree_le, maj_le, categorie, vehicule, lecture, prestations, lignes,"
-            " total, siege, retour, garantie, commentaire, fichier_nom, fichier_taille, fichier_sha256, detection)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " total, siege, retour, garantie, commentaire, fichier_nom, fichier_taille, fichier_sha256, detection,"
+            " express, utilisateur_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (client_id, now, now, categorie, json.dumps(vehicule, ensure_ascii=False),
              json.dumps(lecture, ensure_ascii=False), json.dumps(list(dict.fromkeys(prestations))),
              json.dumps(devis["lignes"], ensure_ascii=False), total, int(siege), retour, garantie,
              (commentaire or "").strip()[:2000], nom, len(contenu), hashlib.sha256(contenu).hexdigest(),
-             json.dumps(detection or {}, ensure_ascii=False)))
+             json.dumps(detection or {}, ensure_ascii=False), int(bool(express)), utilisateur_id))
         did = cur.lastrowid
         numero = f"F-{did:05d}"
         con.execute("UPDATE demandes SET numero = ? WHERE id = ?", (numero, did))
@@ -185,6 +210,12 @@ def creer(db_path, files_dir, client_id, *, categorie, prestations, siege=False,
         try:
             with open(os.path.join(dossier, "original_" + nom), "wb") as fh:
                 fh.write(contenu)
+            for i, (anom, acontenu) in enumerate(annexes, 1):
+                fichier = f"annexe_{i}_{anom}"
+                with open(os.path.join(dossier, fichier), "wb") as fh:
+                    fh.write(acontenu)
+                con.execute("INSERT INTO annexes (demande_id, nom, fichier, taille, sha256, cree_le) VALUES (?, ?, ?, ?, ?, ?)",
+                            (did, anom, fichier, len(acontenu), hashlib.sha256(acontenu).hexdigest(), now))
         except OSError:
             shutil.rmtree(dossier, ignore_errors=True)
             raise
@@ -193,9 +224,14 @@ def creer(db_path, files_dir, client_id, *, categorie, prestations, siege=False,
 
 # --- Lecture -----------------------------------------------------------------
 
+SELECT_DEMANDE = ("SELECT d.*, c.societe, c.email, c.contact, c.tel, c.langue, c.sms_mobile, c.sms_actif,"
+                  " u.nom AS envoye_par, u.email AS envoye_par_email, u.langue AS envoye_par_langue"
+                  " FROM demandes d JOIN clients c ON c.id = d.client_id"
+                  " LEFT JOIN utilisateurs u ON u.id = d.utilisateur_id")
+
+
 def get(db_path, demande_id, client_id=None):
-    sql = ("SELECT d.*, c.societe, c.email, c.contact, c.tel, c.langue FROM demandes d"
-           " JOIN clients c ON c.id = d.client_id WHERE d.id = ?")
+    sql = SELECT_DEMANDE + " WHERE d.id = ?"
     args = [demande_id]
     if client_id is not None:
         sql += " AND d.client_id = ?"
@@ -211,9 +247,10 @@ def get_par_numero(db_path, numero, client_id=None):
 
 
 def lister(db_path, client_id=None, statut=None, limite=500):
-    sql = ("SELECT d.*, c.societe, c.email, c.contact, c.tel, c.langue,"
+    sql = ("SELECT d.*, c.societe, c.email, c.contact, c.tel, c.langue, u.nom AS envoye_par,"
            " (SELECT COUNT(*) FROM messages m WHERE m.demande_id = d.id AND m.lu = 0 AND m.auteur = ?) AS non_lus"
-           " FROM demandes d JOIN clients c ON c.id = d.client_id WHERE 1 = 1")
+           " FROM demandes d JOIN clients c ON c.id = d.client_id"
+           " LEFT JOIN utilisateurs u ON u.id = d.utilisateur_id WHERE 1 = 1")
     # messages non lus : ceux de l'atelier pour le client, ceux du client pour l'atelier
     args = ["atelier" if client_id is not None else "client"]
     if client_id is not None:
@@ -222,10 +259,18 @@ def lister(db_path, client_id=None, statut=None, limite=500):
     if statut:
         sql += " AND d.statut = ?"
         args.append(statut)
-    sql += " ORDER BY d.id DESC LIMIT ?"
+    # côté atelier, les demandes express encore à traiter passent en tête de file
+    sql += (" ORDER BY d.id DESC LIMIT ?" if client_id is not None else
+            " ORDER BY (d.express = 1 AND d.statut IN ('recu', 'en_cours')) DESC, d.id DESC LIMIT ?")
     args.append(limite)
     with connect(db_path) as con:
         return [_decoder(r) for r in con.execute(sql, args).fetchall()]
+
+
+def annexes(db_path, demande_id):
+    with connect(db_path) as con:
+        return [dict(r) for r in con.execute(
+            "SELECT id, nom, fichier, taille, sha256, cree_le FROM annexes WHERE demande_id = ? ORDER BY id", (demande_id,))]
 
 
 def livrables(db_path, demande_id):
@@ -402,8 +447,10 @@ def export_client(db_path, client_id):
         out.append({k: d[k] for k in ("numero", "cree_le", "statut", "categorie", "vehicule", "lecture", "lignes",
                                        "total", "commentaire", "fichier_nom", "motif_refus", "livre_le")}
                    | {"messages": [{k: m[k] for k in ("auteur", "texte", "pj_nom", "cree_le")}
-                                   for m in messages(db_path, d["id"])]})
-    return {"export_du": _now(), "compte": c, "mouvements": comptes.mouvements(db_path, client_id, limite=100000),
+                                   for m in messages(db_path, d["id"])],
+                      "fichiers_complementaires": [a["nom"] for a in annexes(db_path, d["id"])]})
+    return {"export_du": _now(), "compte": c, "utilisateurs": comptes.lister_utilisateurs(db_path, client_id),
+            "mouvements": comptes.mouvements(db_path, client_id, limite=100000),
             "factures": factures, "demandes": out}
 
 
@@ -426,12 +473,16 @@ def anonymiser_client(db_path, files_dir, client_id):
             (f"Compte supprimé n°{client_id}", f"supprime-{client_id}@invalid",
              generate_password_hash(secrets.token_hex(32)), client_id))
         con.execute("DELETE FROM jetons WHERE client_id = ?", (client_id,))
+        con.execute("UPDATE clients SET sms_mobile = '', sms_actif = 0 WHERE id = ?", (client_id,))
+        con.execute("UPDATE utilisateurs SET nom = 'Utilisateur supprimé', email = 'supprime-u' || id || '@invalid',"
+                    " actif = 0 WHERE client_id = ?", (client_id,))
         for did in ids:
             con.execute("UPDATE demandes SET vehicule = '{}', lecture = '{}', commentaire = '', detection = '{}',"
                         " fichier_nom = 'supprime.bin' WHERE id = ?", (did,))
             con.execute("UPDATE messages SET texte = '', pj_nom = '', pj_fichier = '', auteur_nom = '' WHERE demande_id = ?",
                         (did,))
             con.execute("UPDATE livrables SET nom = 'supprime.bin', fichier = '', note = '' WHERE demande_id = ?", (did,))
+            con.execute("UPDATE annexes SET nom = 'supprime.bin', fichier = '' WHERE demande_id = ?", (did,))
     for did in ids:
         shutil.rmtree(os.path.join(files_dir, str(int(did))), ignore_errors=True)
     return len(ids)

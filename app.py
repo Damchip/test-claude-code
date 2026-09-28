@@ -33,6 +33,7 @@ import pages_legales
 import relances
 import sante
 import sauvegarde_externe
+import sms
 import stripe_api
 import taches
 import traductions
@@ -129,7 +130,7 @@ def _refuser_requetes_inter_sites():
 # Actions réservées aux administrateurs quand des comptes atelier existent
 ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "clients_credits", "clients_facture",
                    "fs_reglages_set", "clients_smtp_set", "backups_restore", "backups_import",
-                   "equipe_creer", "equipe_modifier", "equipe_securite", "fs_sauvegarde_externe"}
+                   "equipe_creer", "equipe_modifier", "equipe_securite", "fs_sauvegarde_externe", "fs_sms_test"}
 
 
 def _equipe_active():
@@ -831,7 +832,11 @@ def clients_list():
     packs = [{"credits": p["credits"] + p["bonus"], "ht": p["prix_eur"],
               "label": f"Pack {p['credits']}" + (f" + {p['bonus']} offerts" if p["bonus"] else "") + f" · {p['prix_eur']} € HT",
               "designation": factures.designation_pack(p)} for p in catalogue.PACKS_CREDITS]
-    return jsonify({"clients": comptes.lister_clients(FS_DB), "packs": packs,
+    clients = comptes.lister_clients(FS_DB)
+    for c in clients:
+        c["utilisateurs"] = [{"nom": u["nom"], "email": u["email"], "actif": u["actif"]}
+                             for u in comptes.lister_utilisateurs(FS_DB, c["id"])]
+    return jsonify({"clients": clients, "packs": packs,
                     "niveaux": catalogue.remises(load_portal_config())})
 
 
@@ -1076,6 +1081,8 @@ def fs_reglages_get():
                     "remises": catalogue.remises(cfg),
                     "relances": relances.reglages(cfg),
                     "sauvegarde_externe": sauvegarde_externe.reglages(cfg),
+                    "express": catalogue.express(cfg),
+                    "sms": sms.reglages(cfg),
                     "pages": {k: {"titre": t, "texte": pages_legales.texte(cfg, k),
                                   "a_completer": pages_legales.a_completer(cfg, k)}
                               for k, t in pages_legales.PAGES.items()}})
@@ -1150,6 +1157,34 @@ def fs_reglages_set():
             return jsonify({"error": "Sauvegarde externe : indique le serveur FTP."}), 400
         cfg["sauvegarde_externe"] = {"mode": se.get("mode"), "ftp": ftp, "email": email,
                                      "fichiers": bool(se.get("fichiers")), "garder": garder}
+    if isinstance(b.get("express"), dict):
+        try:
+            cr = int(str(b["express"].get("credits") or "0").strip())
+        except ValueError:
+            return jsonify({"error": "Option express : supplément en crédits (nombre entier)."}), 400
+        if not 1 <= cr <= 1000:
+            return jsonify({"error": "Option express : supplément entre 1 et 1000 crédits."}), 400
+        cfg["express"] = {"actif": bool(b["express"].get("actif")), "credits": cr}
+    if isinstance(b.get("sms"), dict):
+        bs, ancien = b["sms"], sms.reglages(cfg, masquer=False)
+        fournisseur = bs.get("fournisseur") or ancien["fournisseur"]
+        if fournisseur not in sms.FOURNISSEURS:
+            return jsonify({"error": "Fournisseur SMS inconnu."}), 400
+        nouveau = {"fournisseur": fournisseur, "actif": bool(bs.get("actif")),
+                   "compte": str(bs.get("compte") or "").strip()[:64], "expediteur": str(bs.get("expediteur") or "").strip()[:20],
+                   "cle": ancien["cle"]}
+        cle = str(bs.get("cle") or "").strip()
+        if cle == "-":
+            nouveau["cle"] = ""
+        elif cle:
+            nouveau["cle"] = cle[:200]
+        if nouveau["actif"]:
+            err = sms.verifier_expediteur(fournisseur, nouveau["expediteur"])
+            if err:
+                return jsonify({"error": err}), 400
+            if not nouveau["cle"] or (fournisseur == "twilio" and not nouveau["compte"]):
+                return jsonify({"error": "SMS : clé API (et Account SID pour Twilio) obligatoires pour activer."}), 400
+        cfg["sms"] = nouveau
     if isinstance(b.get("remises"), dict):
         rem = {}
         for k, v in b["remises"].items():
@@ -1180,6 +1215,17 @@ def fs_reglages_set():
         cfg["pages"] = pages
     _save_portal_config(cfg)
     return jsonify({"ok": True})
+
+
+@app.route("/fs/sms/test", methods=["POST"])
+def fs_sms_test():
+    try:
+        numero = comptes.normaliser_mobile((request.json or {}).get("numero", ""))
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    cfg = load_portal_config()
+    ok, err = sms.envoyer(cfg, numero, f"{cfg.get('shop_name') or 'E85-FRANCE'} : test d'envoi SMS du fileservice.")
+    return jsonify({"ok": True, "message": "SMS envoyé."}) if ok else (jsonify({"error": err}), 400)
 
 
 @app.route("/clients/smtp", methods=["GET"])
@@ -1247,11 +1293,9 @@ def _fs_lien(numero):
 
 
 def _fs_prevenir(d, cle, **champs):
-    """E-mail au client, dans sa langue ; renvoie un message à afficher à l'atelier."""
-    nom = load_portal_config().get("shop_name") or "E85-FRANCE"
-    ok, err = _mail_client(d["email"], *traductions.mail(cle, d.get("langue"), atelier=nom, numero=d["numero"],
-                                                         lien=_fs_lien(d["numero"]).strip(), **champs))
-    return "Client prévenu par e-mail." if ok else err
+    """E-mail au client (et à l'utilisateur qui a envoyé la demande), SMS s'il les a demandés ;
+    renvoie un message à afficher à l'atelier."""
+    return _fs_vues.prevenir(load_portal_config(), d, cle, _fs_lien(d["numero"]).strip(), journal_dir=DATA_DIR, **champs)
 
 
 @app.route("/fs/demandes")
@@ -1273,7 +1317,7 @@ def fs_demande(did):
     d, err = _fs_demande(did)
     if err:
         return err
-    return jsonify({"demande": d, "livrables": demandes.livrables(FS_DB, did),
+    return jsonify({"demande": d, "livrables": demandes.livrables(FS_DB, did), "annexes": demandes.annexes(FS_DB, did),
                     "messages": demandes.messages(FS_DB, did, marquer_lus_pour="atelier")})
 
 
@@ -1296,6 +1340,14 @@ def fs_livre(did, version):
     return _fs_send(did, liv["fichier"], liv["nom"]) if liv else (jsonify({"error": "Version introuvable."}), 404)
 
 
+@app.route("/fs/demandes/<int:did>/annexe/<int:aid>")
+def fs_annexe(did, aid):
+    a = next((a for a in demandes.annexes(FS_DB, did) if a["id"] == aid and a["fichier"]), None)
+    d = demandes.get(FS_DB, did)
+    return (_fs_send(did, a["fichier"], f"{d['numero']}_{a['nom']}") if a and d
+            else (jsonify({"error": "Fichier introuvable."}), 404))
+
+
 @app.route("/fs/demandes/<int:did>/pj/<int:mid>")
 def fs_pj(did, mid):
     m = next((m for m in demandes.messages(FS_DB, did) if m["id"] == mid and m["pj_fichier"]), None)
@@ -1308,7 +1360,8 @@ def fs_recapitulatif(did):
     if err:
         return err
     cfg = load_portal_config()
-    return render_template("fs/recapitulatif.html", f=d, livrables=demandes.livrables(FS_DB, did), annexes=[],
+    return render_template("fs/recapitulatif.html", f=d, livrables=demandes.livrables(FS_DB, did),
+                           annexes=demandes.annexes(FS_DB, did),
                            vendeur=cfg.get("societe") or {}, prix_credit=catalogue.PRIX_CREDIT_EUR,
                            shop={"name": cfg.get("shop_name") or "E85-FRANCE"}, t=lambda x: x, langue="fr")
 

@@ -56,6 +56,7 @@
   -F categorie=vl -F prestations=stage1,e85 \
   -F marque=Audi -F modele="A3" -F outil=KESS3 \
   -F file=@lecture_ori.bin \
+  -F annexes=@eeprom.bin \
   {{ base }}/api/v1/demandes</pre>
     <p class="muted small">{{ t("Types de véhicule :") }} {% for c in categories %}<code>{{ c.code }}</code>{{ ', ' if not loop.last }}{% endfor %}. {{ t("Codes des prestations et prix :") }} <code>GET /api/v1/catalogue</code>.</p>
   </aside>
@@ -71,7 +72,7 @@
         ('GET', '/catalogue', 'Prestations, packs, garanties et prix'),
         ('POST', '/devis', 'Tarif d\'une sélection (JSON : categorie, prestations[])'),
         ('GET', '/demandes', 'Liste de vos demandes (filtre ?statut=)'),
-        ('POST', '/demandes', 'Envoyer un fichier (multipart : file + champs) — débite les crédits'),
+        ('POST', '/demandes', 'Envoyer un fichier (multipart : file + champs, annexes, express=1) — débite les crédits'),
         ('GET', '/demandes/{n°}', 'Détail : statut, fichiers livrés, messages'),
         ('GET', '/demandes/{n°}/original', 'Télécharger la lecture d\'origine'),
         ('GET', '/demandes/{n°}/livrables/{version}', 'Télécharger le fichier livré'),

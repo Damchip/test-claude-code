@@ -7,6 +7,7 @@ Base SÉPARÉE de la bibliothèque de solutions : le portail (exposé sur intern
   clients     : un compte pro par société (statut en_attente -> actif / bloque)
   mouvements  : journal des crédits (achat, débit, remboursement, ajustement)
   jetons      : liens « mot de passe oublié » (seule l'empreinte SHA-256 est stockée)
+  utilisateurs: personnes rattachées à un compte client (même solde, connexion propre)
 """
 import datetime as dt
 import hashlib
@@ -58,7 +59,21 @@ CREATE TABLE IF NOT EXISTS jetons (
     expire INTEGER NOT NULL,
     utilise INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS utilisateurs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL REFERENCES clients(id),
+    nom TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    mdp_hash TEXT NOT NULL,
+    peut_acheter INTEGER NOT NULL DEFAULT 0,
+    actif INTEGER NOT NULL DEFAULT 1,
+    langue TEXT NOT NULL DEFAULT 'fr',
+    cree_le TEXT NOT NULL,
+    derniere_connexion TEXT
+);
+CREATE INDEX IF NOT EXISTS utilisateurs_client ON utilisateurs(client_id);
 """
+UTILISATEURS_MAX = 10
 
 
 class ErreurCompte(ValueError):
@@ -94,6 +109,8 @@ COLONNES_AJOUTEES = [
     ("ville", "TEXT NOT NULL DEFAULT ''"),
     ("pays", "TEXT NOT NULL DEFAULT 'France'"),
     ("langue", "TEXT NOT NULL DEFAULT 'fr'"),
+    ("sms_mobile", "TEXT NOT NULL DEFAULT ''"),     # alertes SMS (numéro au format international)
+    ("sms_actif", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -104,6 +121,8 @@ def init_db(db_path=DEFAULT_DB):
         for nom, decl in COLONNES_AJOUTEES:
             if nom not in existantes:
                 con.execute(f"ALTER TABLE clients ADD COLUMN {nom} {decl}")
+        if "utilisateur_id" not in {r["name"] for r in con.execute("PRAGMA table_info(jetons)")}:
+            con.execute("ALTER TABLE jetons ADD COLUMN utilisateur_id INTEGER")
 
 
 def sauvegarder(db_path=DEFAULT_DB, garder=30):
@@ -218,6 +237,8 @@ def creer_client(db_path, *, societe, siret, tva, contact, email, tel, mdp,
     if not email_valide(email):
         raise ErreurCompte("Adresse e-mail invalide.")
     _verifier_mdp(mdp)
+    if email_pris(db_path, email):
+        raise ErreurCompte("Un compte existe déjà avec cette adresse e-mail.")
     try:
         with connect(db_path) as con:
             cur = con.execute(
@@ -342,12 +363,13 @@ def _empreinte(jeton):
     return hashlib.sha256(jeton.encode()).hexdigest()
 
 
-def creer_jeton(db_path, client_id, duree=JETON_DUREE):
+def creer_jeton(db_path, client_id, duree=JETON_DUREE, utilisateur_id=None):
+    """Lien de (ré)initialisation du mot de passe : du titulaire, ou d'un utilisateur rattaché."""
     jeton = secrets.token_urlsafe(32)
     with connect(db_path) as con:
         con.execute("DELETE FROM jetons WHERE expire < ? OR utilise = 1", (int(time.time()),))
-        con.execute("INSERT INTO jetons (empreinte, client_id, expire) VALUES (?, ?, ?)",
-                    (_empreinte(jeton), client_id, int(time.time()) + duree))
+        con.execute("INSERT INTO jetons (empreinte, client_id, expire, utilisateur_id) VALUES (?, ?, ?, ?)",
+                    (_empreinte(jeton), client_id, int(time.time()) + duree, utilisateur_id))
     return jeton
 
 
@@ -362,14 +384,154 @@ def reinitialiser_mdp(db_path, jeton, mdp):
     _verifier_mdp(mdp)
     with connect(db_path) as con:
         con.execute("BEGIN IMMEDIATE")
-        row = con.execute("SELECT client_id FROM jetons WHERE empreinte = ? AND utilise = 0 AND expire >= ?",
+        row = con.execute("SELECT client_id, utilisateur_id FROM jetons WHERE empreinte = ? AND utilise = 0 AND expire >= ?",
                           (_empreinte(jeton or ""), int(time.time()))).fetchone()
         if not row:
             raise ErreurCompte("Ce lien a expiré ou a déjà servi. Refaites une demande.")
-        con.execute("UPDATE jetons SET utilise = 1 WHERE client_id = ?", (row["client_id"],))
-        con.execute("UPDATE clients SET mdp_hash = ? WHERE id = ?",
-                    (generate_password_hash(mdp), row["client_id"]))
+        # les autres liens de la MÊME personne deviennent inutilisables
+        con.execute("UPDATE jetons SET utilise = 1 WHERE client_id = ? AND utilisateur_id IS ?",
+                    (row["client_id"], row["utilisateur_id"]))
+        if row["utilisateur_id"]:
+            con.execute("UPDATE utilisateurs SET mdp_hash = ? WHERE id = ? AND client_id = ?",
+                        (generate_password_hash(mdp), row["utilisateur_id"], row["client_id"]))
+        else:
+            con.execute("UPDATE clients SET mdp_hash = ? WHERE id = ?",
+                        (generate_password_hash(mdp), row["client_id"]))
         return row["client_id"]
+
+
+def jeton_utilisateur(db_path, jeton):
+    """Utilisateur rattaché visé par un lien (None pour le titulaire du compte)."""
+    with connect(db_path) as con:
+        row = con.execute("SELECT utilisateur_id FROM jetons WHERE empreinte = ?", (_empreinte(jeton or ""),)).fetchone()
+    return row["utilisateur_id"] if row else None
+
+
+# --- Utilisateurs rattachés à un compte client -------------------------------
+
+def email_pris(db_path, email):
+    with connect(db_path) as con:
+        return bool(con.execute("SELECT 1 FROM clients WHERE email = ? UNION ALL SELECT 1 FROM utilisateurs WHERE email = ?",
+                                ((email or "").strip(), (email or "").strip())).fetchone())
+
+
+def creer_utilisateur(db_path, client_id, *, nom, email, peut_acheter=False, mdp=None, langue="fr"):
+    """Ajoute une personne au compte (même solde, mêmes fichiers). Sans mot de passe : un mot de passe
+    aléatoire est posé et l'appelant envoie une invitation."""
+    nom = (nom or "").strip()[:80]
+    email = (email or "").strip().lower()
+    if not nom:
+        raise ErreurCompte("Indiquez le nom de la personne.")
+    if not email_valide(email):
+        raise ErreurCompte("Adresse e-mail invalide.")
+    if mdp is not None:
+        _verifier_mdp(mdp)
+    if email_pris(db_path, email):
+        raise ErreurCompte("Un compte existe déjà avec cette adresse e-mail.")
+    with connect(db_path) as con:
+        n = con.execute("SELECT COUNT(*) n FROM utilisateurs WHERE client_id = ? AND actif = 1", (client_id,)).fetchone()["n"]
+        if n >= UTILISATEURS_MAX:
+            raise ErreurCompte(f"{UTILISATEURS_MAX} utilisateurs au maximum par compte.")
+        try:
+            return con.execute(
+                "INSERT INTO utilisateurs (client_id, nom, email, mdp_hash, peut_acheter, langue, cree_le)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (client_id, nom, email, generate_password_hash(mdp or secrets.token_urlsafe(24)), int(bool(peut_acheter)),
+                 (langue or "fr")[:5], _now())).lastrowid
+        except sqlite3.IntegrityError:
+            raise ErreurCompte("Un compte existe déjà avec cette adresse e-mail.")
+
+
+def lister_utilisateurs(db_path, client_id):
+    with connect(db_path) as con:
+        return [dict(r) for r in con.execute(
+            "SELECT id, nom, email, peut_acheter, actif, cree_le, derniere_connexion FROM utilisateurs"
+            " WHERE client_id = ? AND email NOT LIKE '%@invalid' ORDER BY nom", (client_id,))]
+
+
+def get_utilisateur(db_path, utilisateur_id, client_id=None):
+    sql, args = "SELECT * FROM utilisateurs WHERE id = ?", [utilisateur_id]
+    if client_id is not None:
+        sql += " AND client_id = ?"
+        args.append(client_id)
+    with connect(db_path) as con:
+        row = con.execute(sql, args).fetchone()
+    return dict(row) if row else None
+
+
+def utilisateur_par_email(db_path, email):
+    with connect(db_path) as con:
+        row = con.execute("SELECT * FROM utilisateurs WHERE email = ?", ((email or "").strip(),)).fetchone()
+    return dict(row) if row else None
+
+
+def modifier_utilisateur(db_path, client_id, utilisateur_id, *, actif=None, peut_acheter=None):
+    with connect(db_path) as con:
+        if actif is not None:
+            con.execute("UPDATE utilisateurs SET actif = ? WHERE id = ? AND client_id = ?",
+                        (int(bool(actif)), utilisateur_id, client_id))
+        if peut_acheter is not None:
+            con.execute("UPDATE utilisateurs SET peut_acheter = ? WHERE id = ? AND client_id = ?",
+                        (int(bool(peut_acheter)), utilisateur_id, client_id))
+
+
+def supprimer_utilisateur(db_path, client_id, utilisateur_id):
+    """Retire l'accès. Le nom reste sur les demandes qu'il a envoyées ; l'e-mail est libéré."""
+    with connect(db_path) as con:
+        con.execute("UPDATE utilisateurs SET actif = 0, email = ?, mdp_hash = ? WHERE id = ? AND client_id = ?",
+                    (f"supprime-u{int(utilisateur_id)}@invalid", generate_password_hash(secrets.token_hex(32)),
+                     utilisateur_id, client_id))
+        con.execute("DELETE FROM jetons WHERE utilisateur_id = ?", (utilisateur_id,))
+
+
+def changer_mdp_utilisateur(db_path, utilisateur_id, actuel, nouveau):
+    u = get_utilisateur(db_path, utilisateur_id)
+    if not u or not check_password_hash(u["mdp_hash"], actuel or ""):
+        raise ErreurCompte("Mot de passe actuel incorrect.")
+    _verifier_mdp(nouveau)
+    with connect(db_path) as con:
+        con.execute("UPDATE utilisateurs SET mdp_hash = ? WHERE id = ?", (generate_password_hash(nouveau), utilisateur_id))
+
+
+def authentifier_compte(db_path, email, mdp):
+    """Connexion à l'espace client : titulaire OU utilisateur rattaché.
+    Renvoie (client, utilisateur ou None), ou None si identifiants incorrects."""
+    c = authentifier(db_path, email, mdp) if client_par_email(db_path, email) else None
+    if c:
+        return c, None
+    u = utilisateur_par_email(db_path, email)
+    if not u:
+        if not client_par_email(db_path, email):
+            check_password_hash(_HASH_FACTICE, mdp or "")
+        return None
+    if not check_password_hash(u["mdp_hash"], mdp or "") or not u["actif"]:
+        return None
+    with connect(db_path) as con:
+        con.execute("UPDATE utilisateurs SET derniere_connexion = ? WHERE id = ?", (_now(), u["id"]))
+    return get_client(db_path, u["client_id"]), u
+
+
+# --- Alertes SMS -------------------------------------------------------------
+
+def normaliser_mobile(raw, pays="France"):
+    """Numéro au format international (+33612345678). Les numéros français 06/07 sont convertis."""
+    n = re.sub(r"[\s.\-()]", "", raw or "")
+    if n.startswith("00"):
+        n = "+" + n[2:]
+    if re.fullmatch(r"0[67]\d{8}", n) and est_en_france(pays):
+        n = "+33" + n[1:]
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", n):
+        raise ErreurCompte("Numéro de mobile invalide (ex. 06 12 34 56 78 ou +33 6 12 34 56 78).")
+    return n
+
+
+def changer_sms(db_path, client_id, mobile, actif):
+    c = get_client(db_path, client_id)
+    mobile = normaliser_mobile(mobile, c["pays"] if c else "France") if (mobile or "").strip() else ""
+    if actif and not mobile:
+        raise ErreurCompte("Indiquez un numéro de mobile pour recevoir les SMS.")
+    with connect(db_path) as con:
+        con.execute("UPDATE clients SET sms_mobile = ?, sms_actif = ? WHERE id = ?", (mobile, int(bool(actif)), client_id))
 
 
 # --- Anti-force brute (mémoire du processus) ---------------------------------

@@ -271,7 +271,7 @@ EN = {
     'Prestations, packs, garanties et prix': 'Services, packs, warranties and prices',
     "Tarif d'une sélection (JSON : categorie, prestations[])": 'Price of a selection (JSON: categorie, prestations[])',
     'Liste de vos demandes (filtre ?statut=)': 'List of your requests (filter ?statut=)',
-    'Envoyer un fichier (multipart : file + champs) — débite les crédits': 'Upload a file (multipart: file + fields) — charges credits',
+    'Envoyer un fichier (multipart : file + champs, annexes, express=1) — débite les crédits': 'Upload a file (multipart: file + fields, annexes, express=1) — charges credits',
     'Détail : statut, fichiers livrés, messages': 'Details: status, delivered files, messages',
     "Télécharger la lecture d'origine": 'Download the original read',
     'Télécharger le fichier livré': 'Download the delivered file',
@@ -348,6 +348,50 @@ EN = {
     'Fichier livré': 'Delivered file',
     'Commentaire': 'Comment',
     'Document récapitulatif, sans valeur de facture : les crédits sont facturés à leur achat (Crédits & factures).': 'Summary document, not an invoice: credits are invoiced when purchased (Credits & invoices).',
+    # --- v1.56 : express, fichiers complémentaires, utilisateurs, SMS ---
+    'Trop de fichiers complémentaires.': 'Too many additional files.',
+    "L'achat de crédits et les factures sont gérés par le titulaire du compte. Demandez-lui de recharger si besoin.": 'Credit purchases and invoices are managed by the account holder. Ask them to top up if needed.',
+    'Express': 'Express',
+    'Fichier refusé :': 'File declined:',
+    'Répondez dans la conversation ci-dessous, le traitement reprend aussitôt.': 'Reply in the conversation below and processing resumes right away.',
+    'Vos {n} crédits ont été remboursés.': 'Your {n} credits have been refunded.',
+    'par': 'by',
+    'Fichiers complémentaires': 'Additional files',
+    "Lecture EEPROM, boîte de vitesses, sauvegarde complète, photo de l'étiquette… Précisez dans le commentaire.": 'EEPROM read, gearbox, full backup, photo of the label… Explain in the comment.',
+    'Traitement express': 'Express processing',
+    "Traité en priorité pendant nos horaires d'ouverture": 'Handled first during our opening hours',
+    'optionnel, {n} max.': 'optional, {n} max.',
+    'Alertes SMS': 'SMS alerts',
+    'Aucun utilisateur : vous êtes seul sur ce compte.': 'No users: you are the only one on this account.',
+    "Autoriser l'achat": 'Allow purchases',
+    'Connecté en tant que {nom} ({email}), utilisateur du compte {societe}.': 'Signed in as {nom} ({email}), user of the {societe} account.',
+    'Désactiver': 'Disable',
+    'Inviter': 'Invite',
+    'Mobile': 'Mobile',
+    'Nom': 'Name',
+    'Peut acheter des crédits': 'Can buy credits',
+    'Recevoir les SMS': 'Receive SMS',
+    'Retirer': 'Remove',
+    'Retirer définitivement cet utilisateur ?': 'Permanently remove this user?',
+    "Retirer l'achat": 'Disallow purchases',
+    'Réactiver': 'Re-enable',
+    'Seul le titulaire du compte peut modifier ces informations.': 'Only the account holder can change these details.',
+    "Un SMS quand un fichier est prêt ou quand l'atelier a besoin d'une précision, en plus de l'e-mail.": 'A text message when a file is ready or when the shop needs more information, in addition to the email.',
+    'Utilisateurs du compte': 'Account users',
+    "Vos techniciens se connectent avec leur propre e-mail et utilisent le même solde de crédits. Chaque demande indique qui l'a envoyée.": 'Your technicians sign in with their own email and share the same credit balance. Each request shows who sent it.',
+    'dernière connexion': 'last login',
+    'désactivé': 'disabled',
+    'envoi de fichiers uniquement': 'file uploads only',
+    'jamais connecté': 'never signed in',
+    'peut acheter des crédits': 'can buy credits',
+    'Réservé au titulaire du compte.': 'Reserved for the account holder.',
+    'Préférences SMS enregistrées.': 'SMS preferences saved.',
+    'Utilisateur retiré : il ne peut plus se connecter.': 'User removed: they can no longer sign in.',
+    'Utilisateur mis à jour.': 'User updated.',
+    'Indiquez le nom de la personne.': "Enter the person's name.",
+    'Numéro de mobile invalide (ex. 06 12 34 56 78 ou +33 6 12 34 56 78).': 'Invalid mobile number (e.g. +44 7700 900123).',
+    'Indiquez un numéro de mobile pour recevoir les SMS.': 'Enter a mobile number to receive text messages.',
+    'Traitement express (prioritaire)': 'Express processing (priority)',
 }
 
 TABLE = {"fr": {}, "en": EN}
@@ -372,6 +416,11 @@ MOTIFS_EN = [
      "A revision is only possible within {0} days of delivery."),
     (re.compile(r"^Prestation indisponible pour ce véhicule : (.+)$"), "Service unavailable for this vehicle: {0}"),
     (re.compile(r"^(\d+) clés actives au maximum : révoquez-en une\.$"), "{0} active keys at most: revoke one."),
+    (re.compile(r"^(\d+) fichiers complémentaires au maximum\.$"), "{0} additional files at most."),
+    (re.compile(r"^(\d+) utilisateurs au maximum par compte\.$"), "{0} users at most per account."),
+    (re.compile(r"^Invitation envoyée à (\S+) \(lien valable 7 jours\)\.$"), "Invitation sent to {0} (link valid for 7 days)."),
+    (re.compile(r"^Utilisateur ajouté, mais l'e-mail n'a pas pu partir : transmettez-lui ce lien \(valable 7 jours\) : (\S+)$"),
+     "User added, but the email could not be sent: give them this link (valid for 7 days): {0}"),
 ]
 
 
@@ -421,6 +470,16 @@ MAILS = {
                "Vous pourrez ensuite vous connecter avec l'adresse {email}.\n\n{atelier}"),
         "en": ("{atelier} — your file service account is ready",
                "Hello,\n\n{atelier} has opened a file service account for {societe}.\n"
+               "Choose your password with this link (valid for 7 days):\n{lien}\n\n"
+               "You can then sign in with {email}.\n\n{atelier}"),
+    },
+    "invitation_membre": {
+        "fr": ("{societe} vous invite sur le fileservice {atelier}",
+               "Bonjour,\n\n{nom} vous a ajouté au compte fileservice de {societe} chez {atelier}.\n"
+               "Choisissez votre mot de passe avec ce lien (valable 7 jours) :\n{lien}\n\n"
+               "Vous pourrez ensuite vous connecter avec l'adresse {email}.\n\n{atelier}"),
+        "en": ("{societe} invites you to the {atelier} file service",
+               "Hello,\n\n{nom} has added you to the {societe} file service account at {atelier}.\n"
                "Choose your password with this link (valid for 7 days):\n{lien}\n\n"
                "You can then sign in with {email}.\n\n{atelier}"),
     },
@@ -499,3 +558,17 @@ def mail(cle, langue, **champs):
     modele = MAILS[cle].get(normaliser(langue)) or MAILS[cle]["fr"]
     ch = _Defaut(champs)
     return modele[0].format_map(ch), modele[1].format_map(ch)
+
+
+# --- SMS (courts : numéro de demande + lien) -------------------------------------
+SMS = {
+    "fichier_pret": {"fr": "{atelier} : votre fichier {numero} est prêt. {lien}",
+                     "en": "{atelier}: your file {numero} is ready. {lien}"},
+    "info_requise": {"fr": "{atelier} : une précision est nécessaire pour votre fichier {numero}. {lien}",
+                     "en": "{atelier}: we need more information for your file {numero}. {lien}"},
+}
+
+
+def sms(cle, langue, **champs):
+    modele = SMS[cle].get(normaliser(langue)) or SMS[cle]["fr"]
+    return modele.format_map(_Defaut(champs)).strip()

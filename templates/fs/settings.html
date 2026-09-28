@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>{{ t("Paramètres") }}</h1>
-    <p>{{ t("Coordonnées de facturation et sécurité du compte.") }}</p>
+    <p>{{ t("Coordonnées de facturation et sécurité du compte.") if not moi else t("Connecté en tant que {nom} ({email}), utilisateur du compte {societe}.").format(nom=moi.nom, email=moi.email, societe=c.societe) }}</p>
   </div>
 </div>
 
@@ -14,7 +14,7 @@
     <form method="post" class="card-body stack">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="profil">
-      <div class="form-grid">
+      <fieldset class="form-grid" style="border: 0; padding: 0; margin: 0" {{ 'disabled' if moi }}>
         <div class="field"><label>{{ t("Société") }}</label><input class="input" value="{{ c.societe }}" disabled></div>
         <div class="field"><label>SIRET</label><input class="input mono" value="{{ c.siret }}" disabled></div>
         <div class="field"><label>{{ t("E-mail de connexion") }}</label><input class="input" value="{{ c.email }}" disabled></div>
@@ -25,9 +25,13 @@
         <div class="field"><label for="code_postal">{{ t("Code postal") }}</label><input class="input" id="code_postal" name="code_postal" value="{{ c.code_postal }}"></div>
         <div class="field"><label for="ville">{{ t("Ville") }}</label><input class="input" id="ville" name="ville" value="{{ c.ville }}"></div>
         <div class="field full"><label for="pays">{{ t("Pays") }}</label><input class="input" id="pays" name="pays" value="{{ c.pays }}"></div>
-      </div>
+      </fieldset>
+      {% if moi %}
+      <p class="muted small">{{ t("Seul le titulaire du compte peut modifier ces informations.") }}</p>
+      {% else %}
       <p class="muted small">{{ t("Pour changer la société, le SIRET ou l'e-mail de connexion, contactez l'atelier.") }}</p>
       <div><button class="btn btn-primary" type="submit">{{ t("Enregistrer") }}</button></div>
+      {% endif %}
     </form>
   </section>
 
@@ -41,6 +45,20 @@
       <div class="field"><label for="nouveau2">{{ t("Confirmation") }}</label><input class="input" type="password" id="nouveau2" name="nouveau2" minlength="10" autocomplete="new-password" required></div>
       <button class="btn btn-block" type="submit">{{ t("Changer le mot de passe") }}</button>
     </form>
+    {% if not moi %}
+    {% if sms_dispo %}
+    <div class="card-body" style="border-top: 1px solid var(--line-soft)">
+      <h3>{{ t("Alertes SMS") }}</h3>
+      <p class="muted small" style="margin: 6px 0 12px">{{ t("Un SMS quand un fichier est prêt ou quand l'atelier a besoin d'une précision, en plus de l'e-mail.") }}</p>
+      <form method="post" class="stack" style="gap: 10px">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="sms">
+        <div class="field"><label for="mobile">{{ t("Mobile") }}</label><input class="input" id="mobile" name="mobile" value="{{ c.sms_mobile }}" placeholder="06 12 34 56 78" inputmode="tel"></div>
+        <label class="switch"><span>{{ t("Recevoir les SMS") }}</span><input type="checkbox" name="sms_actif" value="1" {{ 'checked' if c.sms_actif }}><span class="track"></span></label>
+        <button class="btn btn-block" type="submit">{{ t("Enregistrer") }}</button>
+      </form>
+    </div>
+    {% endif %}
     <div class="card-body" style="border-top: 1px solid var(--line-soft)">
       <h3>{{ t("Mes données") }}</h3>
       <p class="muted small" style="margin: 6px 0 12px">{{ t("Téléchargez toutes les données de votre compte (coordonnées, demandes, messages, crédits, factures). Pour supprimer votre compte, écrivez à l'atelier.") }}{% if shop.email %} ({{ shop.email }}){% endif %}</p>
@@ -51,6 +69,47 @@
       <p class="muted small" style="margin: 6px 0 12px">{{ t("Connectez votre propre logiciel ou site : envoi de fichiers, suivi et téléchargement automatiques.") }}</p>
       <a class="btn btn-block" href="{{ url_for('fs.settings_api') }}">{{ icon('settings', 'icon-sm') }} {{ t('Clés et documentation') }}</a>
     </div>
+    {% endif %}
   </aside>
 </div>
+
+{% if not moi %}
+<section class="card" style="margin-top: 20px" id="utilisateurs">
+  <div class="card-head"><div><h2>{{ t("Utilisateurs du compte") }}</h2>
+    <p class="sub">{{ t("Vos techniciens se connectent avec leur propre e-mail et utilisent le même solde de crédits. Chaque demande indique qui l'a envoyée.") }}</p></div></div>
+  {% for u in utilisateurs %}
+  <div class="file-row">
+    <span class="avatar">{{ u.nom[:2]|upper }}</span>
+    <div class="grow">
+      <div class="name">{{ u.nom }} {% if not u.actif %}<span class="badge refuse">{{ t("désactivé") }}</span>{% endif %}</div>
+      <div class="muted small">{{ u.email }} · {{ t("peut acheter des crédits") if u.peut_acheter else t("envoi de fichiers uniquement") }}
+        · {{ (t("dernière connexion") ~ " " ~ (u.derniere_connexion|date_fr)) if u.derniere_connexion else t("jamais connecté") }}</div>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap">
+      <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="utilisateur_achat">
+        <input type="hidden" name="id" value="{{ u.id }}"><input type="hidden" name="valeur" value="{{ 0 if u.peut_acheter else 1 }}">
+        <button class="btn btn-sm btn-ghost" type="submit">{{ t("Retirer l'achat") if u.peut_acheter else t("Autoriser l'achat") }}</button></form>
+      <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="utilisateur_actif">
+        <input type="hidden" name="id" value="{{ u.id }}"><input type="hidden" name="valeur" value="{{ 0 if u.actif else 1 }}">
+        <button class="btn btn-sm btn-ghost" type="submit">{{ t("Désactiver") if u.actif else t("Réactiver") }}</button></form>
+      <form method="post" data-confirm="{{ t('Retirer définitivement cet utilisateur ?') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="utilisateur_suppr"><input type="hidden" name="id" value="{{ u.id }}">
+        <button class="btn btn-sm" type="submit">{{ t("Retirer") }}</button></form>
+    </div>
+  </div>
+  {% else %}
+  <p class="empty">{{ t("Aucun utilisateur : vous êtes seul sur ce compte.") }}</p>
+  {% endfor %}
+  {% if utilisateurs|selectattr('actif')|list|length < utilisateurs_max %}
+  <form method="post" class="composer" style="flex-wrap: wrap">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="utilisateur_ajout">
+    <input class="input" name="nom" placeholder="{{ t('Nom') }}" required maxlength="80" style="flex: 1 1 160px">
+    <input class="input" name="email" type="email" placeholder="{{ t('E-mail') }}" required style="flex: 2 1 220px">
+    <label class="muted small" style="display: flex; gap: 6px; align-items: center"><input type="checkbox" name="peut_acheter" value="1"> {{ t("Peut acheter des crédits") }}</label>
+    <button class="btn btn-primary" type="submit">{{ icon('plus', 'icon-sm') }} {{ t("Inviter") }}</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

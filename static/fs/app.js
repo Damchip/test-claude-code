@@ -107,6 +107,7 @@
         categorie: cat, prestations: codes,
         siege: $('#siege').checked,
         garantie: ($('input[name="garantie"]:checked', form) || {}).value || null,
+        express: !!($('#express') && $('#express').checked),
       };
       const mine = ++seq;
       let d;
@@ -137,7 +138,10 @@
       const afterEl = $('#sumAfter');
       afterEl.textContent = after + ' ' + T.cr;
       afterEl.style.color = after < 0 ? 'var(--danger)' : '';
-      $('#submitBtn').disabled = !codes.length || after < 0 || !!d.erreur || !input.files.length;
+      const ann = $('#annexes');
+      const tropAnnexes = ann && ann.files.length > (parseInt(ann.dataset.annexes, 10) || 4);
+      if (tropAnnexes && !d.erreur) { err.hidden = false; err.textContent = T.annexes || 'Trop de fichiers complémentaires.'; }
+      $('#submitBtn').disabled = !codes.length || after < 0 || !!d.erreur || !input.files.length || tropAnnexes;
     }
     form.addEventListener('change', e => {
       if (e.target.name === 'categorie') showCategory();

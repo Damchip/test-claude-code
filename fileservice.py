@@ -26,6 +26,7 @@ import livraison_auto
 import mailer
 import pages_legales
 import relances
+import sms
 import stripe_api
 import traductions
 
@@ -148,7 +149,25 @@ def _initiales(nom):
 
 
 def _nom_client():
+    if g.utilisateur:
+        return g.utilisateur["nom"]
     return g.client["contact"] or g.client["societe"]
+
+
+def titulaire():
+    """Vrai pour le titulaire du compte, faux pour un utilisateur rattaché."""
+    return g.utilisateur is None
+
+
+def peut_acheter():
+    return titulaire() or bool(g.utilisateur["peut_acheter"])
+
+
+def _reserve_titulaire():
+    if not titulaire():
+        flash("Réservé au titulaire du compte.", "erreur")
+        return redirect(url_for("fs.dashboard"))
+    return None
 
 
 @bp.app_template_filter("euros")
@@ -204,14 +223,17 @@ def _securite():
             flash("Session expirée, merci de réessayer.")
             return redirect(request.url)
 
-    g.client = None
+    g.client = g.utilisateur = None
     cid = session.get("client_id")
     if cid:
         c = comptes.get_client(_db(), cid)
-        if c and c["statut"] == "actif":
-            g.client = c
+        uid = session.get("utilisateur_id")
+        u = comptes.get_utilisateur(_db(), uid, cid) if uid else None
+        if c and c["statut"] == "actif" and (not uid or (u and u["actif"])):
+            g.client, g.utilisateur = c, u
         else:
             session.pop("client_id", None)
+            session.pop("utilisateur_id", None)
     if g.client is None and request.endpoint not in PUBLIC_ENDPOINTS:
         if request.is_json:
             return jsonify({"erreur": "Connexion requise."}), 401
@@ -234,7 +256,10 @@ def set_langue(code):
     cible = _safe_next(request.args.get("next"))
     resp = redirect(cible)
     resp.set_cookie("lang", code, max_age=31536000, samesite="Lax")
-    if g.client:
+    if g.utilisateur:
+        with comptes.connect(_db()) as con:
+            con.execute("UPDATE utilisateurs SET langue = ? WHERE id = ?", (code, g.utilisateur["id"]))
+    elif g.client:
         comptes.changer_langue(_db(), g.client["id"], code)   # ses e-mails suivront cette langue
     return resp
 
@@ -245,9 +270,10 @@ def _inject():
     c = getattr(g, "client", None)
     if c:
         st = demandes.stats(_db(), c["id"])
-        user = {"company": c["societe"], "contact": c["contact"] or c["societe"],
-                "initials": _initiales(c["contact"] or c["societe"]), "credits": c["credits"],
-                "level": c["niveau"], "open_count": st["ouverts"]}
+        nom = g.utilisateur["nom"] if g.utilisateur else (c["contact"] or c["societe"])
+        user = {"company": c["societe"], "contact": nom, "initials": _initiales(nom), "credits": c["credits"],
+                "level": c["niveau"], "open_count": st["ouverts"], "titulaire": titulaire(),
+                "peut_acheter": peut_acheter()}
     return {"shop": shop(), "user": user, "service": service_status(), "statuses": demandes.STATUTS,
             "csrf_token": csrf_token, "t": t, "langue": langue(), "langues": traductions.LANGUES}
 
@@ -272,7 +298,8 @@ def login():
         if LIMITEUR.bloque(*cles):
             erreur = "Trop de tentatives. Réessayez dans 15 minutes ou réinitialisez votre mot de passe."
         else:
-            c = comptes.authentifier(_db(), email, request.form.get("password", ""))
+            res = comptes.authentifier_compte(_db(), email, request.form.get("password", ""))
+            c, u = res if res else (None, None)
             if not c:
                 LIMITEUR.echec(*cles)
                 erreur = "E-mail ou mot de passe incorrect."
@@ -284,6 +311,8 @@ def login():
                 LIMITEUR.reussite(*cles)
                 session.clear()
                 session["client_id"] = c["id"]
+                if u:
+                    session["utilisateur_id"] = u["id"]
                 session.permanent = bool(request.form.get("remember"))
                 return redirect(_safe_next(request.args.get("next")))
     return render_template("fs/login.html", mode="login", erreur=erreur, email=email)
@@ -330,9 +359,13 @@ def forgot():
         if not LIMITEUR.bloque("oubli:" + _ip()):
             LIMITEUR.echec("oubli:" + _ip())
             c = comptes.client_par_email(_db(), email)
+            u = None if c else comptes.utilisateur_par_email(_db(), email)
+            if u and u["actif"]:
+                c = comptes.get_client(_db(), u["client_id"])
             if c and c["statut"] != "bloque":
-                lien = _url_publique("fs.reset", jeton=comptes.creer_jeton(_db(), c["id"]))
-                _mail(c["email"], *traductions.mail("reset", c.get("langue"), atelier=shop()["name"], lien=lien))
+                jeton = comptes.creer_jeton(_db(), c["id"], utilisateur_id=u["id"] if u else None)
+                dest, lg = (u["email"], u["langue"]) if u else (c["email"], c.get("langue"))
+                _mail(dest, *traductions.mail("reset", lg, atelier=shop()["name"], lien=_url_publique("fs.reset", jeton=jeton)))
         envoye = True   # même réponse que le compte existe ou non
     return render_template("fs/login.html", mode="forgot", envoye=envoye)
 
@@ -379,9 +412,10 @@ CHAMPS_VEHICULE = ("marque", "modele", "moteur", "annee", "boite", "km", "vin", 
 CHAMPS_LECTURE = ("outil", "ecu", "methode")
 
 
-def creer_demande(champs, prestations, fichier_nom, contenu, source="site"):
+def creer_demande(champs, prestations, fichier_nom, contenu, source="site", annexes=None):
     """Crée une demande pour le client connecté (g.client) : site et API passent par ici.
-    Lève ErreurCompte. Renvoie (demande, livree_automatiquement)."""
+    annexes : [(nom, octets)] fichiers complémentaires. Lève ErreurCompte.
+    Renvoie (demande, livree_automatiquement)."""
     detection = {}
     detect = current_app.config.get("FS_DETECT")
     if detect and contenu:
@@ -395,16 +429,21 @@ def creer_demande(champs, prestations, fichier_nom, contenu, source="site"):
         vehicule={k: champs.get(k, "") for k in CHAMPS_VEHICULE},
         lecture={k: champs.get(k, "") for k in CHAMPS_LECTURE},
         commentaire=champs.get("comment", "") or champs.get("commentaire", ""), fichier_nom=fichier_nom or "",
-        contenu=contenu, detection=detection, **_remise_client())
+        contenu=contenu, detection=detection, annexes=annexes,
+        express=catalogue.supplement_express(reglages(), _vrai(champs.get("express"))),
+        utilisateur_id=g.utilisateur["id"] if getattr(g, "utilisateur", None) else None, **_remise_client())
     d = demandes.get(_db(), did)
     livre = _livraison_auto_reception(d, contenu)
     veh = " ".join(v for v in (d["vehicule"].get("marque"), d["vehicule"].get("modele"),
                                d["vehicule"].get("moteur")) if v)
-    _mail_atelier(f"Nouveau fichier {d['numero']} · {g.client['societe']}" + (" (API)" if source == "api" else ""),
-                  f"Client : {g.client['societe']} ({g.client['email']})\nVéhicule : {veh or '—'}\n"
+    _mail_atelier(("⚡ EXPRESS · " if d["express"] else "") + f"Nouveau fichier {d['numero']} · {g.client['societe']}"
+                  + (" (API)" if source == "api" else ""),
+                  f"Client : {g.client['societe']} ({g.client['email']})"
+                  + (f" · envoyé par {d['envoye_par']}" if d.get("envoye_par") else "") + f"\nVéhicule : {veh or '—'}\n"
                   f"Calculateur : {d['lecture'].get('ecu') or d['detection'].get('plateforme') or '—'}\n"
                   f"Prestations : {' + '.join(l['nom'] for l in d['lignes'])}\nCrédits : {d['total']}\n"
-                  f"Commentaire : {d['commentaire'] or '—'}\n\n"
+                  f"Commentaire : {d['commentaire'] or '—'}\n"
+                  + (f"Fichiers complémentaires : {len(annexes)}\n" if annexes else "") + "\n"
                   + ("Livré AUTOMATIQUEMENT (solution même stock, patch propre)." if livre else
                      "À traiter dans l'outil interne, onglet Fileservice."))
     try:
@@ -414,13 +453,22 @@ def creer_demande(champs, prestations, fichier_nom, contenu, source="site"):
     return demandes.get(_db(), did), livre
 
 
+def _vrai(v):
+    return str(v or "").strip().lower() in ("1", "true", "on", "oui", "yes")
+
+
+def _annexes_envoyees(liste):
+    return [(a.filename, a.read()) for a in liste if a and a.filename]
+
+
 @bp.route("/nouveau", methods=["GET", "POST"])
 def new_file():
     if request.method == "POST":
         f = request.files.get("file")
         try:
             d, livre = creer_demande(request.form, request.form.getlist("prestas"),
-                                     f.filename if f else "", f.read() if f else b"")
+                                     f.filename if f else "", f.read() if f else b"",
+                                     annexes=_annexes_envoyees(request.files.getlist("annexes")))
         except comptes.ErreurCompte as e:
             flash(str(e), "erreur")
             return redirect(url_for("fs.new_file"))
@@ -431,7 +479,8 @@ def new_file():
         return redirect(url_for("fs.file_detail", numero=d["numero"]))
     return render_template("fs/new.html", nav="new", categories=catalogue.CATEGORIES,
                            prestations=catalogue.PRESTATIONS, services=catalogue.SERVICES,
-                           garanties=catalogue.GARANTIES, retours=catalogue.RETOURS, tools=TOOLS)
+                           garanties=catalogue.GARANTIES, retours=catalogue.RETOURS, tools=TOOLS,
+                           express=catalogue.express(reglages()), annexes_max=demandes.ANNEXES_MAX)
 
 
 def _livraison_auto_reception(d, contenu):
@@ -446,8 +495,8 @@ def _livraison_auto_reception(d, contenu):
         demandes.livrer(_db(), _files(), d["id"], livraison_auto.nom_fichier(d), prep["patched"],
                         f"{' + '.join(cr['types'])} · checksum {cr['checksum'] or 'OK'}")
         livraison_auto.journaliser(current_app.config["FS_SOLUTIONS_DB"], d, prep, "automatique")
-        _mail(d["email"], *traductions.mail("fichier_pret", d.get("langue"), atelier=shop()["name"],
-                                            numero=d["numero"], lien=_url_publique("fs.file_detail", numero=d["numero"])))
+        prevenir(reglages(), d, "fichier_pret", _url_publique("fs.file_detail", numero=d["numero"]),
+                 journal_dir=current_app.config["FS_DATA_DIR"])
         return True
     except Exception:
         current_app.logger.exception("Livraison automatique impossible pour %s", d["numero"])
@@ -464,7 +513,8 @@ def tarif():
     if not isinstance(codes, list):
         codes = []
     d = catalogue.devis(str(data.get("categorie", "")), [str(c) for c in codes][:20],
-                        siege=bool(data.get("siege")), garantie=str(data.get("garantie") or ""), **_remise_client())
+                        siege=bool(data.get("siege")), garantie=str(data.get("garantie") or ""),
+                        express=catalogue.supplement_express(reglages(), bool(data.get("express"))), **_remise_client())
     for ligne in d["lignes"]:
         ligne["nom"] = t(ligne["nom"]) if not ligne["nom"].startswith("Remise ") else \
             ligne["nom"].replace("Remise ", t("Remise") + " ", 1)
@@ -501,6 +551,7 @@ def file_detail(numero):
     etapes = {"recu": 0, "en_cours": 1, "attente": 1, "refuse": 1, "pret": 2}
     reached = 3 if d["telecharge_le"] else etapes.get(d["statut"], 0)
     return render_template("fs/file.html", nav="files", f=d, livrables=liv, thread=msgs, reached=reached,
+                           annexes=demandes.annexes(_db(), d["id"]),
                            revision=demandes.revision_possible(d, liv[0] if liv else None),
                            revision_jours=demandes.REVISION_JOURS,
                            categorie_nom=next((c["nom"] for c in catalogue.CATEGORIES if c["code"] == d["categorie"]), ""))
@@ -511,7 +562,7 @@ def file_recap(numero):
     """Récapitulatif imprimable (PDF via le navigateur) d'une demande."""
     d = _demande_ou_404(numero)
     return render_template("fs/recapitulatif.html", f=d, livrables=demandes.livrables(_db(), d["id"]),
-                           annexes=[], vendeur=reglages().get("societe") or {},
+                           annexes=demandes.annexes(_db(), d["id"]), vendeur=reglages().get("societe") or {},
                            prix_credit=catalogue.PRIX_CREDIT_EUR)
 
 
@@ -569,6 +620,15 @@ def file_livre(numero, version):
     return _envoyer(d, liv["fichier"], f"{d['numero']}_v{version}_{liv['nom']}")
 
 
+@bp.route("/fichiers/<numero>/annexe/<int:aid>")
+def file_annexe(numero, aid):
+    d = _demande_ou_404(numero)
+    a = next((a for a in demandes.annexes(_db(), d["id"]) if a["id"] == aid and a["fichier"]), None)
+    if not a:
+        abort(404)
+    return _envoyer(d, a["fichier"], a["nom"])
+
+
 @bp.route("/fichiers/<numero>/pj/<int:mid>")
 def file_pj(numero, mid):
     d = _demande_ou_404(numero)
@@ -582,6 +642,11 @@ def file_pj(numero, mid):
 
 @bp.route("/credits")
 def credits():
+    if not peut_acheter():
+        return render_template("fs/credits.html", nav="credits", packs=[], restreint=True,
+                               prix_credit=catalogue.PRIX_CREDIT_EUR, tva=catalogue.TVA,
+                               autoliquidation=factures.autoliquidation(g.client), paiement_en_ligne=False,
+                               transactions=comptes.mouvements(_db(), g.client["id"]), factures=[])
     return render_template("fs/credits.html", nav="credits", packs=catalogue.PACKS_CREDITS,
                            prix_credit=catalogue.PRIX_CREDIT_EUR, tva=catalogue.TVA,
                            autoliquidation=factures.autoliquidation(g.client),
@@ -599,6 +664,8 @@ def _pack(index):
 
 @bp.route("/credits/acheter/<int:index>", methods=["POST"])
 def buy(index):
+    if not peut_acheter():
+        abort(403)
     pack = _pack(index)
     cfg = reglages().get("stripe") or {}
     if not stripe_api.configure(cfg):
@@ -679,6 +746,8 @@ def stripe_webhook():
 
 @bp.route("/factures/<numero>")
 def invoice(numero):
+    if not peut_acheter():
+        abort(403)
     fac = factures.get(_db(), numero, g.client["id"])
     if not fac:
         abort(404)
@@ -690,13 +759,36 @@ def invoice(numero):
 @bp.route("/parametres", methods=["GET", "POST"])
 def settings():
     if request.method == "POST":
+        action = request.form.get("action")
+        if action != "mdp" and not titulaire():
+            abort(403)
         try:
-            if request.form.get("action") == "mdp":
+            if action == "mdp":
                 if request.form.get("nouveau") != request.form.get("nouveau2"):
                     raise comptes.ErreurCompte("Les deux nouveaux mots de passe ne correspondent pas.")
-                comptes.changer_mdp(_db(), g.client["id"], request.form.get("actuel", ""),
-                                    request.form.get("nouveau", ""))
+                if g.utilisateur:
+                    comptes.changer_mdp_utilisateur(_db(), g.utilisateur["id"], request.form.get("actuel", ""),
+                                                    request.form.get("nouveau", ""))
+                else:
+                    comptes.changer_mdp(_db(), g.client["id"], request.form.get("actuel", ""),
+                                        request.form.get("nouveau", ""))
                 flash("Mot de passe modifié.")
+            elif action == "sms":
+                comptes.changer_sms(_db(), g.client["id"], request.form.get("mobile", ""), bool(request.form.get("sms_actif")))
+                flash("Préférences SMS enregistrées.")
+            elif action == "utilisateur_ajout":
+                _ajouter_utilisateur()
+            elif action in ("utilisateur_actif", "utilisateur_achat", "utilisateur_suppr"):
+                uid = int(request.form.get("id") or 0)
+                if action == "utilisateur_suppr":
+                    comptes.supprimer_utilisateur(_db(), g.client["id"], uid)
+                    flash("Utilisateur retiré : il ne peut plus se connecter.")
+                elif action == "utilisateur_actif":
+                    comptes.modifier_utilisateur(_db(), g.client["id"], uid, actif=_vrai(request.form.get("valeur")))
+                    flash("Utilisateur mis à jour.")
+                else:
+                    comptes.modifier_utilisateur(_db(), g.client["id"], uid, peut_acheter=_vrai(request.form.get("valeur")))
+                    flash("Utilisateur mis à jour.")
             else:
                 comptes.modifier_profil(_db(), g.client["id"], **{k: request.form.get(k, "") for k in (
                     "contact", "tel", "tva", "adresse", "code_postal", "ville", "pays")})
@@ -704,12 +796,31 @@ def settings():
         except comptes.ErreurCompte as e:
             flash(str(e), "erreur")
         return redirect(url_for("fs.settings"))
-    return render_template("fs/settings.html", nav="settings", c=g.client)
+    return render_template("fs/settings.html", nav="settings", c=g.client, moi=g.utilisateur,
+                           utilisateurs=comptes.lister_utilisateurs(_db(), g.client["id"]) if titulaire() else [],
+                           utilisateurs_max=comptes.UTILISATEURS_MAX, sms_dispo=sms.configure(reglages()))
+
+
+def _ajouter_utilisateur():
+    """Le titulaire ajoute une personne : invitation par e-mail (lien 7 jours) dans sa langue à lui."""
+    email = (request.form.get("email") or "").strip().lower()
+    uid = comptes.creer_utilisateur(_db(), g.client["id"], nom=request.form.get("nom", ""), email=email,
+                                    peut_acheter=bool(request.form.get("peut_acheter")), langue=langue())
+    jeton = comptes.creer_jeton(_db(), g.client["id"], duree=comptes.JETON_INVITATION, utilisateur_id=uid)
+    lien = _url_publique("fs.reset", jeton=jeton)
+    ok = _mail(email, *traductions.mail("invitation_membre", langue(), atelier=shop()["name"],
+                                        societe=g.client["societe"], nom=_nom_client(), lien=lien, email=email))
+    if ok:
+        flash(f"Invitation envoyée à {email} (lien valable 7 jours).")
+    else:
+        flash(f"Utilisateur ajouté, mais l'e-mail n'a pas pu partir : transmettez-lui ce lien (valable 7 jours) : {lien}")
 
 
 @bp.route("/parametres/mes-donnees")
 def settings_export():
     """Droit d'accès RGPD : toutes les données du compte en JSON."""
+    if not titulaire():
+        abort(403)
     data = demandes.export_client(_db(), g.client["id"])
     resp = current_app.response_class(json.dumps(data, ensure_ascii=False, indent=2), mimetype="application/json")
     resp.headers["Content-Disposition"] = f'attachment; filename="mes-donnees-{dt.date.today():%Y%m%d}.json"'
@@ -720,6 +831,9 @@ def settings_export():
 def settings_api():
     """Clés d'API revendeur du client (création : la clé n'est affichée qu'une fois)."""
     import api
+    refus = _reserve_titulaire()
+    if refus:
+        return refus
     api.init_db(_db())
     api_active = bool(reglages().get("api_active"))
     nouvelle = None
@@ -752,6 +866,26 @@ def legal(cle):
         abort(404)
     return render_template("fs/legal.html", cle=cle, titre=pages_legales.PAGES[cle],
                            contenu=pages_legales.rendre(reglages(), cle), pages=pages_legales.PAGES)
+
+
+def prevenir(cfg, d, cle, lien, journal_dir=None, **champs):
+    """Prévient le client d'un événement sur sa demande : e-mail au titulaire (et à l'utilisateur
+    qui l'a envoyée), SMS si le client l'a demandé. Renvoie un texte pour l'atelier."""
+    nom = cfg.get("shop_name") or "E85-FRANCE"
+    smtp = cfg.get("smtp") or {}
+    ok, err = mailer.envoyer(smtp, d["email"], *traductions.mail(cle, d.get("langue"), atelier=nom, numero=d["numero"],
+                                                                 lien=lien, **champs),
+                             nom_expediteur=nom, journal_dir=journal_dir)
+    infos = ["Client prévenu par e-mail." if ok else err]
+    auteur = d.get("envoye_par_email")
+    if auteur and auteur.lower() != (d["email"] or "").lower() and not auteur.endswith("@invalid"):
+        mailer.envoyer(smtp, auteur, *traductions.mail(cle, d.get("envoye_par_langue"), atelier=nom, numero=d["numero"],
+                                                       lien=lien, **champs), nom_expediteur=nom, journal_dir=journal_dir)
+    if cle in traductions.SMS and d.get("sms_actif") and d.get("sms_mobile") and sms.configure(cfg):
+        sok, serr = sms.envoyer(cfg, d["sms_mobile"], traductions.sms(cle, d.get("langue"), atelier=nom,
+                                                                      numero=d["numero"], lien=lien))
+        infos.append("SMS envoyé." if sok else serr)
+    return " ".join(i for i in infos if i)
 
 
 def executer_relances(app, base_url=""):

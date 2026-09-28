@@ -12,5 +12,5 @@
 {% for l in f.lignes if l.credits > 0 %}<span class="tag">{{ t(l.nom) }}</span>{% endfor %}
 {%- endmacro -%}
 {%- macro badge(f) -%}
-<span class="badge {{ f.statut }}">{{ t(f.statut_label) }}</span>
+<span class="badge {{ f.statut }}">{{ "⚡ " if f.express }}{{ t(f.statut_label) }}</span>
 {%- endmacro -%}

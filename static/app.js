@@ -3191,6 +3191,7 @@ async function loadClients() {
           <span class="badge">${esc(c.niveau)}</span> <span class="muted small">${c.credits} crédits</span></div>
         <div class="job-sub muted">SIRET ${esc(c.siret)}${c.tva ? " · TVA " + esc(c.tva) : ""} · inscrit le ${esc(c.cree_le.slice(0, 10))}</div>
         <div class="job-sub">${[c.contact, c.email, c.tel].filter(Boolean).map(esc).join(" · ")}</div>
+        ${(c.utilisateurs || []).length ? `<div class="job-sub muted small">Utilisateurs : ${c.utilisateurs.map(u => esc(u.nom) + (u.actif ? "" : " (désactivé)")).join(", ")}</div>` : ""}
         <div class="job-sub patch-row" style="margin-top:6px">
           <label>Crédits <input type="text" class="c-montant" placeholder="+440 ou -59" style="width:100px"></label>
           <input type="text" class="c-libelle" placeholder="motif (ex : pack 400 + 40, virement du 24/09)" style="flex:1">
@@ -3361,8 +3362,8 @@ function renderFsList() {
     const txt = [d.numero, d.societe, fsVeh(d), fsEcu(d), (d.vehicule || {}).immat, (d.vehicule || {}).vin].join(" ").toLowerCase();
     return okF && (!q || txt.includes(q));
   });
-  // à traiter : les plus anciennes d'abord
-  if (fsFiltre === "ouverts") rows.sort((a, b) => a.id - b.id);
+  // à traiter : l'express d'abord, puis les plus anciennes
+  if (fsFiltre === "ouverts") rows.sort((a, b) => (b.express - a.express) || (a.id - b.id));
   const box = $("#fsList");
   if (!rows.length) { box.innerHTML = `<div class="empty">Aucune demande ici.</div>`; return; }
   box.innerHTML = rows.map(d => {
@@ -3370,6 +3371,7 @@ function renderFsList() {
     return `<div class="job-row fs-row ${fsSel === d.id ? "sel" : ""}" data-fsid="${d.id}">
       <div class="job-main">
         <div class="job-top"><b>${esc(d.numero)}</b> <span class="badge ${cls}">${esc(lbl)}</span>
+          ${d.express ? `<span class="badge danger" title="Option express payée : à traiter en priorité">⚡ express</span>` : ""}
           ${d.non_lus ? `<span class="badge warn">${d.non_lus} msg</span>` : ""}</div>
         <div class="job-sub"><b>${esc(fsVeh(d))}</b> · ${esc(fsEcu(d))}</div>
         <div class="job-sub muted">${esc(d.societe)} · ${esc(d.lignes.filter(l => l.credits > 0).map(l => l.nom).join(" + "))} · ${d.total} cr. · ${esc(fsDate(d.cree_le))}</div>
@@ -3405,8 +3407,9 @@ async function openFs(id) {
   const ferme = d.statut === "refuse";
   box.innerHTML = `
     <div class="fs-actions" style="justify-content:space-between">
-      <div><h3>${esc(d.numero)} · ${esc(fsVeh(d))} <span class="badge ${cls}">${esc(lbl)}</span></h3>
-        <div class="muted small">${esc(d.societe)} · ${esc(d.email)}${d.tel ? " · " + esc(d.tel) : ""} · reçu le ${esc(fsDate(d.cree_le))}</div></div>
+      <div><h3>${esc(d.numero)} · ${esc(fsVeh(d))} <span class="badge ${cls}">${esc(lbl)}</span>
+        ${d.express ? `<span class="badge danger">⚡ express</span>` : ""}</h3>
+        <div class="muted small">${esc(d.societe)} · ${esc(d.email)}${d.tel ? " · " + esc(d.tel) : ""} · reçu le ${esc(fsDate(d.cree_le))}${d.envoye_par ? " · envoyé par " + esc(d.envoye_par) : ""}${d.sms_actif ? " · 📱 SMS" : ""}</div></div>
     </div>
     <div class="fs-sec" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <dl class="fs-kv">${kv("Moteur", v.moteur)}${kv("Année", v.annee)}${kv("Boîte", v.boite)}${kv("Km", v.km)}${kv("VIN", v.vin)}${kv("Immat.", v.immat)}</dl>
@@ -3421,6 +3424,7 @@ async function openFs(id) {
     <div class="fs-sec fs-actions">
       <a class="ghost sm btn-link" href="/fs/demandes/${d.id}/original">Télécharger l'original</a>
       <a class="ghost sm btn-link" href="/fs/demandes/${d.id}/recapitulatif" target="_blank" rel="noopener">Récapitulatif</a>
+      ${(x.annexes || []).map(a => `<a class="ghost sm btn-link" href="/fs/demandes/${d.id}/annexe/${a.id}" title="Fichier complémentaire envoyé par le client">📎 ${esc(a.nom)}</a>`).join("")}
       <button class="ghost sm" data-fsact="analyser">Analyser</button>
       ${ferme ? "" : `<button class="patchbtn sm" data-fsact="unclic" title="Solution même stock en bibliothèque + patch propre + checksums prêts">⚡ Livrer en un clic</button>`}
       <button class="ghost sm" data-fsact="autopatch">Auto-patch</button>
@@ -3567,6 +3571,12 @@ async function loadFsReglages() {
   $("#fsStripeWh").placeholder = st.webhook_secret_set ? "enregistré (vide = inchangé)" : "whsec_…";
   $("#fsStripeEtat").textContent = st.secret_key_set ? `Paiement en ligne actif (${st.mode === "test" ? "mode test" : "mode réel"})${st.webhook_secret_set ? "" : " · webhook non configuré"}` : "Paiement en ligne désactivé";
   $("#fsWebhookUrl").textContent = (d.public_url || "https://portail.ton-domaine.fr") + "/stripe/webhook";
+  $("#exActif").checked = !!d.express.actif; $("#exCredits").value = d.express.credits;
+  const sm = d.sms;
+  $("#smsActif").checked = !!sm.actif; $("#smsFournisseur").value = sm.fournisseur; $("#smsCompte").value = sm.compte || "";
+  $("#smsExp").value = sm.expediteur || ""; $("#smsCle").value = "";
+  $("#smsCle").placeholder = sm.cle_set ? "enregistrée (vide = inchangée)" : "";
+  majSmsFournisseur();
   const se = d.sauvegarde_externe;
   $("#seMode").value = se.mode; $("#seEmail").value = se.email;
   $("#seHost").value = se.ftp.host || ""; $("#sePort").value = se.ftp.port || 21; $("#seUser").value = se.ftp.user || "";
@@ -3575,6 +3585,21 @@ async function loadFsReglages() {
   $("#sePass").placeholder = se.ftp.password_set ? "enregistré (vide = inchangé)" : "";
   majSeMode();
 }
+
+function majSmsFournisseur() { $("#smsCompteLab").classList.toggle("hidden", $("#smsFournisseur").value !== "twilio"); }
+$("#smsFournisseur").onchange = majSmsFournisseur;
+function smsForm() {
+  return { actif: $("#smsActif").checked, fournisseur: $("#smsFournisseur").value, cle: $("#smsCle").value,
+           compte: $("#smsCompte").value, expediteur: $("#smsExp").value };
+}
+$("#smsTest").onclick = async () => {
+  const out = $("#smsOut");
+  try {
+    await postJSON("/fs/reglages", { sms: smsForm() });
+    const r = await postJSON("/fs/sms/test", { numero: $("#smsTestNum").value });
+    out.innerHTML = `<span class="badge ok">OK</span> ${esc(r.message)}`;
+  } catch (err) { out.innerHTML = `<span class="badge danger">échec</span> ${esc(err.message)}`; }
+};
 
 function majSeMode() {
   $("#seFtpBloc").classList.toggle("hidden", $("#seMode").value !== "ftp");
@@ -3659,7 +3684,7 @@ $("#fsSaveReglages").onclick = async () => {
     if ($("#fsNiveauNom").value.trim()) remises[$("#fsNiveauNom").value.trim()] = $("#fsNiveauPct").value || "0";
     const relances = { solde_bas: $("#rlSolde").checked, seuil: $("#rlSeuil").value,
                        non_telecharge: $("#rlDl").checked, delai_h: $("#rlDelai").value };
-    await postJSON("/fs/reglages", { societe, horaires, pages, remises, relances, sauvegarde_externe: sauvegardeExterneForm(), livraison_auto: $("#fsAutoLivraison").checked, api_active: $("#fsApiActive").checked, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
+    await postJSON("/fs/reglages", { societe, horaires, pages, remises, relances, sauvegarde_externe: sauvegardeExterneForm(), sms: smsForm(), express: { actif: $("#exActif").checked, credits: $("#exCredits").value }, livraison_auto: $("#fsAutoLivraison").checked, api_active: $("#fsApiActive").checked, stripe: { secret_key: $("#fsStripeKey").value, webhook_secret: $("#fsStripeWh").value } });
     $("#fsReglagesOut").textContent = "Réglages enregistrés.";
     loadFsReglages();
   } catch (err) { $("#fsReglagesOut").textContent = err.message; }
