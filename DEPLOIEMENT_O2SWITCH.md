@@ -4,8 +4,8 @@ Ce guide publie **l'espace client** et **l'outil atelier** sur votre hébergemen
 
 | Application | Adresse (exemple) | Point d'entrée |
 |---|---|---|
-| Espace client (portail) | `https://fichiers.e85-france.fr` | `passenger_wsgi.py` |
-| Outil atelier | `https://atelier.e85-france.fr` | `deploy/atelier/passenger_wsgi.py` |
+| Espace client (portail) | `https://fichiers.e85-france.fr` | `wsgi_portail.py` |
+| Outil atelier | `https://atelier.e85-france.fr` | `deploy/atelier/wsgi_atelier.py` |
 
 Les deux applications partagent le même dossier `data/` (comptes, demandes, factures, bibliothèque de solutions).
 
@@ -36,7 +36,7 @@ cPanel → **Setup Python App** → *Create Application* :
 | Python version | la plus récente proposée (3.11 ou plus) |
 | Application root | `carto_matcher` |
 | Application URL | `fichiers.e85-france.fr` |
-| Application startup file | `passenger_wsgi.py` |
+| Application startup file | `wsgi_portail.py` |
 | Application Entry point | `application` |
 
 Variables d'environnement (*Add Variable*) :
@@ -56,7 +56,7 @@ Même écran, seconde application :
 |---|---|
 | Application root | `carto_matcher/deploy/atelier` |
 | Application URL | `atelier.e85-france.fr` |
-| Application startup file | `passenger_wsgi.py` |
+| Application startup file | `wsgi_atelier.py` |
 | Application Entry point | `application` |
 | Variable `CARTO_PROD` | `1` |
 
@@ -155,6 +155,11 @@ le dossier `data/` n'est jamais dans l'archive), puis *Restart* des deux applica
 - En local, rien ne change : `python portal.py` et `python app.py` fonctionnent comme avant (le portail lance lui-même les tâches toutes les heures).
 
 ## Dépannage
+
+**« We're sorry, but something went wrong » et, en Terminal, `RecursionError` avec `imp.load_source('wsgi', 'passenger_wsgi.py')`** :
+cPanel a remplacé `passenger_wsgi.py` par son modèle, qui charge le « fichier de démarrage »… c'est-à-dire lui-même.
+Dans *Setup Python App* → *Edit*, mettez **Application startup file** = `wsgi_portail.py` (espace client) ou
+`wsgi_atelier.py` (outil atelier), enregistrez puis **Restart**. Le passenger_wsgi.py de cPanel chargera alors le bon fichier.
 
 **« Passenger error #2 … Passengerfile.json … Permission denied (errno=13) »** : Apache n'a pas le droit de lire le
 dossier du logiciel (dossier créé ou décompressé avec des droits trop stricts). Dans cPanel → **Terminal** :

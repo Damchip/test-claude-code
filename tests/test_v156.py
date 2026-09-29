@@ -325,6 +325,21 @@ class DeploiementTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}):
             self.assertEqual(runpy.run_path(os.path.join(ROOT, "passenger_wsgi.py"))["application"].name, "portal")
             self.assertEqual(runpy.run_path(os.path.join(ROOT, "deploy", "atelier", "passenger_wsgi.py"))["application"].name, "app")
+            self.assertEqual(runpy.run_path(os.path.join(ROOT, "wsgi_portail.py"))["application"].name, "portal")
+            self.assertEqual(runpy.run_path(os.path.join(ROOT, "deploy", "atelier", "wsgi_atelier.py"))["application"].name, "app")
+            # modèle écrit par cPanel (« Setup Python App ») avec nos fichiers de démarrage : pas de récursion
+            for dossier, fichier, nom in ((ROOT, "wsgi_portail.py", "portal"),
+                                          (os.path.join(ROOT, "deploy", "atelier"), "wsgi_atelier.py", "app")):
+                ancien = os.getcwd()
+                os.chdir(dossier)
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("wsgi", fichier)
+                    m = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(m)
+                    self.assertEqual(m.application.name, nom)
+                finally:
+                    os.chdir(ancien)
 
 
 if __name__ == "__main__":
