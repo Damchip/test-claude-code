@@ -60,11 +60,7 @@ Même écran, seconde application :
 | Application Entry point | `application` |
 | Variable `CARTO_PROD` | `1` |
 
-Installez Flask dans cet environnement : en haut de la page de l'application, copiez la commande *« Enter to the virtual environment »*, collez-la dans cPanel → **Terminal**, puis :
-
-```
-pip install -r ~/carto_matcher/requirements.txt
-```
+*Create*, puis **Configuration files** → `requirements.txt` → *Run Pip Install* (ce fichier renvoie vers celui du logiciel).
 
 *Restart*.
 
@@ -155,6 +151,14 @@ le dossier `data/` n'est jamais dans l'archive), puis *Restart* des deux applica
 - En local, rien ne change : `python portal.py` et `python app.py` fonctionnent comme avant (le portail lance lui-même les tâches toutes les heures).
 
 ## Dépannage
+
+**La page affiche « It works! Python v3.11 »** : c'est l'application d'exemple que cPanel crée quand le fichier de démarrage
+n'existe pas encore au moment de l'enregistrement — il a écrit son exemple dans `wsgi_portail.py` / `wsgi_atelier.py`.
+Remettez le contenu du logiciel (Git *Pull*, ou recopie du fichier depuis l'archive), puis **Restart**.
+
+**« Could not open requirements file » en cliquant sur *Run Pip Install*** (outil atelier) : le fichier
+`deploy/atelier/requirements.txt` manque (versions antérieures à la 1.57.1). Créez-le :
+`printf -- '-r ../../requirements.txt\n' > ~/carto_matcher/deploy/atelier/requirements.txt`, puis recommencez.
 
 **« We're sorry, but something went wrong » et, en Terminal, `RecursionError` avec `imp.load_source('wsgi', 'passenger_wsgi.py')`** :
 cPanel a remplacé `passenger_wsgi.py` par son modèle, qui charge le « fichier de démarrage »… c'est-à-dire lui-même.

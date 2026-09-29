@@ -1,0 +1,3 @@
+# Outil atelier (cPanel « Setup Python App », racine deploy/atelier) : mêmes dépendances que le logiciel.
+# Le bouton « Run Pip Install » de cPanel lit ce fichier ; pip suit le chemin relatif ci-dessous.
+-r ../../requirements.txt
