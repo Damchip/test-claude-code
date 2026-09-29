@@ -6,7 +6,7 @@
   <title>Carto Matcher — recherche de solution locale</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ version }}">
 </head>
-<body>
+<body{% if distants %} data-distants="1"{% endif %}>
   <header>
     <div class="brand">
       <span class="dot"></span>
@@ -89,12 +89,16 @@
           <option value="tags">Étiquettes</option>
         </select>
       </label>
-      <button id="solRepair" class="ghost sm" title="Reconstruit le lien vers le fichier original pour les anciennes fiches">Réparer les liens</button>
-      <button id="solRelabel" class="ghost sm" title="Relit type, plateforme et libellé depuis les chemins (OneDrive / dossier)">Relire les fiches</button>
-      <button id="solRebuildFp" class="ghost sm" title="File atelier : archive + empreintes v2 + versions ECU">File atelier</button>
+      <button id="solRepair" class="ghost sm{% if distants %} hidden{% endif %}" title="Reconstruit le lien vers le fichier original pour les anciennes fiches">Réparer les liens</button>
+      <button id="solRelabel" class="ghost sm{% if distants %} hidden{% endif %}" title="Relit type, plateforme et libellé depuis les chemins (OneDrive / dossier)">Relire les fiches</button>
+      <button id="solRebuildFp" class="ghost sm{% if distants %} hidden{% endif %}" title="File atelier : archive + empreintes v2 + versions ECU">File atelier</button>
       <button id="solBackup" class="ghost sm" title="Copie horodatée de la base dans data\backups\">Sauvegarder</button>
       <span id="solCount" class="muted"></span>
     </div>
+    {% if distants %}
+    <p class="muted small sol-distant">Liste envoyée par le <b>PC atelier</b> <span id="solSynchro"></span> — les fichiers restent sur le PC :
+      « ⬇ Solution » les lui demande (Carto Matcher doit être ouvert sur le PC). Modifie les fiches sur le PC : cette liste est remplacée à chaque envoi.</p>
+    {% endif %}
     <div id="solFacets" class="sol-facets"></div>
     <div id="solBulk" class="sol-bulk hidden">
       <span id="solBulkCount" class="muted"></span>
@@ -284,7 +288,13 @@
           <label class="muted small nc-check"><input type="checkbox" id="elAuto"> Livrer automatiquement les demandes « propres » (toutes les minutes)</label>
           <button class="patchbtn sm" id="elSauver">Enregistrer et tester</button>
         </div>
+        <div class="patch-row" style="margin-top:8px;align-items:center;gap:14px">
+          <label class="muted small nc-check"><input type="checkbox" id="elBase" checked> Envoyer la liste des solutions à l'outil en ligne (la base .db seule, <b>jamais les fichiers</b>)</label>
+          <label class="muted small nc-check"><input type="checkbox" id="elFichiers" checked> Envoyer un fichier quand un technicien le demande en ligne (effacé du serveur après téléchargement)</label>
+          <button class="ghost sm" id="elSynchro" type="button">Envoyer la liste maintenant</button>
+        </div>
         <div id="elAutoEtat" class="muted small" style="margin-top:6px"></div>
+        <div id="elSyncEtat" class="muted small"></div>
         <div id="elOut" class="muted small"></div>
       </details>
     </div>
@@ -323,6 +333,7 @@
         <p class="muted small" style="margin-top:0">Le Carto Matcher du PC de l'atelier se connecte ici avec une clé : il récupère les demandes,
           prépare les fichiers avec sa bibliothèque et renvoie seulement le fichier modifié. Onglet « En ligne » du PC → Connexion.</p>
         <div id="pcListe" class="jobs-list"></div>
+        <div id="pcBase" class="muted small" style="margin-top:6px"></div>
         <div class="patch-row" style="margin-top:8px"><input type="text" id="pcNom" placeholder="nom du poste (ex. PC atelier)" style="width:220px">
           <button class="patchbtn sm" id="pcCreer">Créer une clé</button></div>
         <div id="pcOut" class="muted small" style="margin-top:6px;word-break:break-all"></div>

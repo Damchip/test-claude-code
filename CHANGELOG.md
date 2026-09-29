@@ -3,6 +3,16 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.59.0
+**Bibliothèque consultable depuis l'outil en ligne (fichiers toujours sur le PC)**
+- Le PC atelier **envoie sa liste de solutions** (la base `.db`, jamais les fichiers) à l'outil en ligne à chaque
+  changement : onglets Solutions et Recherche à jour sans import manuel. Bouton *Envoyer la liste maintenant*.
+- **Fichier d'une fiche à la demande** : en ligne, « ⬇ Solution » demande le fichier au PC ; le PC (Carto Matcher ouvert)
+  l'envoie en quelques secondes, le serveur le garde le temps du téléchargement puis l'**efface** (10 minutes au plus).
+  Seul le technicien qui l'a demandé peut le télécharger ; demandes et envois tracés dans le journal.
+- Carte « Passerelle PC atelier » : poste **en ligne / hors ligne**, date et taille de la dernière liste reçue.
+- Sur le PC, deux options (cochées par défaut) : envoi de la liste, envoi des fichiers demandés. Décochées, rien ne part.
+
 ## v1.58.0
 **Passerelle PC atelier** : la bibliothèque de solutions et ses fichiers .bin (OneDrive…) restent sur le PC.
 - Outil en ligne → Fileservice → **Passerelle PC atelier** : clés de connexion des postes (créées par un administrateur,

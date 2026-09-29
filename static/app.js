@@ -1,4 +1,6 @@
 const $ = (s) => document.querySelector(s);
+/* outil en ligne relié au PC atelier : les fichiers des fiches restent sur le PC, on les lui demande */
+const DISTANTS = document.body.dataset.distants === "1";
 const drop = $("#drop"), fileInput = $("#file");
 
 drop.addEventListener("click", () => fileInput.click());
@@ -119,9 +121,10 @@ function paintMatches() {
         ${m.solution_file ? `
         <div class="solfile" title="${esc(m.solution_file)}">📄 ${esc(m.solution_file.split(/[\\/]/).pop())}</div>
         <div class="solactions">
+          ${DISTANTS ? `<button type="button" class="dlbtn" data-distant="${m.id}">⬇ Télécharger la solution (depuis le PC)</button>` : `
           <label class="patch-chk combo-chk"><input type="checkbox" class="combo-id" value="${m.id}" ${(m.exact || m.same_stock || m.calibration_exact) ? "checked" : ""}> combiner</label>
           <a class="dlbtn" href="/solution/file?id=${m.id}">⬇ Télécharger la solution</a>
-          <button class="patchbtn" data-patch="${m.id}">⚙ Auto-patch</button>
+          <button class="patchbtn" data-patch="${m.id}">⚙ Auto-patch</button>`}
           <button class="ghost sm" data-dos="${m.id}">Dossier client</button>
           ${m.exact ? `<span class="okmark">✓ stock identique — prête à livrer</span>`
                     : `<span class="warnmark">⚠ base similaire — à vérifier avant flash</span>`}
@@ -625,9 +628,35 @@ async function loadSolutions() {
   const r = await fetch("/solutions");
   const d = await r.json();
   $("#dbSize").textContent = d.db_size;
+  if ($("#solSynchro")) $("#solSynchro").textContent = d.synchro && d.synchro.date
+    ? `(« ${d.synchro.poste} », ${d.synchro.fiches} fiches, le ${d.synchro.date.slice(0, 16)})` : "(pas encore reçue)";
   window.allSolutions = d.solutions;
   applyFilters();
 }
+
+/* Fichier d'une fiche demandé au PC atelier : le PC l'envoie, le serveur le garde le temps du téléchargement */
+async function demanderFichierPC(id, btn) {
+  const texte = btn.textContent;
+  const fin = (msg) => { btn.disabled = false; btn.textContent = texte; if (msg) alert(msg); };
+  btn.disabled = true; btn.textContent = "⏳ Demande au PC…";
+  try {
+    const d = await postJSON("/fs/passerelle/fichiers", { id: +id, quoi: "solution" });
+    const debut = Date.now();
+    while (Date.now() - debut < 120000) {
+      await new Promise(r => setTimeout(r, 2000));
+      const e = await (await fetch(`/fs/passerelle/fichiers/${d.id}`)).json();
+      if (e.error) return fin(e.error);
+      if (e.statut === "pret") { window.location.href = `/fs/passerelle/fichiers/${d.id}/telecharger`; return fin(); }
+      if (e.statut === "erreur" || e.statut === "expire") return fin(e.message || "Le PC n'a pas pu envoyer le fichier.");
+      btn.textContent = `⏳ Envoi par le PC… ${Math.round((Date.now() - debut) / 1000)} s`;
+    }
+    fin("Le PC atelier n'a pas répondu à temps. Vérifie qu'il est allumé et que Carto Matcher est ouvert.");
+  } catch (err) { fin(err.message); }
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-distant]");
+  if (b && !b.disabled) { e.preventDefault(); demanderFichierPC(b.dataset.distant, b); }
+});
 
 /* catégories d'une fiche pour une dimension donnée (le type peut être multiple) */
 function solCategories(s, dim) {
@@ -710,7 +739,8 @@ function rowHTML(s) {
     </div>
     <div class="sol-meta muted">${size}</div>
     <div class="sol-actions">
-      ${s.solution_file ? `<a class="ghost sm" href="/solution/file?id=${s.id}">⬇ Solution</a>` : ""}
+      ${s.solution_file ? (DISTANTS ? `<button type="button" class="ghost sm" data-distant="${s.id}">⬇ Solution</button>`
+                                    : `<a class="ghost sm" href="/solution/file?id=${s.id}">⬇ Solution</a>`) : ""}
       <button class="ghost sm" data-act="edit">Modifier</button>
       <button class="ghost sm danger" data-act="del">Supprimer</button>
     </div>
@@ -4166,8 +4196,12 @@ async function loadPasserelle() {
         <div class="job-sub muted small">créée le ${esc(c.cree_le.slice(0, 16))} · ${c.derniere_utilisation
           ? "dernière connexion " + esc(c.derniere_utilisation.slice(0, 16)) + (c.derniere_ip ? " (" + esc(c.derniere_ip) + ")" : "")
           : "jamais connecté"}</div></div>
+      ${c.connecte ? '<span class="badge ok">en ligne</span>' : '<span class="badge">hors ligne</span>'}
       <div class="inbox-actions"><button class="ghost sm" data-pcrevoquer="1">Révoquer</button></div></div>`).join("")
     : '<div class="empty">Aucun poste connecté.</div>';
+  const b = d.base || {};
+  $("#pcBase").textContent = b.date ? `Liste des solutions reçue du poste « ${b.poste} » le ${b.date.slice(0, 16)} : ${b.fiches} fiches (sans les fichiers).`
+    : "Liste des solutions : pas encore reçue du PC.";
 }
 if ($("#pcCreer")) {
   $("#pcCreer").onclick = async () => {
@@ -4193,12 +4227,17 @@ async function loadElReglages() {
   try {
     const d = await (await fetch("/enligne/reglages")).json();
     $("#elUrl").value = d.url || ""; $("#elAuto").checked = !!d.auto; $("#elCle").value = "";
+    $("#elBase").checked = !!d.base; $("#elFichiers").checked = !!d.fichiers;
     $("#elCle").placeholder = d.cle_set ? "enregistrée (vide = inchangée)" : "e85pc_…";
     $("#elConnexion").textContent = d.url && d.cle_set ? `— ${d.url}` : "— non configurée";
     if (!(d.url && d.cle_set)) $("#elReglagesCard").open = true;
     const a = d.automate;
     $("#elAutoEtat").textContent = d.auto && a ? `Livraison automatique : ${a.date ? "dernier passage " + a.date.slice(11, 16) + " — " + a.message : "démarrage…"} · ${a.livrees} livrée(s) depuis l'ouverture de l'outil`
       : (d.auto ? "Livraison automatique : active au prochain démarrage de l'outil." : "");
+    const lignes = [];
+    if (d.base && d.etat_base && d.etat_base.date) lignes.push(`Liste des solutions : ${d.etat_base.message} (${d.etat_base.date.slice(11, 16)})`);
+    if (d.fichiers && d.etat_fichiers && d.etat_fichiers.date) lignes.push(`Fichiers demandés en ligne : ${d.etat_fichiers.message} (${d.etat_fichiers.date.slice(11, 16)}) · ${d.etat_fichiers.envoyes} envoyé(s) depuis l'ouverture`);
+    $("#elSyncEtat").textContent = lignes.join(" · ");
   } catch (e) { /* outil en ligne : pas d'onglet */ }
 }
 async function loadEnLigne(silencieux) {
@@ -4302,12 +4341,25 @@ if ($("#elListe")) {
   });
   $("#elSauver").onclick = async () => {
     try {
-      await postJSON("/enligne/reglages", { url: $("#elUrl").value, cle: $("#elCle").value, auto: $("#elAuto").checked });
+      await postJSON("/enligne/reglages", { url: $("#elUrl").value, cle: $("#elCle").value, auto: $("#elAuto").checked,
+                                            base: $("#elBase").checked, fichiers: $("#elFichiers").checked });
       const t = await postJSON("/enligne/test", {});
       $("#elOut").innerHTML = `<span class="badge ok">connecté</span> ${esc(t.atelier)} · poste « ${esc(t.poste)} » · serveur v${esc(t.version)} · ${t.a_traiter} demande(s) à traiter`;
       loadElReglages(); loadEnLigne();
     } catch (err) { $("#elOut").textContent = err.message; }
   };
+  $("#elSynchro").onclick = async () => {
+    const btn = $("#elSynchro"); btn.disabled = true;
+    $("#elOut").innerHTML = '<span class="spin"></span> Envoi de la liste des solutions (sans les fichiers)…';
+    try {
+      const r = await postJSON("/enligne/synchroniser", {});
+      $("#elOut").innerHTML = r.a_jour ? '<span class="badge ok">à jour</span> L\'outil en ligne a déjà cette liste.'
+        : `<span class="badge ok">envoyée</span> ${r.fiches} fiche(s) visibles sur l'outil en ligne.`;
+      loadElReglages();
+    } catch (err) { $("#elOut").textContent = err.message; }
+    finally { btn.disabled = false; }
+  };
+  setInterval(loadElReglages, 30000);
   // nouvelles demandes en ligne : vérification toutes les minutes (alerte sonore / notification)
   (async () => { try { const d = await (await fetch("/enligne/reglages")).json(); if (d.url && d.cle_set) { loadEnLigne(true); setInterval(() => loadEnLigne(true), 60000); } } catch (e) {} })();
 }

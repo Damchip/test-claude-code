@@ -737,8 +737,9 @@ Dans l'outil, 📲 sur une demande indique que le client a l'application.
 ### Passerelle PC atelier
 La bibliothèque et ses fichiers .bin peuvent rester sur le PC (OneDrive) : l'onglet **En ligne** du Carto Matcher
 du PC se connecte au fileservice en ligne avec une clé (Fileservice → Passerelle PC atelier), prépare les fichiers
-avec la bibliothèque locale et renvoie seulement le fichier modifié. Livraison automatique possible. Voir
-DEPLOIEMENT_O2SWITCH.md, section 11.
+avec la bibliothèque locale et renvoie seulement le fichier modifié. Livraison automatique possible.
+Depuis la v1.59, le PC envoie aussi sa **liste de solutions** (base .db seule) à l'outil en ligne, et « ⬇ Solution »
+en ligne **demande le fichier au PC** (effacé du serveur après téléchargement). Voir DEPLOIEMENT_O2SWITCH.md, section 11.
 
 ### Mise à jour du logiciel
 **Fileservice → Mise à jour du logiciel** (administrateurs) : recherche sur GitHub, installation d'un clic

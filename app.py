@@ -17,6 +17,7 @@ import sys
 import secrets
 import threading
 import time
+import zlib
 from datetime import timedelta
 
 from flask import Flask, Response, g, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -49,7 +50,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.58.0"
+APP_VERSION = "1.59.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -140,7 +141,8 @@ ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "cl
                    "maj_etat", "maj_verifier", "maj_installer", "maj_zip", "maj_revenir", "maj_reglages",
                    "fs_passerelle_liste", "fs_passerelle_creer", "fs_passerelle_revoquer",
                    "enligne_reglages_get", "enligne_reglages_set", "enligne_test", "enligne_demandes",
-                   "enligne_preparer", "enligne_livrer_auto", "enligne_original", "enligne_livrer", "enligne_traitement"}
+                   "enligne_preparer", "enligne_livrer_auto", "enligne_original", "enligne_livrer", "enligne_traitement",
+                   "enligne_synchroniser"}
 
 
 def _equipe_active():
@@ -493,7 +495,8 @@ def _get_last():
 @app.route("/")
 def index():
     db.init_db(DB_PATH)
-    return render_template("index.html", db_size=db.count(DB_PATH), version=APP_VERSION, prod=PROD)
+    return render_template("index.html", db_size=db.count(DB_PATH), version=APP_VERSION, prod=PROD,
+                           distants=_fichiers_distants())
 
 
 @app.route("/analyze", methods=["POST"])
@@ -566,7 +569,7 @@ def save():
 def solutions():
     q = request.args.get("q", "")
     return jsonify({"solutions": db.list_solutions(DB_PATH, q),
-                    "db_size": db.count(DB_PATH)})
+                    "db_size": db.count(DB_PATH), "synchro": passerelle.etat_base(DATA_DIR)})
 
 
 @app.route("/solutions/update", methods=["POST"])
@@ -1111,10 +1114,22 @@ def fs_modeles_supprimer():
 
 # --- Passerelle PC atelier : côté serveur (outil en ligne) -------------------------
 
+def _fichiers_distants():
+    """Outil en ligne relié à un PC atelier : les fichiers des fiches sont sur le PC, pas sur ce serveur."""
+    try:
+        _fs_init()
+        return bool(passerelle.lister_cles(FS_DB))
+    except Exception:
+        return False
+
+
 @app.route("/fs/passerelle")
 def fs_passerelle_liste():
     _fs_init()
-    return jsonify({"cles": passerelle.lister_cles(FS_DB)})
+    limite = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() - passerelle.PC_EN_LIGNE))
+    cles = [dict(c, connecte=bool(c["derniere_utilisation"] and c["derniere_utilisation"] >= limite))
+            for c in passerelle.lister_cles(FS_DB)]
+    return jsonify({"cles": cles, "base": passerelle.etat_base(DATA_DIR)})
 
 
 @app.route("/fs/passerelle/creer", methods=["POST"])
@@ -1137,7 +1152,118 @@ def fs_passerelle_revoquer():
 def passerelle_etat():
     cfg = load_portal_config()
     return jsonify({"ok": True, "version": APP_VERSION, "atelier": cfg.get("shop_name") or "E85-FRANCE",
-                    "poste": g.passerelle["nom"], "a_traiter": demandes.alertes(FS_DB)["a_traiter"]})
+                    "poste": g.passerelle["nom"], "a_traiter": demandes.alertes(FS_DB)["a_traiter"],
+                    "base_empreinte": passerelle.etat_base(DATA_DIR).get("empreinte")})
+
+
+@app.route("/passerelle/v1/base", methods=["POST"])
+def passerelle_base():
+    """Le PC envoie sa base de solutions (gzip), sans aucun fichier : elle remplace celle de l'outil en ligne."""
+    tmp = os.path.join(DATA_DIR, f"solutions-passerelle-{secrets.token_hex(6)}.db")
+    try:
+        empreinte = passerelle.recevoir_base(request.stream, tmp)
+        if empreinte != request.headers.get("X-Empreinte", empreinte):
+            return jsonify({"error": "Base altérée pendant l'envoi, nouvel essai au prochain passage."}), 400
+        out = db.import_db_file(DB_PATH, tmp)
+        if not out.get("ok"):
+            return jsonify(out), 400
+    except (comptes.ErreurCompte, OSError, zlib.error) as e:
+        return jsonify({"error": f"Base refusée : {e}"}), 400
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    passerelle.noter_base(DATA_DIR, empreinte, out["count"], g.passerelle["nom"])
+    equipe.noter(FS_DB, f"PC · {g.passerelle['nom']}", "Bibliothèque synchronisée (PC atelier)", "", f"{out['count']} fiches")
+    return jsonify({"ok": True, "fiches": out["count"]})
+
+
+@app.route("/passerelle/v1/fichiers")
+def passerelle_fichiers():
+    passerelle.purger_fichiers(FS_DB, DATA_DIR)
+    return jsonify({"fichiers": passerelle.fichiers_en_attente(FS_DB)})
+
+
+@app.route("/passerelle/v1/fichiers/<int:rid>", methods=["POST"])
+def passerelle_fichier_deposer(rid):
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "Fichier manquant."}), 400
+    try:
+        d = passerelle.deposer_fichier(FS_DB, DATA_DIR, rid, f.filename, f.read(), g.passerelle["nom"])
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    equipe.noter(FS_DB, f"PC · {g.passerelle['nom']}", "Fichier envoyé à la demande (PC atelier)", d["libelle"],
+                 f"pour {d['demandeur']}" if d["demandeur"] else "")
+    return jsonify({"ok": True})
+
+
+@app.route("/passerelle/v1/fichiers/<int:rid>/echec", methods=["POST"])
+def passerelle_fichier_echec(rid):
+    passerelle.refuser_fichier(FS_DB, rid, str((request.json or {}).get("message") or ""), g.passerelle["nom"])
+    return jsonify({"ok": True})
+
+
+# --- Fichiers demandés au PC depuis l'outil en ligne (techniciens) ------------------
+
+def _fichier_pc(rid):
+    d = passerelle.fichier_demande(FS_DB, rid)
+    if not d:
+        return None, (jsonify({"error": "Demande de fichier introuvable."}), 404)
+    t = getattr(g, "tech", None)
+    if t and d["demandeur_id"] and d["demandeur_id"] != t["id"] and t["role"] != "admin":
+        return None, (jsonify({"error": "Ce fichier a été demandé par un autre technicien."}), 403)
+    return d, None
+
+
+@app.route("/fs/passerelle/fichiers", methods=["POST"])
+def fs_passerelle_fichier_demander():
+    _fs_init()
+    b = request.json or {}
+    sol = db.get_solution(DB_PATH, b.get("id"))
+    if not sol:
+        return jsonify({"error": "Fiche introuvable."}), 404
+    quoi = b.get("quoi") or "solution"
+    if not (sol.get("solution_file") if quoi == "solution" else sol.get("original_file")):
+        return jsonify({"error": "Cette fiche n'a pas de fichier enregistré."}), 400
+    passerelle.purger_fichiers(FS_DB, DATA_DIR)
+    if not passerelle.pc_connecte(FS_DB):
+        return jsonify({"error": "Le PC atelier n'est pas connecté : Carto Matcher doit être ouvert sur le PC "
+                                 "(onglet En ligne → connexion configurée)."}), 409
+    t = getattr(g, "tech", None)
+    libelle = f"fiche {sol['id']} · {sol.get('vehicle_label') or 'sans libellé'}"
+    try:
+        rid = passerelle.demander_fichier(FS_DB, sol["id"], quoi, libelle, t["id"] if t else None,
+                                          (t["nom"] if t else _auteur_nom()) or "")
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    equipe.noter(FS_DB, (t["nom"] if t else ""), "Fichier demandé au PC atelier", libelle, quoi)
+    return jsonify({"ok": True, "id": rid})
+
+
+@app.route("/fs/passerelle/fichiers/<int:rid>")
+def fs_passerelle_fichier_etat(rid):
+    d, err = _fichier_pc(rid)
+    if err:
+        return err
+    if d["statut"] == "attente" and time.time() - d["cree_le"] > 60 and not passerelle.pc_connecte(FS_DB):
+        return jsonify({"statut": "erreur", "message": "Le PC atelier ne répond plus."})
+    return jsonify({"statut": d["statut"], "message": d["message"], "nom": d["nom"], "taille": d["taille"]})
+
+
+@app.route("/fs/passerelle/fichiers/<int:rid>/telecharger")
+def fs_passerelle_fichier_telecharger(rid):
+    d, err = _fichier_pc(rid)
+    if err:
+        return err
+    r = passerelle.retirer_fichier(FS_DB, DATA_DIR, rid)
+    if not r:
+        return jsonify({"error": "Fichier plus disponible (déjà téléchargé ou délai de 10 minutes dépassé) : redemande-le."}), 410
+    nom, contenu = r
+    resp = send_file(io.BytesIO(contenu), as_attachment=True, download_name=nom, mimetype="application/octet-stream")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/passerelle/v1/demandes")
@@ -1198,7 +1324,9 @@ def _enligne(fn):
 def enligne_reglages_get():
     r = _enligne_reglages()
     return jsonify({"url": r.get("url", ""), "cle_set": bool(r.get("cle")), "auto": bool(r.get("auto")),
-                    "automate": AUTOMATE.derniere if AUTOMATE else None, "automate_actif": bool(AUTOMATE)})
+                    "base": bool(r.get("base", True)), "fichiers": bool(r.get("fichiers", True)),
+                    "automate": AUTOMATE.derniere if AUTOMATE else None, "automate_actif": bool(AUTOMATE),
+                    "etat_base": AUTOMATE.base if AUTOMATE else None, "etat_fichiers": AUTOMATE.fichiers if AUTOMATE else None})
 
 
 @app.route("/enligne/reglages", methods=["POST"])
@@ -1213,6 +1341,9 @@ def enligne_reglages_set():
     elif cle:
         r["cle"] = cle
     r["url"], r["auto"] = url, bool(b.get("auto"))
+    for k in ("base", "fichiers"):
+        if k in b:
+            r[k] = bool(b[k])
     if url or r.get("cle"):
         try:
             passerelle.Client(url, r.get("cle") or passerelle.PREFIXE + "x")
@@ -1226,6 +1357,17 @@ def enligne_reglages_set():
 @app.route("/enligne/test", methods=["POST"])
 def enligne_test():
     return _enligne(lambda: jsonify(_enligne_client().etat()))
+
+
+@app.route("/enligne/synchroniser", methods=["POST"])
+def enligne_synchroniser():
+    """Envoie tout de suite la liste des solutions (base .db, sans les fichiers) à l'outil en ligne."""
+    def faire():
+        a = AUTOMATE or _nouvel_automate()
+        n = a.synchroniser_base(_enligne_client(), forcer=True)
+        a.base = {"date": passerelle._now(), "message": f"{n} fiche(s) envoyée(s)" if n is not None else "à jour"}
+        return jsonify({"ok": True, "fiches": n, "a_jour": n is None})
+    return _enligne(faire)
 
 
 @app.route("/enligne/demandes")
@@ -1289,11 +1431,20 @@ def enligne_traitement(did):
 AUTOMATE = None
 
 
+def _chemin_fichier_fiche(db_path, sol_id, quoi):
+    sol = db.get_solution(db_path, sol_id)
+    return sol and (sol.get("solution_file") if quoi == "solution" else sol.get("original_file"))
+
+
+def _nouvel_automate():
+    return passerelle.Automate(_enligne_reglages, DB_PATH, DATA_DIR, livraison_auto.preparer,
+                               livraison_auto.nom_fichier, livraison_auto.journaliser, chemin_fichier=_chemin_fichier_fiche)
+
+
 def demarrer_automate():
-    """PC de l'atelier : livraison automatique des demandes en ligne « propres » (si activée dans les réglages)."""
+    """PC de l'atelier : fichiers demandés en ligne, envoi de la liste des solutions et livraison automatique."""
     global AUTOMATE
-    AUTOMATE = passerelle.Automate(_enligne_reglages, DB_PATH, DATA_DIR, livraison_auto.preparer,
-                                   livraison_auto.nom_fichier, livraison_auto.journaliser)
+    AUTOMATE = _nouvel_automate()
     threading.Thread(target=AUTOMATE.boucle, name="passerelle-auto", daemon=True).start()
 
 

@@ -139,6 +139,13 @@ bibliothèque du PC (fichiers OneDrive compris) sans jamais les envoyer sur le s
 
 La connexion part du PC vers le serveur en HTTPS : rien à ouvrir sur la box. Une clé perdue se révoque en un clic.
 
+**Depuis la v1.59**, tant que Carto Matcher est ouvert sur le PC :
+- la **liste des solutions** (base `.db`, sans fichiers) est envoyée à l'outil en ligne à chaque changement ;
+- un technicien en ligne peut cliquer **« ⬇ Solution »** sur une fiche : le PC envoie ce fichier, que le serveur efface
+  dès qu'il est téléchargé (10 minutes au plus). PC éteint → message « Le PC atelier n'est pas connecté ».
+Les deux options se décochent dans l'onglet **En ligne** du PC. Les fiches se modifient sur le PC (la liste en ligne est
+remplacée à chaque envoi).
+
 ## 12. Mettre à jour le logiciel
 
 À partir de la v1.57, tout se fait depuis l'outil atelier (administrateur) : **Fileservice → Mise à jour du logiciel**.

@@ -35,6 +35,7 @@ header{display:flex;justify-content:space-between;align-items:center;
   border-radius:8px;padding:8px 10px;font-family:var(--sans)}
 .sol-facets{max-width:1000px;margin:2px auto 0;padding:0 22px;display:flex;flex-wrap:wrap;gap:6px}
 .sol-facets:empty{display:none}
+.sol-distant{max-width:1000px;margin:6px auto 10px;padding:0 22px;box-sizing:border-box}
 .facet{background:var(--panel);border:1px solid var(--line);color:var(--ink);
   border-radius:999px;padding:5px 11px;font-size:12px;cursor:pointer;display:inline-flex;
   align-items:center;gap:6px;transition:border-color .12s,background .12s}
