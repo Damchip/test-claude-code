@@ -9,6 +9,9 @@ chère de packs et de prestations seules qui couvre exactement la sélection :
 le tarif pack s'applique tout seul.
 """
 
+import copy
+import json
+
 PRIX_CREDIT_EUR = 2.50   # HT
 TVA = 0.20               # prix affichés HT et TTC
 
@@ -194,3 +197,124 @@ def remises(cfg):
         except (TypeError, ValueError):
             continue
     return out or dict(NIVEAUX_DEFAUT)
+
+
+# --- Tarifs réglés par l'atelier (outil atelier → Fileservice → Tarifs) --------------
+# Seuls les PRIX des prestations existantes se règlent en ligne, et chaque prestation peut être
+# retirée de l'offre. Les prestations elles-mêmes (noms, descriptions, types) restent définies ici.
+# Réglages gardés dans portal_config.json, clé « tarifs » :
+#   {"prestations": {"vl.stage1": {"prix": 69, "prix_siege": 99}}, "services": {"clonage": {"prix": 45}},
+#    "packs": {"vl.0": {"prix": 99}}, "garanties": {"g1": {"prix": 20}}, "retours": {"colissimo": {"prix_eur": 10}},
+#    "packs_credits": {"50": {"prix_eur": 125, "bonus": 0}}, "masques": ["vl.torque", "clonage"]}
+
+PRIX_MAX = 10000       # crédits
+EUR_MAX = 100000       # euros
+_DEFAUTS = copy.deepcopy({"PRESTATIONS": PRESTATIONS, "SERVICES": SERVICES, "PACKS": PACKS, "GARANTIES": GARANTIES,
+                          "RETOURS": RETOURS, "PACKS_CREDITS": PACKS_CREDITS})
+_APPLIQUE = json.dumps({})
+
+
+def _lignes_tarifs(d):
+    """(section, clé, élément, champs réglables, masquable) pour chaque élément du catalogue `d`."""
+    for cat, items in d["PRESTATIONS"].items():
+        for p in items:
+            yield "prestations", f"{cat}.{p['code']}", p, ("prix", "prix_siege") if p.get("prix_siege") is not None else ("prix",), True
+    for p in d["SERVICES"]:
+        yield "services", p["code"], p, ("prix",), True
+    for cat, items in d["PACKS"].items():
+        for i, p in enumerate(items):
+            yield "packs", f"{cat}.{i}", p, ("prix", "prix_siege") if p.get("prix_siege") is not None else ("prix",), False
+    for p in d["GARANTIES"]:
+        yield "garanties", p["code"], p, ("prix",), False
+    for p in d["RETOURS"]:
+        yield "retours", p["code"], p, ("prix_eur",), False
+    for p in d["PACKS_CREDITS"]:
+        yield "packs_credits", str(p["credits"]), p, ("prix_eur", "bonus"), False
+
+
+def _nombre(v, maxi):
+    try:
+        n = float(str(v).replace(",", ".").strip())
+    except (TypeError, ValueError):
+        raise ValueError("nombre attendu")
+    if n != n or not 0 <= n <= maxi:
+        raise ValueError(f"entre 0 et {maxi}")
+    return int(n) if n == int(n) else round(n, 2)
+
+
+def normaliser_tarifs(brut):
+    """Vérifie les tarifs saisis : uniquement des prix d'éléments existants et des retraits de prestations.
+    Lève ValueError (message lisible) si une valeur est invalide. Les valeurs égales à l'origine ne sont pas gardées."""
+    brut = brut if isinstance(brut, dict) else {}
+    out, masques = {}, []
+    demandes_masques = set(str(x) for x in (brut.get("masques") or []) if isinstance(x, str))
+    for section, cle, item, champs, masquable in _lignes_tarifs(_DEFAUTS):
+        saisie = (brut.get(section) or {}).get(cle)
+        if isinstance(saisie, dict):
+            for champ in champs:
+                if saisie.get(champ) in (None, ""):
+                    continue
+                maxi = EUR_MAX if champ == "prix_eur" else PRIX_MAX
+                try:
+                    v = _nombre(saisie[champ], maxi)
+                except ValueError as e:
+                    raise ValueError(f"{item.get('nom') or cle} : prix invalide ({e}).")
+                if champ != "prix_eur":
+                    v = int(round(v))
+                if v != item.get(champ):
+                    out.setdefault(section, {}).setdefault(cle, {})[champ] = v
+        if masquable and cle in demandes_masques:
+            masques.append(cle)
+    if masques:
+        out["masques"] = masques
+    return out
+
+
+def appliquer_tarifs(cfg):
+    """Applique les tarifs de l'atelier au catalogue (à chaque requête ; ne refait rien si rien n'a changé)."""
+    global _APPLIQUE
+    t = cfg.get("tarifs") if isinstance(cfg, dict) and isinstance(cfg.get("tarifs"), dict) else {}
+    cle = json.dumps(t, sort_keys=True)
+    if cle == _APPLIQUE:
+        return
+    try:
+        t = normaliser_tarifs(t)
+    except ValueError:
+        t = {}
+    d = copy.deepcopy(_DEFAUTS)
+    masques = set(t.get("masques") or [])
+    for section, c, item, champs, _ in _lignes_tarifs(d):
+        for champ, v in ((t.get(section) or {}).get(c) or {}).items():
+            if champ in champs:
+                item[champ] = v
+    prestations = {cat: [p for p in items if f"{cat}.{p['code']}" not in masques] for cat, items in d["PRESTATIONS"].items()}
+    PRESTATIONS.clear()
+    PRESTATIONS.update(prestations)
+    SERVICES[:] = [p for p in d["SERVICES"] if p["code"] not in masques]
+    PACKS.clear()
+    PACKS.update(d["PACKS"])
+    GARANTIES[:] = d["GARANTIES"]
+    RETOURS[:] = d["RETOURS"]
+    PACKS_CREDITS[:] = d["PACKS_CREDITS"]      # jamais retirés : l'ordre sert au paiement Stripe
+    _APPLIQUE = cle
+
+
+def tableau_tarifs(cfg):
+    """Pour l'écran des tarifs : chaque élément avec son prix d'origine et son prix actuel."""
+    t = cfg.get("tarifs") if isinstance(cfg.get("tarifs"), dict) else {}
+    try:
+        t = normaliser_tarifs(t)
+    except ValueError:
+        t = {}
+    masques = set(t.get("masques") or [])
+    noms_cat = {c["code"]: c["nom"] for c in CATEGORIES}
+    lignes = []
+    for section, cle, item, champs, masquable in _lignes_tarifs(_DEFAUTS):
+        reg = (t.get(section) or {}).get(cle) or {}
+        cat = cle.split(".")[0] if section in ("prestations", "packs") else ""
+        nom = item.get("nom") or (f"{item['credits']} crédits" + (f" (+{item['bonus']} offerts)" if item.get("bonus") else "")
+                                   if section == "packs_credits" else cle)
+        lignes.append({"section": section, "cle": cle, "nom": nom, "categorie": noms_cat.get(cat, ""),
+                       "champs": {c: {"origine": item.get(c), "valeur": reg.get(c, item.get(c))} for c in champs},
+                       "masquable": masquable, "masque": cle in masques})
+    return lignes

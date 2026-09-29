@@ -3,6 +3,17 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.60.0
+**Tarifs réglables depuis l'outil atelier** (administrateurs) : Fileservice → **Tarifs des prestations**.
+- Prix de chaque prestation (et prix « ouverture au siège »), des services, des packs, des garanties, des frais de
+  retour et des packs de crédits (prix en € et crédits offerts).
+- Une prestation peut être **retirée de l'offre** (case décochée) puis remise d'un clic ; bouton « Revenir aux prix
+  d'origine ». Appliqué aussitôt à l'espace client et à l'API revendeurs ; les demandes déjà payées gardent leur prix.
+- Modifications tracées dans le journal (« Tarifs modifiés »). La création de prestations reste dans le catalogue du logiciel.
+
+**Corrections**
+- En-tête de l'outil en ligne : « en ligne · fichiers sur le PC » au lieu de « local · hors-ligne ».
+
 ## v1.59.0
 **Bibliothèque consultable depuis l'outil en ligne (fichiers toujours sur le PC)**
 - Le PC atelier **envoie sa liste de solutions** (la base `.db`, jamais les fichiers) à l'outil en ligne à chaque

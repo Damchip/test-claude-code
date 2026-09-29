@@ -470,3 +470,14 @@ header{flex-wrap:wrap;gap:10px}
 .modal-x{position:sticky;top:0;float:right;margin:-8px -8px 0 8px;width:34px;height:34px;border-radius:50%;
   border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:20px;line-height:1;cursor:pointer;z-index:2;padding:0}
 .modal-x:hover{border-color:var(--accent);color:var(--accent)}
+.tarifs-titre{margin:14px 0 6px}
+table.tarifs{width:100%;border-collapse:collapse;font-size:13px}
+table.tarifs td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.tarifs .tarifs-cat{padding-top:10px;border-bottom:none;text-transform:uppercase;letter-spacing:.05em}
+.tarifs-champs{display:flex;gap:12px;flex-wrap:wrap}
+.tarifs-champ{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.tarifs-champ input{width:90px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:5px 8px}
+.tarifs-champ input.modifie{border-color:var(--accent)}
+table.tarifs{table-layout:fixed}
+table.tarifs td:first-child{width:38%}
+table.tarifs td:last-child{width:12%}

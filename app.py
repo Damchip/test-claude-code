@@ -50,7 +50,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.59.0"
+APP_VERSION = "1.60.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -142,7 +142,7 @@ ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "cl
                    "fs_passerelle_liste", "fs_passerelle_creer", "fs_passerelle_revoquer",
                    "enligne_reglages_get", "enligne_reglages_set", "enligne_test", "enligne_demandes",
                    "enligne_preparer", "enligne_livrer_auto", "enligne_original", "enligne_livrer", "enligne_traitement",
-                   "enligne_synchroniser"}
+                   "enligne_synchroniser", "fs_tarifs", "fs_tarifs_set"}
 
 
 def _equipe_active():
@@ -222,7 +222,7 @@ JOURNAL_ACTIONS = {
     "fs_modeles_enregistrer": "Réponse type enregistrée", "fs_modeles_supprimer": "Réponse type supprimée",
     "equipe_2fa_activer": "Double authentification activée", "equipe_2fa_desactiver": "Double authentification retirée",
     "equipe_securite": "Double authentification obligatoire",
-    "settings_set": "Réglages de l'outil", "backups_restore": "Restauration de la bibliothèque",
+    "settings_set": "Réglages de l'outil", "fs_tarifs_set": "Tarifs modifiés", "backups_restore": "Restauration de la bibliothèque",
 }
 
 
@@ -1113,6 +1113,30 @@ def fs_modeles_supprimer():
 
 
 # --- Passerelle PC atelier : côté serveur (outil en ligne) -------------------------
+
+@app.before_request
+def _tarifs_atelier():
+    catalogue.appliquer_tarifs(load_portal_config())
+
+
+@app.route("/fs/tarifs")
+def fs_tarifs():
+    return jsonify({"lignes": catalogue.tableau_tarifs(load_portal_config()), "prix_credit": catalogue.PRIX_CREDIT_EUR})
+
+
+@app.route("/fs/tarifs", methods=["POST"])
+def fs_tarifs_set():
+    """Prix des prestations existantes et retrait de l'offre ; les prestations elles-mêmes ne se créent pas ici."""
+    try:
+        t = catalogue.normaliser_tarifs((request.json or {}).get("tarifs"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    cfg = load_portal_config()
+    cfg["tarifs"] = t
+    _save_portal_config(cfg)
+    catalogue.appliquer_tarifs(cfg)
+    return jsonify({"ok": True, "lignes": catalogue.tableau_tarifs(cfg)})
+
 
 def _fichiers_distants():
     """Outil en ligne relié à un PC atelier : les fichiers des fiches sont sur le PC, pas sur ce serveur."""

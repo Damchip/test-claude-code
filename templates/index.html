@@ -328,6 +328,19 @@
         <div id="fsSante" class="muted small">…</div>
       </div>
 
+      <details class="dash-card" style="margin-top:22px" id="tarifsCard">
+        <summary><b>Tarifs des prestations</b> <span class="muted small">(prix en crédits · 1 crédit = 2,50 € HT)</span></summary>
+        <p class="muted small">Modifie les prix, ou décoche une prestation pour la retirer de l'offre. Les changements
+          s'appliquent tout de suite aux nouvelles demandes (les demandes déjà payées gardent leur prix).
+          Pour créer une nouvelle prestation, demande une mise à jour du catalogue.</p>
+        <div id="tarifsListe"></div>
+        <div class="patch-row" style="margin-top:10px;align-items:center">
+          <button class="patchbtn sm" id="tarifsSauver" type="button">Enregistrer les tarifs</button>
+          <button class="ghost sm" id="tarifsOrigine" type="button">Revenir aux prix d'origine</button>
+          <span id="tarifsOut" class="muted small"></span>
+        </div>
+      </details>
+
       <div class="dash-card" style="margin-top:22px" id="pcCard">
         <h3 style="margin-top:0">Passerelle PC atelier <span class="muted small">(la bibliothèque et ses fichiers restent sur le PC)</span></h3>
         <p class="muted small" style="margin-top:0">Le Carto Matcher du PC de l'atelier se connecte ici avec une clé : il récupère les demandes,

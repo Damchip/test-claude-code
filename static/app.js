@@ -4220,6 +4220,62 @@ if ($("#pcCreer")) {
   });
 }
 
+/* ===== Tarifs des prestations (administrateurs) ===== */
+const TARIFS_SECTIONS = { prestations: "Prestations", services: "Services (tous véhicules)", packs: "Packs",
+  garanties: "Garanties", retours: "Retour du boîtier (en €)", packs_credits: "Packs de crédits (prix en € HT, crédits offerts)" };
+const TARIFS_CHAMPS = { prix: "prix", prix_siege: "ouverture au siège", prix_eur: "€ HT", bonus: "crédits offerts" };
+function afficherTarifs(lignes) {
+  let html = "", section = null, cat = null;
+  for (const l of lignes) {
+    if (l.section !== section) {
+      if (section) html += "</tbody></table>";
+      section = l.section; cat = null;
+      html += `<h4 class="tarifs-titre">${esc(TARIFS_SECTIONS[section] || section)}</h4><table class="tarifs"><tbody>`;
+    }
+    if (l.categorie && l.categorie !== cat) { cat = l.categorie; html += `<tr><td colspan="3" class="muted small tarifs-cat">${esc(cat)}</td></tr>`; }
+    const champs = Object.entries(l.champs).map(([c, v]) => `<label class="tarifs-champ">${esc(TARIFS_CHAMPS[c] || c)}
+      <input type="number" min="0" step="${c === "prix_eur" ? "0.01" : "1"}" data-champ="${c}" value="${v.valeur ?? ""}"
+        class="${v.valeur !== v.origine ? "modifie" : ""}" title="origine : ${esc(v.origine)}"></label>`).join("");
+    html += `<tr data-section="${l.section}" data-cle="${esc(l.cle)}">
+      <td>${l.masquable ? `<label class="nc-check"><input type="checkbox" class="tarifs-actif" ${l.masque ? "" : "checked"}> ${esc(l.nom)}</label>` : esc(l.nom)}</td>
+      <td class="tarifs-champs">${champs}</td>
+      <td class="muted small">${Object.values(l.champs).some(v => v.valeur !== v.origine) ? "modifié" : ""}${l.masque ? " · retirée" : ""}</td></tr>`;
+  }
+  $("#tarifsListe").innerHTML = html + (section ? "</tbody></table>" : "");
+}
+async function loadTarifs() {
+  if (!$("#tarifsListe")) return;
+  try {
+    const r = await fetch("/fs/tarifs");
+    if (!r.ok) { $("#tarifsCard").classList.add("hidden"); return; }
+    afficherTarifs((await r.json()).lignes);
+  } catch (e) { /* hors ligne */ }
+}
+async function enregistrerTarifs(origine) {
+  const tarifs = { masques: [] };
+  if (!origine) {
+    document.querySelectorAll("#tarifsListe tr[data-cle]").forEach(tr => {
+      const sec = tr.dataset.section, cle = tr.dataset.cle;
+      tr.querySelectorAll("input[data-champ]").forEach(i => {
+        if (i.value === "") return;
+        ((tarifs[sec] = tarifs[sec] || {})[cle] = tarifs[sec][cle] || {})[i.dataset.champ] = i.value;
+      });
+      const a = tr.querySelector(".tarifs-actif");
+      if (a && !a.checked) tarifs.masques.push(cle);
+    });
+  }
+  try {
+    const d = await postJSON("/fs/tarifs", { tarifs });
+    afficherTarifs(d.lignes);
+    $("#tarifsOut").innerHTML = '<span class="badge ok">enregistré</span> Appliqué aux nouvelles demandes.';
+  } catch (err) { $("#tarifsOut").textContent = err.message; }
+}
+if ($("#tarifsCard")) {
+  $("#tarifsCard").addEventListener("toggle", () => { if ($("#tarifsCard").open) loadTarifs(); });
+  $("#tarifsSauver").onclick = () => enregistrerTarifs(false);
+  $("#tarifsOrigine").onclick = () => { if (confirm("Remettre tous les prix d'origine et toutes les prestations dans l'offre ?")) enregistrerTarifs(true); };
+}
+
 /* ===== Passerelle PC atelier — côté PC : onglet « En ligne » ===== */
 let EL_ROWS = [], EL_SEL = null, EL_VUS = null;
 async function loadElReglages() {

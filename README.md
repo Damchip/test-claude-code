@@ -749,7 +749,8 @@ d'installation automatique la nuit. En local, relance ensuite les deux lanceurs 
 
 ### Tarifs
 Catalogue, packs, garanties et prix des packs de crédits : `catalogue.py` (prix en crédits,
-1 crédit = 2,50 € HT, TVA 20 %). Le prix de chaque demande est toujours recalculé par le serveur.
+1 crédit = 2,50 € HT, TVA 20 %). Les **prix** se règlent aussi dans l'outil atelier (administrateur) :
+Fileservice → **Tarifs des prestations** (prix, retrait d'une prestation de l'offre, retour aux prix d'origine). Le prix de chaque demande est toujours recalculé par le serveur.
 Un client pro d'un autre pays de l'UE avec un numéro de TVA est facturé HT (autoliquidation).
 
 ### E-mails (O2switch)

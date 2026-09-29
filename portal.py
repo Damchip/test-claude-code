@@ -30,13 +30,14 @@ import comptes
 import demandes
 import factures
 import api
+import catalogue
 import fileservice
 import push
 import relances
 import sante
 import taches
 
-APP_VERSION = "1.59.0"
+APP_VERSION = "1.60.0"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt
@@ -173,6 +174,16 @@ def _safe_next(raw, fallback):
     if not raw.startswith("/") or raw.startswith("//") or "\\" in raw or ":" in raw:
         return fallback
     return raw
+
+
+@app.before_request
+def _tarifs_atelier():
+    """Prix réglés par l'atelier (outil atelier → Fileservice → Tarifs), relus à chaque requête."""
+    try:
+        with open(app.config["FS_CONFIG"], encoding="utf-8") as fh:
+            catalogue.appliquer_tarifs(json.load(fh))
+    except (OSError, ValueError):
+        catalogue.appliquer_tarifs({})
 
 
 @app.before_request
