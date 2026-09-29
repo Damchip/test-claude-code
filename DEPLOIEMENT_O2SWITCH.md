@@ -145,7 +145,12 @@ le dossier `data/` n'est jamais dans l'archive), puis *Restart* des deux applica
 
 ## Bon à savoir
 
-- **Bibliothèque de solutions** : sur le serveur, l'import « choisir un dossier » ne peut pas ouvrir votre PC. Envoyez le dossier par FTP dans `carto_matcher/data/…` puis importez-le en indiquant ce chemin, ou continuez d'enrichir la bibliothèque sur le PC de l'atelier et envoyez `solutions.db` mise à jour.
+- **Bibliothèque de solutions (base seule, fichiers .bin restés au PC)** : fermez Carto Matcher sur le PC, puis dans
+  l'outil en ligne → **Tableau de bord → Sauvegardes → « Importer une base .db »** → choisissez `data/solutions.db` du PC.
+  La base en ligne est sauvegardée puis remplacée. En ligne, la **reconnaissance** des calculateurs (espace client et
+  onglet Recherche) fonctionne, car elle n'utilise que la base ; **Auto-patch, Cartes 2D et « Livrer en un clic »** ont
+  besoin des fichiers .bin et restent donc sur le PC : préparez le fichier au PC et livrez-le avec « Livrer le fichier
+  modifié ». Laissez la *livraison automatique* décochée. Refaites l'import quand la bibliothèque du PC a évolué.
 - **Taille des fichiers** : 64 Mo par envoi, comme en local.
 - **Ne jamais publier** `data/` (comptes, factures, mots de passe SMTP/Stripe) : il est déjà exclu de Git et de l'archive de release.
 - En local, rien ne change : `python portal.py` et `python app.py` fonctionnent comme avant (le portail lance lui-même les tâches toutes les heures).

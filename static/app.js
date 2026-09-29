@@ -4136,3 +4136,20 @@ $("#majSauver").onclick = async () => {
     $("#majOut").textContent = "Réglages de mise à jour enregistrés."; loadMaj();
   } catch (err) { $("#majOut").textContent = err.message; }
 };
+
+/* ===== Fenêtres (modales) : croix de fermeture, touche Échap, clic à côté ===== */
+document.querySelectorAll(".modal").forEach(m => {
+  const box = m.querySelector(".modal-box");
+  if (box && !box.querySelector(".modal-x")) {
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "modal-x"; x.title = "Fermer (Échap)"; x.setAttribute("aria-label", "Fermer");
+    x.textContent = "×";
+    x.onclick = () => m.classList.add("hidden");
+    box.prepend(x);
+  }
+  m.addEventListener("mousedown", e => { if (e.target === m) m.classList.add("hidden"); });
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll(".modal:not(.hidden)").forEach(m => m.classList.add("hidden"));
+});

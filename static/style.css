@@ -464,3 +464,8 @@ header{flex-wrap:wrap;gap:10px}
 .st-ligne[data-tip]:hover::after{left:auto;right:0;transform:translateY(-4px)}
 .dfa-config.hidden{display:none}
 .maj-notes{white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin:6px 0 0}
+/* Croix de fermeture des fenêtres */
+.modal-box{position:relative}
+.modal-x{position:sticky;top:0;float:right;margin:-8px -8px 0 8px;width:34px;height:34px;border-radius:50%;
+  border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:20px;line-height:1;cursor:pointer;z-index:2;padding:0}
+.modal-x:hover{border-color:var(--accent);color:var(--accent)}
