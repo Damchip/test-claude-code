@@ -31,6 +31,7 @@ import factures
 import livraison_auto
 import mailer
 import mise_a_jour
+import passerelle
 import modeles
 import pages_legales
 import push
@@ -48,7 +49,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.57.0"
+APP_VERSION = "1.58.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -136,7 +137,10 @@ def _refuser_requetes_inter_sites():
 ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "clients_credits", "clients_facture",
                    "fs_reglages_set", "clients_smtp_set", "backups_restore", "backups_import",
                    "equipe_creer", "equipe_modifier", "equipe_securite", "fs_sauvegarde_externe", "fs_sms_test",
-                   "maj_etat", "maj_verifier", "maj_installer", "maj_zip", "maj_revenir", "maj_reglages"}
+                   "maj_etat", "maj_verifier", "maj_installer", "maj_zip", "maj_revenir", "maj_reglages",
+                   "fs_passerelle_liste", "fs_passerelle_creer", "fs_passerelle_revoquer",
+                   "enligne_reglages_get", "enligne_reglages_set", "enligne_test", "enligne_demandes",
+                   "enligne_preparer", "enligne_livrer_auto", "enligne_original", "enligne_livrer", "enligne_traitement"}
 
 
 def _equipe_active():
@@ -155,9 +159,27 @@ def exiger_double_auth():
     return bool(load_config().get("exiger_double_auth"))
 
 
+LIMITEUR_PASSERELLE = comptes.Limiteur(max_echecs=20, fenetre=900)
+
+
 @app.before_request
 def _require_login():
     g.tech = None
+    g.passerelle = None
+    if request.path.startswith("/passerelle/v1/"):
+        # PC de l'atelier : clé de passerelle (en-tête Authorization), jamais de session
+        ip = "passerelle:" + (request.remote_addr or "?")
+        if LIMITEUR_PASSERELLE.bloque(ip):
+            return jsonify({"error": "Trop de tentatives, réessaie plus tard."}), 429
+        entete = request.headers.get("Authorization", "")
+        _fs_init()
+        cle = passerelle.verifier_cle(FS_DB, entete[7:].strip() if entete.lower().startswith("bearer ") else "",
+                                      request.remote_addr or "")
+        if not cle:
+            LIMITEUR_PASSERELLE.echec(ip)
+            return jsonify({"error": "Clé de passerelle refusée (révoquée ou invalide)."}), 401
+        g.passerelle = cle
+        return None
     if request.endpoint in ("login", "static", "sante"):
         return None
     if _equipe_active():
@@ -191,6 +213,8 @@ JOURNAL_ACTIONS = {
     "clients_supprimer": "Suppression de compte (RGPD)", "clients_niveau": "Niveau client",
     "fs_reglages_set": "Réglages fileservice", "clients_smtp_set": "Réglages e-mail",
     "equipe_creer": "Compte atelier créé", "equipe_modifier": "Compte atelier modifié",
+    "passerelle_livrer": "Livraison (PC atelier)", "passerelle_statut": "Changement de statut (PC atelier)",
+    "fs_passerelle_creer": "Clé de passerelle PC créée", "fs_passerelle_revoquer": "Clé de passerelle PC révoquée",
     "maj_installer": "Mise à jour du logiciel (GitHub)", "maj_zip": "Mise à jour du logiciel (fichier .zip)",
     "maj_revenir": "Retour à la version précédente", "maj_reglages": "Réglages de mise à jour",
     "fs_modeles_enregistrer": "Réponse type enregistrée", "fs_modeles_supprimer": "Réponse type supprimée",
@@ -225,7 +249,8 @@ def _journaliser(resp):
                                              b.get("niveau"), b.get("credits") and f"{b.get('credits')} cr.",
                                              b.get("ht") and f"{b.get('ht')} € HT", b.get("reference"),
                                              request.form.get("note")) if x)
-        equipe.noter(FS_DB, g.tech["nom"] if getattr(g, "tech", None) else "", JOURNAL_ACTIONS[ep], cible, detail)
+        qui = g.tech["nom"] if getattr(g, "tech", None) else (f"PC · {g.passerelle['nom']}" if getattr(g, "passerelle", None) else "")
+        equipe.noter(FS_DB, qui, JOURNAL_ACTIONS[ep], cible, detail)
     except Exception:
         pass
     return resp
@@ -305,6 +330,8 @@ def _auteur_nom():
     """Signature des messages : le technicien connecté, sinon le champ « Signature »."""
     if getattr(g, "tech", None):
         return g.tech["nom"]
+    if getattr(g, "passerelle", None):
+        return f"PC · {g.passerelle['nom']}"
     return (request.form.get("auteur") or (request.get_json(silent=True) or {}).get("auteur") or "").strip()[:40]
 
 
@@ -466,7 +493,7 @@ def _get_last():
 @app.route("/")
 def index():
     db.init_db(DB_PATH)
-    return render_template("index.html", db_size=db.count(DB_PATH), version=APP_VERSION)
+    return render_template("index.html", db_size=db.count(DB_PATH), version=APP_VERSION, prod=PROD)
 
 
 @app.route("/analyze", methods=["POST"])
@@ -1082,6 +1109,194 @@ def fs_modeles_supprimer():
     return jsonify({"ok": True})
 
 
+# --- Passerelle PC atelier : côté serveur (outil en ligne) -------------------------
+
+@app.route("/fs/passerelle")
+def fs_passerelle_liste():
+    _fs_init()
+    return jsonify({"cles": passerelle.lister_cles(FS_DB)})
+
+
+@app.route("/fs/passerelle/creer", methods=["POST"])
+def fs_passerelle_creer():
+    _fs_init()
+    try:
+        cle = passerelle.creer_cle(FS_DB, (request.json or {}).get("nom"))
+    except comptes.ErreurCompte as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "cle": cle, "url": request.host_url.rstrip("/")})
+
+
+@app.route("/fs/passerelle/revoquer", methods=["POST"])
+def fs_passerelle_revoquer():
+    passerelle.revoquer_cle(FS_DB, int((request.json or {}).get("id") or 0))
+    return jsonify({"ok": True})
+
+
+@app.route("/passerelle/v1/etat")
+def passerelle_etat():
+    cfg = load_portal_config()
+    return jsonify({"ok": True, "version": APP_VERSION, "atelier": cfg.get("shop_name") or "E85-FRANCE",
+                    "poste": g.passerelle["nom"], "a_traiter": demandes.alertes(FS_DB)["a_traiter"]})
+
+
+@app.route("/passerelle/v1/demandes")
+def passerelle_demandes():
+    rows = demandes.lister(FS_DB, limite=300)
+    if not request.args.get("tous"):
+        rows = [d for d in rows if d["statut"] in demandes.OUVERTS]
+    return jsonify({"demandes": [passerelle.demande_publique(d, len(demandes.livrables(FS_DB, d["id"]))) for d in rows]})
+
+
+@app.route("/passerelle/v1/demandes/<int:did>")
+def passerelle_demande(did):
+    d, err = _fs_demande(did)
+    if err:
+        return err
+    liv = demandes.livrables(FS_DB, did)
+    return jsonify(passerelle.demande_publique(d, len(liv)) | {
+        "messages": [{k: m[k] for k in ("auteur", "auteur_nom", "texte", "cree_le")} for m in demandes.messages(FS_DB, did)]})
+
+
+@app.route("/passerelle/v1/demandes/<int:did>/original")
+def passerelle_original(did):
+    d, err = _fs_demande(did)
+    return err or _fs_send(did, "original_" + d["fichier_nom"], d["fichier_nom"])
+
+
+@app.route("/passerelle/v1/demandes/<int:did>/livrer", methods=["POST"])
+def passerelle_livrer(did):
+    return fs_livrer(did)
+
+
+@app.route("/passerelle/v1/demandes/<int:did>/statut", methods=["POST"])
+def passerelle_statut(did):
+    return fs_statut(did)
+
+
+# --- Passerelle PC atelier : côté PC (Carto Matcher local) --------------------------
+
+def _enligne_reglages():
+    return dict(load_config().get("passerelle") or {})
+
+
+def _enligne_client():
+    r = _enligne_reglages()
+    if not r.get("url") or not r.get("cle"):
+        raise passerelle.ErreurPasserelle("Passerelle non configurée : indique l'adresse de l'outil en ligne et la clé.")
+    return passerelle.Client(r["url"], r["cle"])
+
+
+def _enligne(fn):
+    try:
+        return fn()
+    except passerelle.ErreurPasserelle as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/enligne/reglages")
+def enligne_reglages_get():
+    r = _enligne_reglages()
+    return jsonify({"url": r.get("url", ""), "cle_set": bool(r.get("cle")), "auto": bool(r.get("auto")),
+                    "automate": AUTOMATE.derniere if AUTOMATE else None, "automate_actif": bool(AUTOMATE)})
+
+
+@app.route("/enligne/reglages", methods=["POST"])
+def enligne_reglages_set():
+    b = request.json or {}
+    cfg = load_config()
+    r = dict(cfg.get("passerelle") or {})
+    url = str(b.get("url") or "").strip().rstrip("/")
+    cle = str(b.get("cle") or "").strip()
+    if cle == "-":
+        r.pop("cle", None)
+    elif cle:
+        r["cle"] = cle
+    r["url"], r["auto"] = url, bool(b.get("auto"))
+    if url or r.get("cle"):
+        try:
+            passerelle.Client(url, r.get("cle") or passerelle.PREFIXE + "x")
+        except passerelle.ErreurPasserelle as e:
+            return jsonify({"error": str(e)}), 400
+    cfg["passerelle"] = r
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+
+@app.route("/enligne/test", methods=["POST"])
+def enligne_test():
+    return _enligne(lambda: jsonify(_enligne_client().etat()))
+
+
+@app.route("/enligne/demandes")
+def enligne_demandes():
+    return _enligne(lambda: jsonify({"demandes": _enligne_client().demandes(tous=bool(request.args.get("tous")))}))
+
+
+def _enligne_preparation(did):
+    c = _enligne_client()
+    d = c.demande(did)
+    return c, d, livraison_auto.preparer(d, c.original(did), DB_PATH)
+
+
+@app.route("/enligne/demandes/<int:did>/preparer", methods=["POST"])
+def enligne_preparer(did):
+    def faire():
+        _, _, prep = _enligne_preparation(did)
+        prep.pop("patched", None)
+        return jsonify(prep)
+    return _enligne(faire)
+
+
+@app.route("/enligne/demandes/<int:did>/livrer-auto", methods=["POST"])
+def enligne_livrer_auto(did):
+    def faire():
+        c, d, prep = _enligne_preparation(did)
+        if not prep["ok"]:
+            return jsonify({"error": prep["raison"]}), 400
+        cr = prep["compte_rendu"]
+        r = c.livrer(did, livraison_auto.nom_fichier(d), prep["patched"],
+                     note=f"{' + '.join(cr['types'])} · checksum {cr['checksum'] or 'OK'}", auteur=_auteur_nom())
+        livraison_auto.journaliser(DB_PATH, d, prep, _auteur_nom() or "PC atelier")
+        return jsonify({"ok": True, "compte_rendu": cr, "version": r.get("version"), "mail": r.get("mail")})
+    return _enligne(faire)
+
+
+@app.route("/enligne/demandes/<int:did>/original")
+def enligne_original(did):
+    def faire():
+        c = _enligne_client()
+        d = c.demande(did)
+        return send_file(io.BytesIO(c.original(did)), as_attachment=True, download_name=f"{d['numero']}_{d['fichier_nom']}",
+                         mimetype="application/octet-stream")
+    return _enligne(faire)
+
+
+@app.route("/enligne/demandes/<int:did>/livrer", methods=["POST"])
+def enligne_livrer(did):
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "Choisis le fichier modifié à livrer."}), 400
+    return _enligne(lambda: jsonify(_enligne_client().livrer(did, f.filename, f.read(), request.form.get("note", ""),
+                                                             _auteur_nom())))
+
+
+@app.route("/enligne/demandes/<int:did>/traitement", methods=["POST"])
+def enligne_traitement(did):
+    return _enligne(lambda: jsonify(_enligne_client().en_traitement(did)))
+
+
+AUTOMATE = None
+
+
+def demarrer_automate():
+    """PC de l'atelier : livraison automatique des demandes en ligne « propres » (si activée dans les réglages)."""
+    global AUTOMATE
+    AUTOMATE = passerelle.Automate(_enligne_reglages, DB_PATH, DATA_DIR, livraison_auto.preparer,
+                                   livraison_auto.nom_fichier, livraison_auto.journaliser)
+    threading.Thread(target=AUTOMATE.boucle, name="passerelle-auto", daemon=True).start()
+
+
 # --- Mise à jour du logiciel (administrateurs) -----------------------------------
 
 def _maj_confirmer():
@@ -1418,6 +1633,7 @@ def _fs_init():
     equipe.init_db(FS_DB)
     modeles.init_db(FS_DB)
     push.init_db(FS_DB)
+    passerelle.init_db(FS_DB)
 
 
 def _fs_demande(did):
@@ -2730,4 +2946,5 @@ if __name__ == "__main__":
     else:
         print(f"  Ouvre http://127.0.0.1:{port}")
     print("=" * 60)
+    demarrer_automate()
     app.run(host=host, port=port, debug=False, threaded=True)

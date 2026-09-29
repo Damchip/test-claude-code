@@ -233,7 +233,7 @@ function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;"
 
 function showView(v) {
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x.dataset.view === v));
-  ["search", "solutions", "import", "viz", "patch", "batch", "dash", "jobs", "inbox", "fs", "clients", "inspect"].forEach(name => {
+  ["search", "solutions", "import", "viz", "patch", "batch", "dash", "jobs", "inbox", "enligne", "fs", "clients", "inspect"].forEach(name => {
     const el = document.getElementById("view-" + name);
     if (el) el.classList.toggle("hidden", name !== v);
   });
@@ -244,7 +244,8 @@ function showView(v) {
   if (v === "jobs" && !window.openingDos) loadJobs();
   if (v === "inbox") loadInbox();
   if (v === "clients") { loadClients(); loadSmtp(); }
-  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadFsSante(); loadFsStats(); loadModeles(); loadEquipe(); loadJournal(); loadMaj(); }
+  if (v === "enligne") { loadEnLigne(); loadElReglages(); }
+  if (v === "fs") { loadFs(); loadFsReglages(); loadFsBackups(false); loadFsSynthese(); loadFsSante(); loadFsStats(); loadModeles(); loadEquipe(); loadJournal(); loadMaj(); loadPasserelle(); }
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => showView(t.dataset.view); });
 
@@ -3902,7 +3903,7 @@ async function initSession() {
       const lab = $("#fsAuteur").closest("label");
       if (lab) lab.innerHTML = `<span class="muted small">Connecté : <b>${esc(MOI.nom)}</b></span>`;
       if (MOI.role !== "admin") {
-        ["#fsReglages", "#fsEquipeForm", "#majCard"].forEach(sel => { const el = $(sel); if (el) el.classList.add("hidden"); });
+        ["#fsReglages", "#fsEquipeForm", "#majCard", "#pcCard"].forEach(sel => { const el = $(sel); if (el) el.classList.add("hidden"); });
         document.body.classList.add("role-technicien");
       }
       majDoubleAuth(d);
@@ -4153,3 +4154,160 @@ document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   document.querySelectorAll(".modal:not(.hidden)").forEach(m => m.classList.add("hidden"));
 });
+
+/* ===== Passerelle PC atelier — côté serveur : clés des postes ===== */
+async function loadPasserelle() {
+  const box = $("#pcListe");
+  if (!box) return;
+  let d;
+  try { const r = await fetch("/fs/passerelle"); if (!r.ok) { $("#pcCard").classList.add("hidden"); return; } d = await r.json(); } catch (e) { return; }
+  box.innerHTML = d.cles.length ? d.cles.map(c => `<div class="job-row" data-pcid="${c.id}">
+      <div class="job-main"><div class="job-top"><b>${esc(c.nom)}</b> <span class="muted small mono">${esc(c.prefixe)}…</span></div>
+        <div class="job-sub muted small">créée le ${esc(c.cree_le.slice(0, 16))} · ${c.derniere_utilisation
+          ? "dernière connexion " + esc(c.derniere_utilisation.slice(0, 16)) + (c.derniere_ip ? " (" + esc(c.derniere_ip) + ")" : "")
+          : "jamais connecté"}</div></div>
+      <div class="inbox-actions"><button class="ghost sm" data-pcrevoquer="1">Révoquer</button></div></div>`).join("")
+    : '<div class="empty">Aucun poste connecté.</div>';
+}
+if ($("#pcCreer")) {
+  $("#pcCreer").onclick = async () => {
+    try {
+      const d = await postJSON("/fs/passerelle/creer", { nom: $("#pcNom").value });
+      $("#pcOut").innerHTML = `<span class="badge ok">clé créée</span> Copie-la maintenant, elle ne sera plus affichée.<br>
+        Adresse : <code>${esc(d.url)}</code><br>Clé : <code style="user-select:all">${esc(d.cle)}</code>`;
+      $("#pcNom").value = ""; loadPasserelle();
+    } catch (err) { $("#pcOut").textContent = err.message; }
+  };
+  $("#pcListe").addEventListener("click", async e => {
+    const row = e.target.closest("[data-pcid]");
+    if (!row || !e.target.dataset.pcrevoquer) return;
+    if (!confirm("Révoquer cette clé ? Le PC concerné ne pourra plus livrer.")) return;
+    await postJSON("/fs/passerelle/revoquer", { id: +row.dataset.pcid }); loadPasserelle();
+  });
+}
+
+/* ===== Passerelle PC atelier — côté PC : onglet « En ligne » ===== */
+let EL_ROWS = [], EL_SEL = null, EL_VUS = null;
+async function loadElReglages() {
+  if (!$("#elUrl")) return;
+  try {
+    const d = await (await fetch("/enligne/reglages")).json();
+    $("#elUrl").value = d.url || ""; $("#elAuto").checked = !!d.auto; $("#elCle").value = "";
+    $("#elCle").placeholder = d.cle_set ? "enregistrée (vide = inchangée)" : "e85pc_…";
+    $("#elConnexion").textContent = d.url && d.cle_set ? `— ${d.url}` : "— non configurée";
+    if (!(d.url && d.cle_set)) $("#elReglagesCard").open = true;
+    const a = d.automate;
+    $("#elAutoEtat").textContent = d.auto && a ? `Livraison automatique : ${a.date ? "dernier passage " + a.date.slice(11, 16) + " — " + a.message : "démarrage…"} · ${a.livrees} livrée(s) depuis l'ouverture de l'outil`
+      : (d.auto ? "Livraison automatique : active au prochain démarrage de l'outil." : "");
+  } catch (e) { /* outil en ligne : pas d'onglet */ }
+}
+async function loadEnLigne(silencieux) {
+  if (!$("#elListe")) return;
+  let d;
+  try {
+    const r = await fetch("/enligne/demandes" + ($("#elTous").checked ? "?tous=1" : ""));
+    d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Erreur");
+  } catch (err) {
+    $("#elEtat").innerHTML = `<span class="badge danger">hors ligne</span> ${esc(err.message)}`;
+    if (!silencieux) $("#elListe").innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    return;
+  }
+  EL_ROWS = d.demandes;
+  const ouvertes = EL_ROWS.filter(x => ["recu", "en_cours"].includes(x.statut));
+  $("#elEtat").innerHTML = `<span class="badge ok">connecté</span> ${ouvertes.length} à traiter`;
+  const c = $("#elCount"); c.textContent = ouvertes.length; c.classList.toggle("hidden", !ouvertes.length);
+  const ids = new Set(EL_ROWS.map(x => x.id));
+  if (EL_VUS) {
+    const nouvelles = EL_ROWS.filter(x => !EL_VUS.has(x.id) && x.statut === "recu");
+    if (nouvelles.length) notifier("Fileservice en ligne", `${nouvelles.length} nouveau(x) fichier(s) : ${nouvelles.map(x => x.numero).join(", ")}`);
+  }
+  EL_VUS = ids;
+  const tri = [...EL_ROWS].sort((a, b) => (b.express - a.express) || (a.id - b.id));
+  $("#elListe").innerHTML = tri.length ? tri.map(x => {
+    const [cls, lbl] = FS_STATUT[x.statut] || ["", x.statut];
+    return `<div class="job-row fs-row ${EL_SEL === x.id ? "sel" : ""}" data-elid="${x.id}"><div class="job-main">
+      <div class="job-top"><b>${esc(x.numero)}</b> <span class="badge ${cls}">${esc(lbl)}</span>
+        ${x.express ? '<span class="badge danger">⚡ express</span>' : ""}${x.livrables ? ` <span class="badge ok">v${x.livrables} livrée</span>` : ""}
+        ${x.non_lus ? `<span class="badge warn">${x.non_lus} msg</span>` : ""}</div>
+      <div class="job-sub"><b>${esc(fsVeh(x))}</b> · ${esc(fsEcu(x))}</div>
+      <div class="job-sub muted">${esc(x.societe)} · ${esc(x.lignes.filter(l => l.credits > 0).map(l => l.nom).join(" + "))} · ${esc(fsDate(x.cree_le))}</div>
+    </div></div>`;
+  }).join("") : '<div class="empty">Aucune demande à traiter.</div>';
+  if (EL_SEL && !silencieux) ouvrirEl(EL_SEL);
+}
+function ouvrirEl(id) {
+  EL_SEL = id;
+  document.querySelectorAll("#elListe [data-elid]").forEach(r => r.classList.toggle("sel", +r.dataset.elid === id));
+  const x = EL_ROWS.find(r => r.id === id);
+  if (!x) return;
+  const v = x.vehicule || {}, l = x.lecture || {}, det = x.detection || {};
+  const kv = (k, val) => val ? `<dt>${k}</dt><dd>${esc(val)}</dd>` : "";
+  $("#elDetail").innerHTML = `
+    <h3>${esc(x.numero)} · ${esc(fsVeh(x))}</h3>
+    <div class="muted small">${esc(x.societe)} · reçu le ${esc(fsDate(x.cree_le))}</div>
+    <div class="fs-sec" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <dl class="fs-kv">${kv("Moteur", v.moteur)}${kv("Année", v.annee)}${kv("Boîte", v.boite)}${kv("VIN", v.vin)}</dl>
+      <dl class="fs-kv">${kv("Outil", l.outil)}${kv("Méthode", l.methode)}${kv("ECU saisi", l.ecu)}${kv("ECU détecté", [det.plateforme, det.fabricant].filter(Boolean).join(" / "))}</dl>
+    </div>
+    <div class="fs-sec"><b>${esc(x.lignes.filter(z => z.credits > 0).map(z => z.nom).join(" + "))}</b>${x.siege ? " · <b>ouverture au siège</b>" : ""}
+      ${x.commentaire ? `<div class="muted" style="white-space:pre-wrap;margin-top:4px">« ${esc(x.commentaire)} »</div>` : ""}</div>
+    <div class="fs-sec fs-actions">
+      <button class="patchbtn sm" data-elact="unclic" title="Bibliothèque de ce PC : solution même stock + patch propre + checksums prêts">⚡ Préparer et livrer</button>
+      <a class="ghost sm btn-link" href="/enligne/demandes/${x.id}/original">Télécharger l'original</a>
+      ${x.statut === "recu" ? '<button class="ghost sm" data-elact="traitement">Passer en traitement</button>' : ""}
+    </div>
+    <div class="fs-sec"><b>Livrer un fichier préparé à la main</b> <span class="muted small">(Auto-patch, Cartes 2D… sur ce PC)</span>
+      <div class="fs-actions" style="margin-top:6px"><input type="file" id="elFichier">
+        <input type="text" id="elNote" placeholder="note visible par le client (optionnel)" style="flex:1">
+        <button class="patchbtn sm" data-elact="livrer">Livrer</button></div></div>
+    <div class="el-out muted small" style="margin-top:8px;white-space:pre-wrap"></div>`;
+}
+if ($("#elListe")) {
+  $("#elListe").addEventListener("click", e => { const r = e.target.closest("[data-elid]"); if (r) ouvrirEl(+r.dataset.elid); });
+  $("#elRafraichir").onclick = () => loadEnLigne();
+  $("#elTous").onchange = () => loadEnLigne();
+  $("#elDetail").addEventListener("click", async e => {
+    const act = e.target.dataset && e.target.dataset.elact;
+    if (!act || !EL_SEL) return;
+    const out = $("#elDetail .el-out");
+    const btn = e.target; btn.disabled = true;
+    try {
+      if (act === "unclic") {
+        out.innerHTML = '<span class="spin"></span> Téléchargement de l\'original et préparation avec la bibliothèque de ce PC…';
+        const p = await postJSON(`/enligne/demandes/${EL_SEL}/preparer`, {});
+        if (!p.ok) { out.innerHTML = `<span class="badge warn">à traiter à la main</span> ${esc(p.raison)}`; return; }
+        const cr = p.compte_rendu;
+        if (!confirm(`Fichier prêt : ${cr.types.join(" + ")} (fiches : ${cr.fiches.join(", ")}), checksum ${cr.checksum || "OK"}.\nLivrer au client ?`)) {
+          out.textContent = "Préparation OK — livraison annulée."; return;
+        }
+        const r = await postJSON(`/enligne/demandes/${EL_SEL}/livrer-auto`, {});
+        out.innerHTML = `<span class="badge ok">livré</span> ${esc(r.mail || "")}`;
+      } else if (act === "traitement") {
+        await postJSON(`/enligne/demandes/${EL_SEL}/traitement`, {});
+        out.textContent = "Demande passée en traitement.";
+      } else if (act === "livrer") {
+        const f = $("#elFichier").files[0];
+        if (!f) { out.textContent = "Choisis le fichier modifié."; return; }
+        const fd = new FormData(); fd.append("file", f); fd.append("note", $("#elNote").value);
+        out.innerHTML = '<span class="spin"></span> Envoi…';
+        const r = await fetch(`/enligne/demandes/${EL_SEL}/livrer`, { method: "POST", body: fd });
+        const d = await r.json();
+        if (!r.ok || d.error) throw new Error(d.error || "Livraison impossible.");
+        out.innerHTML = `<span class="badge ok">livré (v${d.version})</span> ${esc(d.mail || "")}`;
+      }
+      loadEnLigne(true);
+    } catch (err) { out.textContent = err.message; }
+    finally { btn.disabled = false; }
+  });
+  $("#elSauver").onclick = async () => {
+    try {
+      await postJSON("/enligne/reglages", { url: $("#elUrl").value, cle: $("#elCle").value, auto: $("#elAuto").checked });
+      const t = await postJSON("/enligne/test", {});
+      $("#elOut").innerHTML = `<span class="badge ok">connecté</span> ${esc(t.atelier)} · poste « ${esc(t.poste)} » · serveur v${esc(t.version)} · ${t.a_traiter} demande(s) à traiter`;
+      loadElReglages(); loadEnLigne();
+    } catch (err) { $("#elOut").textContent = err.message; }
+  };
+  // nouvelles demandes en ligne : vérification toutes les minutes (alerte sonore / notification)
+  (async () => { try { const d = await (await fetch("/enligne/reglages")).json(); if (d.url && d.cle_set) { loadEnLigne(true); setInterval(() => loadEnLigne(true), 60000); } } catch (e) {} })();
+}

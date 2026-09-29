@@ -3,6 +3,22 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.58.0
+**Passerelle PC atelier** : la bibliothèque de solutions et ses fichiers .bin (OneDrive…) restent sur le PC.
+- Outil en ligne → Fileservice → **Passerelle PC atelier** : clés de connexion des postes (créées par un administrateur,
+  empreinte seule gardée, révocables, dernière connexion affichée).
+- Carto Matcher du PC → onglet **En ligne** : demandes du fileservice en ligne, **« Préparer et livrer »** avec la
+  bibliothèque du PC, téléchargement de l'original, livraison d'un fichier préparé à la main (Auto-patch, Cartes 2D).
+  Seul le fichier modifié part sur le serveur ; connexion sortante en HTTPS, aucun port à ouvrir.
+- Option **livraison automatique depuis le PC** : toutes les minutes, les nouvelles demandes « propres » sont livrées.
+- Alerte sonore / notification sur le PC à chaque nouvelle demande en ligne ; livraisons tracées dans le journal
+  (« PC · nom du poste »).
+
+**Corrections**
+- Fenêtres de l'outil : croix de fermeture, touche Échap, clic à côté.
+- Points d'entrée `wsgi_portail.py` / `wsgi_atelier.py` (le `passenger_wsgi.py` réécrit par cPanel ne boucle plus) ;
+  `deploy/atelier/requirements.txt` pour le bouton *Run Pip Install* ; `python outils_prod.py droits`.
+
 ## v1.57.0
 **Application mobile (PWA) et notifications**
 - L'espace client s'**installe comme une application** (Android, iPhone, ordinateur) : icône E85, plein écran,

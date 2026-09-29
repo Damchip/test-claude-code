@@ -734,6 +734,12 @@ plein écran, page d'attente hors connexion. Dans **Paramètres → Application 
 demandée, refus. Envoi gratuit par le standard Web Push (paquet `cryptography`), en plus des e-mails et SMS.
 Dans l'outil, 📲 sur une demande indique que le client a l'application.
 
+### Passerelle PC atelier
+La bibliothèque et ses fichiers .bin peuvent rester sur le PC (OneDrive) : l'onglet **En ligne** du Carto Matcher
+du PC se connecte au fileservice en ligne avec une clé (Fileservice → Passerelle PC atelier), prépare les fichiers
+avec la bibliothèque locale et renvoie seulement le fichier modifié. Livraison automatique possible. Voir
+DEPLOIEMENT_O2SWITCH.md, section 11.
+
 ### Mise à jour du logiciel
 **Fileservice → Mise à jour du logiciel** (administrateurs) : recherche sur GitHub, installation d'un clic
 (empreinte SHA-256 vérifiée, dépendances installées, essai de démarrage, sauvegarde du code, redémarrage

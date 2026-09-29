@@ -124,7 +124,22 @@ Dans *Paramètres → Application et notifications*, il active les notifications
 demandée par l'atelier, refus. C'est gratuit (standard Web Push). Les clés d'envoi sont créées automatiquement
 au premier usage et gardées dans `data/portal_config.json`.
 
-## 11. Mettre à jour le logiciel
+## 11. Passerelle PC atelier (bibliothèque et fichiers restés sur le PC)
+
+En ligne, seule la base `solutions.db` sert (reconnaissance des calculateurs). Pour préparer les fichiers avec la
+bibliothèque du PC (fichiers OneDrive compris) sans jamais les envoyer sur le serveur :
+
+1. Outil atelier **en ligne** (administrateur) → Fileservice → **Passerelle PC atelier** → nom du poste → *Créer une clé*.
+   Notez l'adresse et la clé affichées (la clé n'est montrée qu'une fois).
+2. Sur le **PC**, Carto Matcher (v1.58 ou plus) → onglet **En ligne** → *Connexion au fileservice en ligne* : collez
+   l'adresse (`https://atelier.e85france.fr`) et la clé → *Enregistrer et tester*.
+3. Chaque demande s'ouvre dans cet onglet : **⚡ Préparer et livrer** (bibliothèque du PC), ou *Télécharger l'original*,
+   travail dans Auto-patch / Cartes 2D, puis *Livrer* le fichier modifié. Option : **livraison automatique** des
+   demandes « propres » tant que le PC est allumé et Carto Matcher ouvert.
+
+La connexion part du PC vers le serveur en HTTPS : rien à ouvrir sur la box. Une clé perdue se révoque en un clic.
+
+## 12. Mettre à jour le logiciel
 
 À partir de la v1.57, tout se fait depuis l'outil atelier (administrateur) : **Fileservice → Mise à jour du logiciel**.
 

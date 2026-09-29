@@ -23,6 +23,7 @@
       <button class="tab" data-view="dash">Tableau de bord</button>
       <button class="tab" data-view="jobs">Dossiers <span id="dosCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="inbox">Demandes <span id="inboxCount" class="tab-count hidden"></span></button>
+      {% if not prod %}<button class="tab" data-view="enligne" title="Demandes du fileservice en ligne, traitées avec la bibliothèque de ce PC">En ligne <span id="elCount" class="tab-count hidden"></span></button>{% endif %}
       <button class="tab" data-view="fs">Fileservice <span id="fsCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="clients">Clients <span id="clientsCount" class="tab-count hidden"></span></button>
       <button class="tab" data-view="inspect">Inspecteur</button>
@@ -257,6 +258,39 @@
     </div>
   </main>
 
+  <!-- ===== Vue En ligne (PC atelier) : demandes du fileservice en ligne ===== -->
+  {% if not prod %}
+  <main id="view-enligne" class="hidden">
+    <div class="fs-wrap">
+      <div class="dash-head">
+        <h2>Fileservice en ligne</h2>
+        <span class="muted small" id="elEtat">…</span>
+        <button class="ghost sm" id="elRafraichir" type="button">Actualiser</button>
+        <label class="muted small nc-check"><input type="checkbox" id="elTous"> afficher aussi les demandes terminées</label>
+      </div>
+      <p class="muted small" style="margin-top:0">Les demandes arrivent de l'espace client en ligne ; le fichier est préparé <b>sur ce PC</b>
+        avec ta bibliothèque (OneDrive compris) et seul le fichier modifié est renvoyé. Tes fichiers ne sont jamais envoyés au serveur.</p>
+      <div class="fs-grid">
+        <div id="elListe" class="jobs-list"></div>
+        <div id="elDetail" class="dash-card fs-detail"><div class="empty">Choisis une demande dans la liste.</div></div>
+      </div>
+      <details class="dash-card" style="margin-top:22px" id="elReglagesCard">
+        <summary><b>Connexion au fileservice en ligne</b> <span id="elConnexion" class="muted small"></span></summary>
+        <p class="muted small">Dans l'outil atelier <b>en ligne</b> (administrateur) : Fileservice → <b>Passerelle PC atelier</b> →
+          « Créer une clé », puis colle ici l'adresse et la clé affichées.</p>
+        <div class="patch-row fs-form" style="align-items:flex-end">
+          <label>Adresse de l'outil en ligne <input type="text" id="elUrl" placeholder="https://atelier.e85france.fr" style="width:260px"></label>
+          <label>Clé <input type="password" id="elCle" autocomplete="new-password" placeholder="e85pc_…" style="width:260px"></label>
+          <label class="muted small nc-check"><input type="checkbox" id="elAuto"> Livrer automatiquement les demandes « propres » (toutes les minutes)</label>
+          <button class="patchbtn sm" id="elSauver">Enregistrer et tester</button>
+        </div>
+        <div id="elAutoEtat" class="muted small" style="margin-top:6px"></div>
+        <div id="elOut" class="muted small"></div>
+      </details>
+    </div>
+  </main>
+  {% endif %}
+
   <!-- ===== Vue Fileservice : demandes des clients ===== -->
   <main id="view-fs" class="hidden">
     <div class="fs-wrap">
@@ -282,6 +316,16 @@
       <div class="dash-card" style="margin-top:22px" id="fsSanteCard">
         <h3 style="margin-top:0">État du service <span id="fsSanteBadge"></span></h3>
         <div id="fsSante" class="muted small">…</div>
+      </div>
+
+      <div class="dash-card" style="margin-top:22px" id="pcCard">
+        <h3 style="margin-top:0">Passerelle PC atelier <span class="muted small">(la bibliothèque et ses fichiers restent sur le PC)</span></h3>
+        <p class="muted small" style="margin-top:0">Le Carto Matcher du PC de l'atelier se connecte ici avec une clé : il récupère les demandes,
+          prépare les fichiers avec sa bibliothèque et renvoie seulement le fichier modifié. Onglet « En ligne » du PC → Connexion.</p>
+        <div id="pcListe" class="jobs-list"></div>
+        <div class="patch-row" style="margin-top:8px"><input type="text" id="pcNom" placeholder="nom du poste (ex. PC atelier)" style="width:220px">
+          <button class="patchbtn sm" id="pcCreer">Créer une clé</button></div>
+        <div id="pcOut" class="muted small" style="margin-top:6px;word-break:break-all"></div>
       </div>
 
       <div class="dash-card" style="margin-top:22px" id="majCard">

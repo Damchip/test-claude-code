@@ -401,15 +401,15 @@ hr.sep { border: none; border-top: 1px solid var(--line, #2a333d); margin: 20px 
 .fs-msg.atelier{align-self:flex-end;border-color:var(--accent)}
 .fs-msg .fs-meta{font-size:11px;color:var(--muted);margin-bottom:3px}
 .fs-msg .fs-txt{white-space:pre-wrap}
-#view-fs a.fs-link,#view-fs a.btn-link,#view-clients a.btn-link{color:var(--accent);text-decoration:none}
-#view-fs a.fs-link:hover{text-decoration:underline}
+#view-fs a.fs-link,#view-fs a.btn-link,#view-clients a.btn-link,#view-enligne a.fs-link,#view-enligne a.btn-link{color:var(--accent);text-decoration:none}
+#view-fs a.fs-link:hover,#view-enligne a.fs-link:hover{text-decoration:underline}
 .fs-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-#view-fs input[type=text],#view-fs input[type=password],#view-fs input[type=search],#view-fs input[type=number],#view-fs textarea,#view-fs select{
+#view-fs input[type=text],#view-fs input[type=password],#view-fs input[type=search],#view-fs input[type=number],#view-fs textarea,#view-fs select,#view-enligne input[type=text],#view-enligne input[type=password],#view-enligne input[type=search],#view-enligne input[type=number],#view-enligne textarea,#view-enligne select{
   background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:6px 9px;font:inherit;font-size:13px}
-#view-fs textarea{width:100%;min-height:60px;resize:vertical}
-#view-fs input:focus,#view-fs textarea:focus{outline:none;border-color:var(--accent)}
-#view-fs .fs-form{flex-wrap:wrap;gap:8px}
-#view-fs .fs-form label{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
+#view-fs textarea,#view-enligne textarea{width:100%;min-height:60px;resize:vertical}
+#view-fs input:focus,#view-fs textarea:focus,#view-enligne input:focus,#view-enligne textarea:focus{outline:none;border-color:var(--accent)}
+#view-fs .fs-form,#view-enligne .fs-form{flex-wrap:wrap;gap:8px}
+#view-fs .fs-form label,#view-enligne .fs-form label{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
 #view-fs h4{margin:16px 0 6px;font-size:13px}
 /* Barre d'onglets : passe à la ligne au lieu de déborder quand les onglets sont nombreux */
 header{flex-wrap:wrap;gap:10px}
@@ -427,7 +427,7 @@ header{flex-wrap:wrap;gap:10px}
 #view-clients #ncCard .fs-form label{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
 #view-clients #ncCard input[type=text],#view-clients #ncCard select{margin-top:4px}
 .role-technicien #ncCard #nc_credits{display:none}
-#view-clients .patch-row label.nc-check,#view-fs .patch-row label.nc-check,#view-fs .fs-form label.nc-check{flex-direction:row;align-items:center;gap:6px;align-self:center}
+#view-clients .patch-row label.nc-check,#view-fs .patch-row label.nc-check,#view-fs .fs-form label.nc-check,#view-enligne .patch-row label.nc-check,#view-enligne .fs-form label.nc-check{flex-direction:row;align-items:center;gap:6px;align-self:center}
 /* Double authentification */
 .dfa-config{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-top:10px}
 .dfa-qr{width:180px;height:180px;background:#fff;border-radius:8px;padding:6px}

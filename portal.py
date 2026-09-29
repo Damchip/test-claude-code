@@ -36,7 +36,7 @@ import relances
 import sante
 import taches
 
-APP_VERSION = "1.57.0"
+APP_VERSION = "1.58.0"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt
