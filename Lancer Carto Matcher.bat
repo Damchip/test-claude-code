@@ -21,11 +21,11 @@ if not defined PY (
   exit /b 1
 )
 
-rem --- installer Flask si absent ---
-%PY% -m flask --version >nul 2>nul
+rem --- installer les dependances si absentes (Flask, cryptography...) ---
+%PY% -c "import flask, cryptography" >nul 2>nul
 if errorlevel 1 (
-  echo   Installation de Flask ^(une seule fois^)...
-  %PY% -m pip install flask
+  echo   Installation des dependances ^(une seule fois^)...
+  %PY% -m pip install -r requirements.txt
 )
 
 rem --- ouvrir le navigateur apres un court delai, en parallele ---
