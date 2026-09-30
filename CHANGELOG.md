@@ -3,6 +3,16 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.63.0
+**Auto-patch utilisable avec une grande bibliothèque**
+- Le choix de la solution n'est plus une liste déroulante de toutes les fiches : dès que le fichier client est choisi,
+  les **solutions compatibles** s'affichent (stock identique, même stock, score), et une **recherche** (véhicule, ECU,
+  plateforme, type, mots-clés combinables) trouve les autres. Entrée pour prendre la première ; analyse lancée au choix.
+- Seules les fiches **avec un fichier solution** sont proposées (les lectures d'origine seules ne patchent rien) ;
+  « Trouver automatiquement » les écarte aussi.
+- Fichier d'origine introuvable : le chemin attendu est affiché (OneDrive pas synchronisé, dossier déplacé…) ; sur l'outil
+  en ligne, message clair (l'Auto-patch se fait sur le PC).
+
 ## v1.62.0
 **Plus de double des fichiers de la bibliothèque**
 - Par défaut, les imports ne copient plus les fichiers dans `data/files/` : les fiches pointent directement vers les

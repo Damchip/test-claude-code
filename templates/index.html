@@ -869,7 +869,7 @@
   <main id="view-patch" class="hidden">
     <div class="patch-form">
       <p class="muted small">Applique automatiquement les modifications d'une ou <b>plusieurs</b> solutions
-        (Stage 1 + FAP + E85…) au même <b>fichier client</b>. Les deltas se superposent ;
+        (Stage 1 + E85…) au même <b>fichier client</b>. Les deltas se superposent ;
         un octet en conflit n'est pas écrit. Calcul 100 % serveur :
         headers programmeur (KESS, Autotuner…) retirés puis recollés, checksums Bosch additifs
         ou CRC-16 corrigés si le schéma est <b>clair</b>. Une signature RSA/CSA détectée
@@ -881,9 +881,13 @@
         <label>Fichier client à patcher
           <input type="file" id="patch_file">
         </label>
-        <label>Solution (patch à appliquer)
-          <select id="patch_sol"></select>
-        </label>
+        <div class="patch-sol-pick">
+          <label for="patch_sol_q">Solution (patch à appliquer)</label>
+          <input type="search" id="patch_sol_q" autocomplete="off"
+                 placeholder="Choisis le fichier client, ou cherche : véhicule, ECU, plateforme, type…">
+          <input type="hidden" id="patch_sol">
+          <div id="patch_sol_list" class="patch-sol-list hidden"></div>
+        </div>
         <button id="patch_autofind" class="ghost">Trouver automatiquement</button>
         <button id="patch_analyze">Analyser la compatibilité</button>
       </div>

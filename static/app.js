@@ -261,8 +261,7 @@ async function autoPatchFromMatch(id) {
   await initPatch();
   showView("patch");
   const first = String(id).split(",")[0];
-  if ($("#patch_sol").querySelector(`option[value="${first}"]`))
-    $("#patch_sol").value = first;
+  choisirSolutionPatch(first, true);
   await analyzePatch(window.lastClientFile, String(id));
 }
 
@@ -1724,14 +1723,75 @@ async function initPatch() {
   if (!patchSolLoaded) {
     const r = await fetch("/solutions");
     const d = await r.json();
-    window.patchSolutions = d.solutions;
-    $("#patch_sol").innerHTML = d.solutions.map(s =>
-      `<option value="${s.id}">${esc(s.vehicle_label || s.ecu_version || ("#" + s.id))}</option>`
-    ).join("") || `<option value="">(base vide)</option>`;
+    // seules les fiches qui ont un fichier solution servent à patcher (les lectures d'origine seules sont écartées)
+    window.patchSolutions = d.solutions.filter(s => s.solution_file);
     patchSolLoaded = true;
+    if ($("#patch_sol").value) choisirSolutionPatch($("#patch_sol").value, true);
   }
   await fillPatchDossiers();
 }
+
+/* Choix de la solution : recherche + suggestions d'après le fichier client (au lieu d'une liste déroulante) */
+window.patchMatches = [];
+function libelleFiche(s) { return s.vehicle_label || s.ecu_version || ("#" + s.id); }
+function choisirSolutionPatch(id, silencieux) {
+  const s = (window.patchSolutions || []).find(x => String(x.id) === String(id));
+  $("#patch_sol").value = s ? String(s.id) : "";
+  $("#patch_sol_q").value = s ? `${libelleFiche(s)} — ${s.solution_type || "type ?"}` : "";
+  $("#patch_sol_list").classList.add("hidden");
+  if (s && !silencieux && $("#patch_file").files[0]) analyzePatch($("#patch_file").files[0], String(s.id));
+}
+function afficherChoixPatch() {
+  const q = $("#patch_sol_q").value.trim().toLowerCase();
+  const sols = window.patchSolutions || [];
+  const parId = new Map(sols.map(s => [s.id, s]));
+  const ligne = (s, extra) => `<button type="button" class="patch-sol-item" data-sid="${s.id}">
+      <b>${esc(libelleFiche(s))}</b>${extra || ""}
+      <span class="muted small">${esc([s.solution_type, s.ecu_platform, s.ecu_version, s.manufacturer].filter(Boolean).join(" · "))}
+        ${s.stock_size ? " · " + Math.round(s.stock_size / 1024) + " Ko" : ""}</span></button>`;
+  let html = "";
+  if (!q) {
+    const sugg = (window.patchMatches || []).filter(m => parId.has(m.id)).slice(0, 12);
+    html = sugg.length
+      ? `<div class="patch-sol-titre">Compatibles avec le fichier client</div>` + sugg.map(m => ligne(parId.get(m.id),
+          ` <span class="badge ${m.exact || m.same_stock ? "ok" : "warn"}">${m.exact ? "stock identique" : m.same_stock ? "même stock" : Math.round(m.score * 100) + " %"}</span>`)).join("")
+      : `<div class="patch-sol-titre">${$("#patch_file").files[0] ? "Aucune solution compatible trouvée — cherche par véhicule, ECU…" : "Choisis d'abord le fichier client : les solutions compatibles s'affichent ici."}</div>`;
+  } else {
+    const mots = q.split(/\s+/);
+    const trouve = sols.filter(s => {
+      const t = [s.vehicle_label, s.ecu_version, s.ecu_platform, s.manufacturer, s.solution_type, s.tags, s.notes].join(" ").toLowerCase();
+      return mots.every(m => t.includes(m));
+    });
+    html = trouve.length ? trouve.slice(0, 60).map(s => ligne(s)).join("")
+      + (trouve.length > 60 ? `<div class="patch-sol-titre">… ${trouve.length - 60} autres : précise la recherche</div>` : "")
+      : `<div class="patch-sol-titre">Aucune fiche avec fichier solution ne correspond.</div>`;
+  }
+  $("#patch_sol_list").innerHTML = html;
+  $("#patch_sol_list").classList.remove("hidden");
+}
+$("#patch_sol_q").addEventListener("focus", async () => { await initPatch(); afficherChoixPatch(); });
+$("#patch_sol_q").addEventListener("input", () => { $("#patch_sol").value = ""; afficherChoixPatch(); });
+$("#patch_sol_q").addEventListener("keydown", e => {
+  if (e.key === "Escape") $("#patch_sol_list").classList.add("hidden");
+  if (e.key === "Enter") { const b = $("#patch_sol_list .patch-sol-item"); if (b) { e.preventDefault(); choisirSolutionPatch(b.dataset.sid); } }
+});
+$("#patch_sol_list").addEventListener("mousedown", e => {
+  const b = e.target.closest("[data-sid]");
+  if (b) { e.preventDefault(); choisirSolutionPatch(b.dataset.sid); }
+});
+$("#patch_sol_q").addEventListener("blur", () => setTimeout(() => $("#patch_sol_list").classList.add("hidden"), 150));
+$("#patch_file").addEventListener("change", async () => {
+  const f = $("#patch_file").files[0];
+  window.patchMatches = [];
+  if (!f) return;
+  try {
+    await initPatch();
+    const fd = new FormData(); fd.append("file", f); fd.append("relpath", f.name);
+    const d = await (await fetch("/analyze", { method: "POST", body: fd })).json();
+    window.patchMatches = d.matches || [];
+    if (!$("#patch_sol").value) { $("#patch_sol_q").focus(); afficherChoixPatch(); }
+  } catch (e) { /* la recherche manuelle reste possible */ }
+});
 
 function bytesEqualRange(a, b, off, len) {
   for (let i = 0; i < len; i++) if (a[off + i] !== b[off + i]) return false;
@@ -1893,7 +1953,10 @@ $("#patch_autofind").onclick = async () => {
     fd.append("file", f);
     fd.append("relpath", f.name);
     const d = await (await fetch("/analyze", { method: "POST", body: fd })).json();
-    const matches = d.matches || [];
+    await initPatch();
+    const avecFichier = new Set((window.patchSolutions || []).map(s => s.id));
+    const matches = (d.matches || []).filter(m => avecFichier.has(m.id));   // une lecture d'origine seule ne patche rien
+    window.patchMatches = d.matches || [];
     if (!matches.length) {
       rep.innerHTML = `<div class="patch-bad">Aucune correspondance trouvée pour ce fichier dans la base.</div>`;
       return;
@@ -1911,7 +1974,7 @@ $("#patch_autofind").onclick = async () => {
     else why = `⚠ aucune fiche de même taille — meilleur score ${Math.round(best.score * 100)}% (vérifie la compatibilité)`;
 
     await initPatch();
-    $("#patch_sol").value = String(best.id);
+    choisirSolutionPatch(best.id, true);
     const note = `Solution auto-sélectionnée : ${best.vehicle_label || best.ecu_version || ("#" + best.id)} — ${why}.`;
     await analyzePatch(f, String(best.id), note);
   } catch (e) {
@@ -1936,8 +1999,12 @@ async function analyzePatch(f, id, autoNote) {
     const r = await fetch(multi ? "/patch/analyze_multi" : "/patch/analyze", { method: "POST", body: fd });
     const d = await r.json();
     if (d.error === "original_missing") {
-      rep.innerHTML = `<div class="patch-bad">Le fichier <b>original</b> de cette solution est introuvable.
-        Va dans Solutions → « Réparer les liens », ou réimporte la fiche.</div>`;
+      const fi = (window.patchSolutions || []).find(x => String(x.id) === String(id).split(",")[0]) || {};
+      rep.innerHTML = DISTANTS
+        ? `<div class="patch-bad">Sur l'outil en ligne, les fichiers de la bibliothèque restent sur le PC atelier :
+            l'Auto-patch se fait dans Carto Matcher sur le PC.</div>`
+        : `<div class="patch-bad">Le fichier <b>original</b> de cette solution est introuvable sur ce PC${fi.original_file ? ` :<br><code>${esc(fi.original_file)}</code>` : ""}.
+        <br>OneDrive pas encore synchronisé ou dossier déplacé ? Tableau de bord → Fichiers CARTOS pour indiquer le bon dossier.</div>`;
       return;
     }
     if (d.error === "solution_missing") {

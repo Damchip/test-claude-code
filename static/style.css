@@ -481,3 +481,12 @@ table.tarifs .tarifs-cat{padding-top:10px;border-bottom:none;text-transform:uppe
 table.tarifs{table-layout:fixed}
 table.tarifs td:first-child{width:38%}
 table.tarifs td:last-child{width:12%}
+.patch-sol-pick{position:relative;display:flex;flex-direction:column;gap:4px;flex:1;min-width:320px}
+.patch-sol-pick input[type=search]{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px}
+.patch-sol-list{position:absolute;top:100%;left:0;right:0;z-index:30;max-height:420px;overflow:auto;margin-top:4px;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.patch-sol-item{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);
+  color:var(--ink);padding:8px 12px;cursor:pointer;font:inherit}
+.patch-sol-item:hover{background:rgba(255,255,255,.05)}
+.patch-sol-item .muted{display:block;margin-top:2px}
+.patch-sol-titre{padding:8px 12px;font-size:12px;color:var(--muted)}
