@@ -30,7 +30,7 @@ class TarifsCatalogueTests(unittest.TestCase):
         self.assertIn("indisponible", catalogue.devis("vl", ["torque"])["erreur"])
         catalogue.appliquer_tarifs({})
         self.assertEqual(catalogue.devis("vl", ["stage1"])["total"], base)
-        self.assertEqual(len(catalogue.PRESTATIONS["vl"]), 9)
+        self.assertEqual(len(catalogue.PRESTATIONS["vl"]), len(catalogue._DEFAUTS["PRESTATIONS"]["vl"]))
 
     def test_rien_d_autre_que_des_prix(self):
         t = catalogue.normaliser_tarifs({"prestations": {"vl.stage1": {"prix": 70, "nom": "Autre chose"},
@@ -43,6 +43,17 @@ class TarifsCatalogueTests(unittest.TestCase):
         for mauvais in ("-5", "abc", 999999):
             with self.assertRaises(ValueError):
                 catalogue.normaliser_tarifs({"prestations": {"vl.stage1": {"prix": mauvais}}})
+
+    def test_nouvelles_prestations_et_packs(self):
+        self.assertEqual(catalogue.devis("vl", ["e85", "startstop"])["total"], 79)
+        self.assertEqual(catalogue.devis("vl", ["e85", "startstop"], siege=True)["total"], 109)
+        self.assertEqual(catalogue.devis("vl", ["stage1", "popbang"])["total"], 89)
+        self.assertEqual(catalogue.devis("vl", ["stage2", "boite", "launch", "rupteur"])["total"], 89 + 59 + 39 + 29)
+        self.assertEqual(catalogue.devis("moto", ["popbang"])["total"], 29)
+        import traductions
+        for items in catalogue.PRESTATIONS.values():
+            for p in items:
+                self.assertIn(p["desc"], traductions.EN, p["desc"])
 
     def test_packs_credits_jamais_retires(self):
         n = len(catalogue.PACKS_CREDITS)

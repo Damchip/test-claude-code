@@ -37,6 +37,11 @@ PRESTATIONS = {
         {"code": "volet_adm", "nom": "Volet collecteur d'admission", "desc": "Réglage du volet d'admission", "prix": 39},
         {"code": "volet_ech", "nom": "Volet d'échappement", "desc": "Réglage du volet d'échappement", "prix": 39},
         {"code": "torque", "nom": "Torque OFF", "desc": "Limitation de couple", "prix": 19},
+        {"code": "stage2", "nom": "Stage 2", "desc": "Pièces modifiées · FAP, catalyseur et EGR conservés", "prix": 89},
+        {"code": "boite", "nom": "Boîte automatique (TCU)", "desc": "Passages de rapports et couple de la boîte", "prix": 59},
+        {"code": "popbang", "nom": "Pop & Bang", "desc": "Détonations à la décélération (moteurs essence)", "prix": 39},
+        {"code": "launch", "nom": "Launch control", "desc": "Aide au départ arrêté", "prix": 39},
+        {"code": "rupteur", "nom": "Rupteur (hardcut)", "desc": "Coupure franche au régime maximal", "prix": 29},
     ],
     "pl": [
         {"code": "stage1", "nom": "Stage 1 – PL", "desc": "Fichier sur mesure", "prix": 79, "type": "Stage 1"},
@@ -48,6 +53,7 @@ PRESTATIONS = {
         {"code": "stage1", "nom": "Stage 1 – Moto", "desc": "Fichier sur mesure", "prix": 59, "type": "Stage 1"},
         {"code": "speed", "nom": "Speed limit – Moto/Quad", "desc": "Réglage du limiteur de vitesse", "prix": 20,
          "type": "Vmax off"},
+        {"code": "popbang", "nom": "Pop & Bang – Moto", "desc": "Détonations à la décélération", "prix": 29},
     ],
 }
 
@@ -60,6 +66,9 @@ SERVICES = [
 PACKS = {
     "vl": [
         {"nom": "Pack E85 + débridage moteur", "codes": {"e85", "stage1"}, "prix": 99, "prix_siege": 129},
+        {"nom": "Pack E85 + Start & Stop", "codes": {"e85", "startstop"}, "prix": 79, "prix_siege": 109},
+        {"nom": "Pack E85 + Speed limit", "codes": {"e85", "speed"}, "prix": 79, "prix_siege": 109},
+        {"nom": "Pack Stage 1 + Pop & Bang", "codes": {"stage1", "popbang"}, "prix": 89},
     ],
 }
 

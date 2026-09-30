@@ -3,6 +3,15 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.61.0
+**Nouvelles prestations** (prix de départ, réglables dans Fileservice → Tarifs des prestations)
+- Véhicule léger : **Stage 2** (pièces modifiées, FAP / catalyseur / EGR conservés) 89 cr., **Boîte automatique (TCU)**
+  59 cr., **Pop & Bang** 39 cr., **Launch control** 39 cr., **Rupteur (hardcut)** 29 cr.
+- Moto / Quad : **Pop & Bang – Moto** 29 cr.
+- Packs : **E85 + Start & Stop** et **E85 + Speed limit** 79 cr. (109 cr. avec ouverture au siège),
+  **Stage 1 + Pop & Bang** 89 cr.
+- Traductions anglaises de l'espace client.
+
 ## v1.60.0
 **Tarifs réglables depuis l'outil atelier** (administrateurs) : Fileservice → **Tarifs des prestations**.
 - Prix de chaque prestation (et prix « ouverture au siège »), des services, des packs, des garanties, des frais de
