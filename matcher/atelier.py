@@ -4,8 +4,10 @@ Conçu pour reprendre si ça s'arrête (lot de N fiches). Sans fichier sur le
 disque, tout est ignoré — pointer CARTOS d'abord.
 """
 
+import hashlib
 import os
 import json
+import re
 
 from . import db, extract, fingerprint, headers, importer, metadata
 
@@ -88,7 +90,7 @@ def _needs_sync(db_path, d):
     if not has:
         return False, ori, sol
     need = (
-        not _has_archive(db_path, d["id"])
+        (db.copie_active(db_path) and not _has_archive(db_path, d["id"]))
         or int(d.get("minhash_ver") or 1) < 2
         or ecu_empty(d.get("ecu_version"))
         or not (d.get("ecu_platform") or "").strip()
@@ -128,7 +130,7 @@ def sync_batch(db_path=None, limit=12):
             continue
         processed += 1
         try:
-            if not _has_archive(db_path, d["id"]):
+            if db.copie_active(db_path) and not _has_archive(db_path, d["id"]):
                 db.archive_files(db_path, d["id"], ori, sol)
                 stats["archived"] += 1
                 ori = db.resolve_file(db_path, ori)
@@ -314,3 +316,98 @@ def cleanup(db_path=None, apply=False):
     dupes = merge_duplicates(db_path, apply=apply)
     linked = link_missing_solutions(db_path, apply=apply)
     return {"junk": junk, "duplicates": dupes, "linked": linked, "applied": apply}
+
+
+_NOMS_NOTES = re.compile(r"original:\s*(.*?)\s*\|\s*solution:\s*(.*?)\s*$")
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for bloc in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(bloc)
+    return h.hexdigest()
+
+
+def _dans(path, dossier):
+    try:
+        return os.path.commonpath([os.path.abspath(path), os.path.abspath(dossier)]) == os.path.abspath(dossier)
+    except ValueError:
+        return False
+
+
+def liberer_espace(db_path=None, racine="", apply=False, max_candidats=25):
+    """Supprime les copies de data/files/ quand le fichier d'origine est retrouvé dans `racine` (dossier CARTOS) :
+    même contenu exact (SHA-256). La fiche pointe alors vers le fichier d'origine. Une copie sans original
+    retrouvé est gardée. Aperçu par défaut ; `apply=True` écrit (base sauvegardée d'abord)."""
+    db_path = db_path or db.DEFAULT_DB
+    if not racine or not os.path.isdir(racine):
+        return {"ok": False, "error": "Dossier CARTOS introuvable sur ce PC."}
+    copies_dir = db.files_root(db_path)
+    conn = db._connect(db_path)
+    rows = [dict(r) for r in conn.execute("SELECT id, original_file, solution_file, notes FROM solutions")]
+    conn.close()
+    besoins = []
+    for r in rows:
+        m = _NOMS_NOTES.search(r.get("notes") or "")
+        noms = {"original_file": m.group(1) if m else "", "solution_file": m.group(2) if m else ""}
+        for champ in ("original_file", "solution_file"):
+            p = db.resolve_file(db_path, r.get(champ) or "")
+            if p and os.path.isfile(p) and _dans(p, copies_dir):
+                besoins.append({"id": r["id"], "champ": champ, "copie": p, "taille": os.path.getsize(p),
+                                "ext": os.path.splitext(p)[1].lower(), "nom": (noms[champ] or "").lower()})
+    res = {"ok": True, "applied": apply, "copies": len(besoins), "retrouves": 0, "gardees": 0, "octets": 0}
+    if not besoins:
+        return res
+    tailles = {b["taille"] for b in besoins}
+    exts = {b["ext"] for b in besoins}
+    index = {}
+    for base, dossiers, fichiers in os.walk(racine):
+        dossiers[:] = [d for d in dossiers if not d.startswith(".")]
+        if _dans(base, copies_dir):
+            continue
+        for f in fichiers:
+            if os.path.splitext(f)[1].lower() not in exts:
+                continue
+            full = os.path.join(base, f)
+            try:
+                taille = os.path.getsize(full)
+            except OSError:
+                continue
+            if taille in tailles:
+                index.setdefault(taille, []).append(full)
+    trouves = []
+    for b in besoins:
+        cands = [c for c in index.get(b["taille"], []) if os.path.splitext(c)[1].lower() == b["ext"]]
+        cands.sort(key=lambda c: os.path.basename(c).lower() != b["nom"])   # même nom d'abord
+        empreinte = None
+        for c in cands[:max_candidats]:
+            try:
+                empreinte = empreinte or _sha256(b["copie"])
+                if _sha256(c) == empreinte:
+                    trouves.append((b, c))
+                    break
+            except OSError:
+                continue
+    res["retrouves"] = len(trouves)
+    res["gardees"] = len(besoins) - len(trouves)
+    res["octets"] = sum(b["taille"] for b, _ in trouves)
+    if apply and trouves:
+        db.backup_db(db_path)
+        conn = db._connect(db_path)
+        for b, c in trouves:
+            conn.execute(f"UPDATE solutions SET {b['champ']} = ? WHERE id = ?", (os.path.abspath(c), b["id"]))
+        conn.commit()
+        conn.close()
+        for b, _ in trouves:
+            try:
+                os.remove(b["copie"])
+            except OSError:
+                pass
+        for base, _, _ in sorted(os.walk(copies_dir), key=lambda x: -len(x[0])):
+            if base != copies_dir:
+                try:
+                    os.rmdir(base)          # dossiers de fiches vidés
+                except OSError:
+                    pass
+    return res

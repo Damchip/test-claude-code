@@ -267,9 +267,27 @@ def _hydrate_paths(db_path, d):
     return d
 
 
+def copie_active(db_path=DEFAULT_DB):
+    """Réglage « Copier les fichiers dans l'application » (config.json à côté de la base). Désactivé par défaut :
+    les fiches gardent le lien vers les fichiers d'origine (OneDrive…), sans double."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(db_path)), "config.json"), encoding="utf-8") as fh:
+            return bool(json.load(fh).get("copier_fichiers", False))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def archive_files(db_path, sol_id, original_path="", solution_path=""):
-    """Copie original + solution dans data/files/<id>/ (indépendant de OneDrive).
+    """Enregistre les fichiers d'une fiche. Si la copie est activée, copie original + solution dans
+    data/files/<id>/ (indépendant de OneDrive) ; sinon garde simplement les chemins d'origine.
     Met à jour les chemins en base. Si la copie échoue, les chemins d'origine restent."""
+    if not copie_active(db_path):
+        conn = _connect(db_path)
+        conn.execute("UPDATE solutions SET original_file=?, solution_file=? WHERE id=?",
+                     (_store_path(db_path, original_path or ""), _store_path(db_path, solution_path or ""), sol_id))
+        conn.commit()
+        conn.close()
+        return original_path or "", solution_path or ""
     dest = os.path.join(files_root(db_path), f"{int(sol_id):06d}")
     try:
         os.makedirs(dest, exist_ok=True)

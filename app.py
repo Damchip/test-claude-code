@@ -50,7 +50,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.61.0"
+APP_VERSION = "1.62.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -142,7 +142,7 @@ ADMIN_ENDPOINTS = {"settings_set", "portal_config_set", "clients_supprimer", "cl
                    "fs_passerelle_liste", "fs_passerelle_creer", "fs_passerelle_revoquer",
                    "enligne_reglages_get", "enligne_reglages_set", "enligne_test", "enligne_demandes",
                    "enligne_preparer", "enligne_livrer_auto", "enligne_original", "enligne_livrer", "enligne_traitement",
-                   "enligne_synchroniser", "fs_tarifs", "fs_tarifs_set"}
+                   "enligne_synchroniser", "fs_tarifs", "fs_tarifs_set", "files_liberer"}
 
 
 def _equipe_active():
@@ -728,6 +728,13 @@ def files_remap():
         DB_PATH, new_root=b.get("root") or "", apply=bool(b.get("apply"))))
 
 
+@app.route("/files/liberer", methods=["POST"])
+def files_liberer():
+    """Supprime les copies de data/files/ dont l'original est retrouvé dans le dossier CARTOS (aperçu par défaut)."""
+    b = request.json or {}
+    return jsonify(atelier.liberer_espace(DB_PATH, racine=(b.get("root") or "").strip(), apply=bool(b.get("apply"))))
+
+
 @app.route("/backup", methods=["POST"])
 def backup_now():
     path = db.backup_db(DB_PATH)
@@ -749,7 +756,8 @@ def settings_get():
     key = ui_key or env_key
     masked = (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("•" * len(key))
     return jsonify({"has_key": bool(key), "source": source, "masked": masked,
-                    "has_password": bool(cfg.get("access_password_hash"))})
+                    "has_password": bool(cfg.get("access_password_hash")),
+                    "copier_fichiers": bool(cfg.get("copier_fichiers", False))})
 
 
 @app.route("/settings", methods=["POST"])
@@ -769,6 +777,8 @@ def settings_set():
             session["authed"] = True
         else:
             cfg.pop("access_password_hash", None)
+    if "copier_fichiers" in b:
+        cfg["copier_fichiers"] = bool(b["copier_fichiers"])
     save_config(cfg)
     return jsonify({"ok": True})
 

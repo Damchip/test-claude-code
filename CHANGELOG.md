@@ -3,6 +3,15 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.62.0
+**Plus de double des fichiers de la bibliothèque**
+- Par défaut, les imports ne copient plus les fichiers dans `data/files/` : les fiches pointent directement vers les
+  fichiers d'origine (OneDrive). Option « Copier les fichiers dans l'application » (Tableau de bord → Copies des
+  fichiers) pour qui veut une copie de sécurité.
+- **Libérer l'espace** : pour les fiches déjà copiées, l'original est retrouvé dans le dossier CARTOS (même taille,
+  même nom en priorité, contenu identique vérifié par SHA-256), la fiche y est reliée et la copie supprimée.
+  Aperçu d'abord ; base sauvegardée avant ; copie gardée si l'original est introuvable.
+
 ## v1.61.0
 **Nouvelles prestations** (prix de départ, réglables dans Fileservice → Tarifs des prestations)
 - Véhicule léger : **Stage 2** (pièces modifiées, FAP / catalyseur / EGR conservés) 89 cr., **Boîte automatique (TCU)**

@@ -2428,6 +2428,33 @@ async function doRemap(apply) {
   }
 }
 
+/* Copies des fichiers dans data/files/ : option + libération de l'espace */
+async function loadCopier() {
+  try { $("#dashCopier").checked = !!(await (await fetch("/settings")).json()).copier_fichiers; } catch (e) { /* ignore */ }
+}
+$("#dashCopier").onchange = async () => {
+  try { await postJSON("/settings", { copier_fichiers: $("#dashCopier").checked }); }
+  catch (err) { alert(err.message); loadCopier(); }
+};
+async function doLiberer(apply) {
+  const ph = $("#dash_cartos").placeholder;
+  const root = $("#dash_cartos").value.trim() || (ph.startsWith("ex :") ? "" : ph);
+  if (!root) { alert("Indique le dossier CARTOS de cette machine (champ ci-dessus)."); return; }
+  if (apply && !confirm("Relier les fiches aux fichiers d'origine et supprimer les copies retrouvées ? La base est d'abord sauvegardée.")) return;
+  const out = $("#dashLibererOut");
+  out.innerHTML = '<span class="spin"></span> Recherche des originaux dans ' + esc(root) + "… (peut prendre quelques minutes)";
+  try {
+    const d = await postJSON("/files/liberer", { root, apply });
+    const mo = (d.octets / 1048576).toFixed(0);
+    out.innerHTML = d.copies === 0 ? "Aucune copie dans data/files/ : rien à libérer."
+      : `${d.applied ? '<span class="badge ok">fait</span> ' : "Aperçu — rien n'est modifié. "}${d.retrouves} / ${d.copies} copie(s) avec original retrouvé`
+        + ` → <b>${mo} Mo</b> ${d.applied ? "libérés" : "à libérer"}.${d.gardees ? ` ${d.gardees} copie(s) gardée(s) (original introuvable).` : ""}`;
+  } catch (err) { out.textContent = err.message; }
+}
+$("#dashLibererTest").onclick = () => doLiberer(false);
+$("#dashLibererGo").onclick = () => doLiberer(true);
+loadCopier();
+
 $("#dashRemapTest").onclick = () => doRemap(false);
 $("#dashRemapApply").onclick = () => doRemap(true);
 

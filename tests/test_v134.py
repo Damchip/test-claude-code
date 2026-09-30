@@ -208,6 +208,8 @@ class ArchiveTests(unittest.TestCase):
         shutil.rmtree(self.td, ignore_errors=True)
 
     def test_add_copies_into_files(self):
+        with open(os.path.join(self.td, "config.json"), "w") as fh:   # option « Copier les fichiers » cochée
+            fh.write('{"copier_fichiers": true}')
         sid = db.add_solution(
             self.dbp, ecu_version="0281020088", ecu_platform="EDC17CP14",
             vehicle_label="Audi", solution_type="Stage 1",

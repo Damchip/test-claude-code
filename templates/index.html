@@ -154,6 +154,19 @@
       </div>
       <div id="dashRemapOut" class="muted small"></div>
 
+      <h3>Copies des fichiers</h3>
+      <p class="muted small">Par défaut, les fiches pointent directement vers tes fichiers (OneDrive) : aucun double.
+        Coche la case seulement si tu veux une copie de sécurité dans <code>data/files/</code> (double l'espace utilisé).</p>
+      <label class="muted small nc-check"><input type="checkbox" id="dashCopier"> Copier les fichiers dans l'application lors des imports</label>
+      <p class="muted small" style="margin-top:10px"><b>Libérer l'espace</b> : pour les fiches déjà copiées, retrouve le fichier d'origine
+        dans le dossier CARTOS ci-dessus (contenu identique vérifié), relie la fiche à l'original et supprime la copie.
+        Une copie dont l'original n'est pas retrouvé est gardée.</p>
+      <div class="patch-row" style="margin:8px 0 12px">
+        <button id="dashLibererTest" class="ghost sm">Aperçu</button>
+        <button id="dashLibererGo" class="ghost sm">Libérer l'espace</button>
+      </div>
+      <div id="dashLibererOut" class="muted small"></div>
+
       <h3>Sauvegardes</h3>
       <p class="muted small">Restaure une copie de <code>data/backups/</code>, ou importe un
         fichier <code>.db</code> (sauvegarde Carto Matcher d'un autre PC / une ancienne version).
