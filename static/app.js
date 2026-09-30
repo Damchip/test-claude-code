@@ -723,8 +723,9 @@ function solCategories(s, dim) {
 }
 
 function solText(s) {
-  return [s.vehicle_label, s.solution_type, s.ecu_platform, s.ecu_version,
-          s.manufacturer, s.notes, s.tags].filter(Boolean).join(" ").toLowerCase();
+  // gardé en mémoire : la recherche parcourt des milliers de fiches à chaque touche
+  return s._t || (s._t = [s.vehicle_label, s.solution_type, s.ecu_platform, s.ecu_version,
+          s.manufacturer, s.notes, s.tags].filter(Boolean).join(" ").toLowerCase());
 }
 
 function applyFilters() {
@@ -732,7 +733,8 @@ function applyFilters() {
   const q = $("#solSearch").value.trim().toLowerCase();
   const dim = window.solDim;
   // 1) filtre texte
-  const textList = q ? all.filter(s => solText(s).includes(q)) : all;
+  const mots = q.split(/\s+/).filter(Boolean);   // plusieurs mots : tous doivent être présents, dans n'importe quel ordre
+  const textList = mots.length ? all.filter(s => { const t = solText(s); return mots.every(m => t.includes(m)); }) : all;
   // 2) facettes (comptage par catégorie) sur le résultat texte
   const counts = new Map();
   for (const s of textList)
@@ -743,6 +745,7 @@ function applyFilters() {
     ? textList
     : textList.filter(s => solCategories(s, dim).includes(window.solCat));
   $("#solCount").textContent = `${list.length} / ${all.length} fiche(s)`;
+  window.solLimite = SOL_PAGE;       // nouveau filtre : on repart de la première page
   renderSolutions(list, $("#solDim2").value);
   updateBulkBar();
 }
@@ -839,15 +842,25 @@ async function bulkApply(payload) {
   await loadSolutions();   // recharge la base à jour (garde la sélection)
 }
 
+/* Affichage par pages : des dizaines de milliers de fiches ne se dessinent pas d'un coup */
+const SOL_PAGE = 200;
+window.solLimite = SOL_PAGE;
+function boutonPlus(reste) {
+  return reste > 0 ? `<div class="sol-plus"><button type="button" class="ghost sm" id="solPlus">Afficher ${Math.min(reste, SOL_PAGE)} de plus</button>
+    <span class="muted small">${reste} autre(s) — ou affine la recherche</span></div>` : "";
+}
 function renderSolutions(list, dim2) {
   const box = $("#solList");
   if (!list.length) {
     box.innerHTML = `<div class="empty">Aucune solution${$("#solSearch").value || window.solCat ? " pour ce filtre" : " en base"}.</div>`;
     return;
   }
+  const limite = window.solLimite;
+  const surPlus = () => { const b = $("#solPlus"); if (b) b.onclick = () => { window.solLimite += SOL_PAGE; renderSolutions(list, dim2); }; };
   if (!dim2) {
-    box.innerHTML = list.map(rowHTML).join("");
+    box.innerHTML = list.slice(0, limite).map(rowHTML).join("") + boutonPlus(list.length - limite);
     wireRows(box);
+    surPlus();
     return;
   }
   // sous-groupement : regroupe par catégorie de la dimension secondaire
@@ -859,12 +872,18 @@ function renderSolutions(list, dim2) {
     }
   const ordered = [...groups.entries()].sort((a, b) =>
     b[1].length - a[1].length || a[0].localeCompare(b[0], "fr"));
-  box.innerHTML = ordered.map(([cat, rows]) =>
-    `<div class="sol-group">
+  let places = limite, masquees = 0;
+  box.innerHTML = ordered.map(([cat, rows]) => {
+    const vus = rows.slice(0, Math.max(0, places));
+    places -= vus.length;
+    masquees += rows.length - vus.length;
+    return vus.length ? `<div class="sol-group">
        <div class="sol-group-head">${esc(cat)} <span class="muted">· ${rows.length}</span></div>
-       ${rows.map(rowHTML).join("")}
-     </div>`).join("");
+       ${vus.map(rowHTML).join("")}
+     </div>` : "";
+  }).join("") + boutonPlus(masquees);
   wireRows(box);
+  surPlus();
 }
 
 /* ---- Édition ---- */
@@ -940,13 +959,44 @@ function vizUpdateControls() {
 $("#viz_type").addEventListener("change", vizUpdateControls);
 $("#viz_source").addEventListener("change", vizUpdateControls);
 
+/* Choix d'une fiche par recherche (des milliers de fiches : pas de liste déroulante) */
+function selecteurFiche(prefixe, fiches) {
+  const q = $(`#${prefixe}_q`), cache = $(`#${prefixe}`), liste = $(`#${prefixe}_list`);
+  const afficher = () => {
+    const mots = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const tout = fiches();
+    const trouve = mots.length ? tout.filter(s => { const t = solText(s); return mots.every(m => t.includes(m)); }) : tout;
+    liste.innerHTML = trouve.slice(0, 60).map(s => `<button type="button" class="patch-sol-item" data-sid="${s.id}">
+        <b>${esc(libelleFiche(s))}</b><span class="muted small">${esc([s.solution_type, s.ecu_platform, s.ecu_version].filter(Boolean).join(" · "))}</span></button>`).join("")
+      + (trouve.length > 60 ? `<div class="patch-sol-titre">… ${trouve.length - 60} autres : précise la recherche</div>` : "")
+      + (!trouve.length ? `<div class="patch-sol-titre">Aucune fiche ne correspond.</div>` : "");
+    liste.classList.remove("hidden");
+  };
+  const choisir = id => {
+    const s = fiches().find(x => String(x.id) === String(id));
+    cache.value = s ? String(s.id) : "";
+    q.value = s ? `${libelleFiche(s)} — ${s.solution_type || "type ?"}` : "";
+    liste.classList.add("hidden");
+  };
+  q.addEventListener("focus", afficher);
+  q.addEventListener("input", () => { cache.value = ""; afficher(); });
+  q.addEventListener("keydown", e => {
+    if (e.key === "Escape") liste.classList.add("hidden");
+    if (e.key === "Enter") { const b = liste.querySelector(".patch-sol-item"); if (b) { e.preventDefault(); choisir(b.dataset.sid); } }
+  });
+  q.addEventListener("blur", () => setTimeout(() => liste.classList.add("hidden"), 150));
+  liste.addEventListener("mousedown", e => { const b = e.target.closest("[data-sid]"); if (b) { e.preventDefault(); choisir(b.dataset.sid); } });
+  return choisir;
+}
+window.vizSolutions = [];
+const choisirFicheViz = selecteurFiche("viz_sol", () => window.vizSolutions);
+
 async function initViz() {
   if (vizSolLoaded) return;
   const r = await fetch("/solutions");
   const d = await r.json();
-  $("#viz_sol").innerHTML = d.solutions.map(s =>
-    `<option value="${s.id}">${esc(s.vehicle_label || s.ecu_version || ("#" + s.id))}</option>`
-  ).join("") || `<option value="">(base vide)</option>`;
+  window.vizSolutions = d.solutions.filter(s => s.solution_file || s.original_file);
+  if (window.vizSolutions.length && !$("#viz_sol").value) choisirFicheViz(window.vizSolutions[0].id);
   vizSolLoaded = true;
   vizUpdateControls();
 }

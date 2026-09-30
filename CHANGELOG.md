@@ -3,6 +3,15 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.65.0
+**Rapide avec des dizaines de milliers de fiches** (mesuré sur une base de 30 000 fiches)
+- Reconnaissance d'un calculateur (espace client, Recherche, Auto-patch) : **≈ 0,2 s au lieu de 1 s** — la base est
+  gardée en mémoire tant qu'elle ne change pas (signatures compactes, ~55 Mo pour 30 000 fiches), comparaison des
+  tailles une fois par taille.
+- Liste des Solutions : chargée **5× plus vite** (plus de vérification du disque pour l'affichage) et affichée par pages
+  de 200 (« Afficher 200 de plus ») ; recherche **à plusieurs mots**, dans n'importe quel ordre.
+- Cartes 2D → « Solution de la base » : recherche au lieu d'une liste déroulante de toutes les fiches.
+
 ## v1.64.0
 **Import de toute la bibliothèque (des dizaines de milliers de fichiers)**
 - Onglet Importer → **Importer toute la bibliothèque** : l'import tourne en tâche de fond sur le PC (la page peut être

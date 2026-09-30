@@ -50,7 +50,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.64.0"
+APP_VERSION = "1.65.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -568,7 +568,7 @@ def save():
 @app.route("/solutions")
 def solutions():
     q = request.args.get("q", "")
-    return jsonify({"solutions": db.list_solutions(DB_PATH, q),
+    return jsonify({"solutions": db.list_solutions(DB_PATH, q, hydrate=False),
                     "db_size": db.count(DB_PATH), "synchro": passerelle.etat_base(DATA_DIR)})
 
 

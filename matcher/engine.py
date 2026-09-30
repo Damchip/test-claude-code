@@ -75,7 +75,7 @@ def _size_ratio(a, b):
 
 def match(data: bytes, db_path=db.DEFAULT_DB, top_n: int = 12, path: str = "") -> dict:
     info = analyze(data, path)
-    sols = db.all_solutions(db_path)
+    sols = db.solutions_pour_recherche(db_path)
 
     incoming_ids = {i for i in info["candidate_ids"] if i and len(i) >= MIN_ID_LEN}
     name_meta = info["name_meta"]
@@ -128,12 +128,19 @@ def match(data: bytes, db_path=db.DEFAULT_DB, top_n: int = 12, path: str = "") -
         if "size_ratio" in flags:
             row["size_ratio"] = flags["size_ratio"]
 
+    tailles = {}   # quelques tailles distinctes pour des milliers de fiches : calcul une fois par taille
+
+    def compat(taille):
+        r = tailles.get(taille)
+        if r is None:
+            r = headers.sizes_compatible(taille, info["size"], min_ratio=SIZE_RATIO_MIN)
+            if not r[0]:
+                r = headers.sizes_compatible(taille, info.get("body_size"), min_ratio=SIZE_RATIO_MIN)
+            tailles[taille] = r
+        return r
+
     for sol in sols:
-        ok_size, ratio = headers.sizes_compatible(
-            sol.get("stock_size"), info["size"], min_ratio=SIZE_RATIO_MIN)
-        if not ok_size:
-            ok_size, ratio = headers.sizes_compatible(
-                sol.get("stock_size"), info.get("body_size"), min_ratio=SIZE_RATIO_MIN)
+        ok_size, ratio = compat(sol.get("stock_size"))
 
         # 2. fichier identique (dump complet OU corps sans header)
         sha_sol = sol.get("stock_sha256") or ""

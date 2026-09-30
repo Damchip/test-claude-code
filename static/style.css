@@ -493,3 +493,5 @@ table.tarifs td:last-child{width:12%}
 .imp-complet{max-width:760px;margin:16px auto;box-sizing:border-box}
 .imp-track #impCompletBar{height:100%;width:0;background:var(--accent);transition:width .3s}
 #impCompletEtat .imp-track{display:block}
+.sol-plus{display:flex;align-items:center;gap:12px;justify-content:center;margin:14px 0 24px}
+.patch-sol-pick.hidden{display:none}

@@ -18,6 +18,7 @@ plusieurs prestations (Stage 1 + FAP off + EGR off).
 
 import datetime
 import json
+from array import array
 import os
 import re
 import shutil
@@ -357,6 +358,39 @@ def all_solutions(db_path=DEFAULT_DB):
     return out
 
 
+_CACHE_RECHERCHE = {}
+
+
+def _signature_base(db_path):
+    sig = []
+    for suffixe in ("", "-wal"):
+        try:
+            st = os.stat(db_path + suffixe)
+            sig.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            sig.append(None)
+    return tuple(sig)
+
+
+def solutions_pour_recherche(db_path=DEFAULT_DB):
+    """Toutes les fiches (avec MinHash) pour la reconnaissance, gardées en mémoire tant que la base ne change pas :
+    avec des dizaines de milliers de fiches, relire et décoder la base à chaque fichier coûterait près d'une seconde.
+    La liste renvoyée est partagée : ne pas la modifier."""
+    cle = os.path.abspath(db_path)
+    sig = _signature_base(cle)
+    c = _CACHE_RECHERCHE.get(cle)
+    if c and c[0] == sig:
+        return c[1]
+    sols = all_solutions(db_path)
+    for d in sols:
+        try:
+            d["minhash"] = array("Q", d["minhash"])     # 8 octets par valeur au lieu d'un objet Python
+        except (OverflowError, TypeError):
+            d["minhash"] = tuple(d["minhash"])
+    _CACHE_RECHERCHE[cle] = (sig, sols)
+    return sols
+
+
 def _norm_type(t):
     return (t or "").strip().casefold()
 
@@ -393,8 +427,9 @@ EDITABLE = ("ecu_version", "ecu_platform", "manufacturer", "vehicle_label",
             "solution_type", "tested_status", "notes", "tags")
 
 
-def list_solutions(db_path=DEFAULT_DB, q=""):
-    """Liste légère (sans minhash) pour l'affichage et l'édition."""
+def list_solutions(db_path=DEFAULT_DB, q="", hydrate=True):
+    """Liste légère (sans minhash) pour l'affichage et l'édition.
+    hydrate=False : chemins tels qu'enregistrés, sans vérifier le disque (liste de milliers de fiches instantanée)."""
     conn = _connect(db_path)
     rows = conn.execute(
         """SELECT id, ecu_version, ecu_platform, manufacturer, vehicle_label,
@@ -403,7 +438,7 @@ def list_solutions(db_path=DEFAULT_DB, q=""):
            FROM solutions ORDER BY created_at DESC"""
     ).fetchall()
     conn.close()
-    out = [ _hydrate_paths(db_path, dict(r)) for r in rows ]
+    out = [_hydrate_paths(db_path, dict(r)) if hydrate else dict(r) for r in rows]
     if q:
         ql = q.lower()
         out = [d for d in out

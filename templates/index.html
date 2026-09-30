@@ -732,9 +732,12 @@
       <label id="viz_diff_wrap" class="hidden" style="align-self:center">
         <input type="checkbox" id="viz_diff_chk" checked> Surligner / superposer les différences
       </label>
-      <label id="viz_base_wrap" class="hidden">Solution
-        <select id="viz_sol"></select>
-      </label>
+      <div id="viz_base_wrap" class="hidden patch-sol-pick">
+        <label for="viz_sol_q">Solution</label>
+        <input type="search" id="viz_sol_q" autocomplete="off" placeholder="Cherche : véhicule, ECU, plateforme, type…">
+        <input type="hidden" id="viz_sol">
+        <div id="viz_sol_list" class="patch-sol-list hidden"></div>
+      </div>
       <label id="viz_which_wrap" class="hidden">Vue
         <select id="viz_which">
           <option value="diff">Original + Solution</option>
