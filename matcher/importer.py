@@ -123,6 +123,69 @@ def _collect_folders(root, exts, min_size, max_size, since_ts=None, skip_roots=N
     return folders
 
 
+def traiter_job(root, dirpath, original, solution, counts, analyzed, *, dbp, status="a_confirmer",
+                type_override=None, dry_run=False):
+    """Analyse un couple (original, solution) d'un dossier et l'ajoute à la base s'il est nouveau.
+    `analyzed` : cache des analyses d'originaux (partagé par les types d'un même dossier). Renvoie l'entrée."""
+    folder_rel = os.path.relpath(dirpath, root)
+    try:
+        ori_path = original[0]
+        if ori_path not in analyzed:
+            with open(ori_path, "rb") as fh:
+                data = fh.read()
+            rel = os.path.relpath(ori_path, root)
+            analyzed[ori_path] = engine.analyze(data, rel, with_minhash=not dry_run)
+        info = analyzed[ori_path]
+        nm = info["name_meta"]
+        vehicle = metadata.compose_label(nm.get("brand"), nm.get("vehicle"))
+        sol_path = solution[0] if solution else ""
+        sol_meta = metadata.parse(os.path.relpath(sol_path, root)) if sol_path else {}
+        stype = (type_override or sol_meta.get("solution_type")
+                 or nm.get("solution_type") or "")
+
+        entry = {
+            "folder": folder_rel,
+            "original": os.path.basename(ori_path),
+            "solution": os.path.basename(sol_path) if sol_path else "",
+            "solution_path": sol_path,
+            "vehicle": vehicle,
+            "platform": info["platform"] or "",
+            "ecu": info["best_ecu_version"] or "",
+            "type": stype,
+            "state": "nouveau",
+        }
+
+        if (db.sha256_type_exists(dbp, info["sha256"], stype)
+                or (info.get("sha256_body")
+                    and info["sha256_body"] != info["sha256"]
+                    and db.sha256_type_exists(dbp, info["sha256_body"], stype))):
+            entry["state"] = "doublon"
+            counts["dup"] += 1
+        else:
+            counts["new"] += 1
+            if not dry_run:
+                db.add_solution(
+                    dbp,
+                    ecu_version=info["best_ecu_version"] or "",
+                    ecu_platform=info["platform"] or "",
+                    manufacturer=info["manufacturer"] or "",
+                    vehicle_label=vehicle, solution_type=stype,
+                    tested_status=status,
+                    stock_sha256=info.get("sha256_body") or info["sha256"],
+                    stock_size=info.get("body_size") or info["size"],
+                    minhash=info["minhash"], minhash_ver=2,
+                    solution_file=sol_path,
+                    original_file=ori_path,
+                    notes=f"original: {entry['original']} | solution: {entry['solution'] or '(aucun)'}",
+                )
+                counts["added"] += 1
+                entry["state"] = "ajouté"
+    except Exception as e:
+        counts["errors"] += 1
+        entry = {"folder": folder_rel, "state": "erreur", "error": str(e)}
+    return entry
+
+
 def iter_import(root, *, status="a_confirmer", type_override=None, exts=None,
                 min_ko=16, max_mo=32, dry_run=False, db_path=None, since_ts=None):
     exts = exts or DEFAULT_EXT
@@ -146,63 +209,8 @@ def iter_import(root, *, status="a_confirmer", type_override=None, exts=None,
     analyzed = {}
 
     for i, (dirpath, original, solution) in enumerate(jobs, 1):
-        folder_rel = os.path.relpath(dirpath, root)
-        try:
-            ori_path = original[0]
-            if ori_path not in analyzed:
-                with open(ori_path, "rb") as fh:
-                    data = fh.read()
-                rel = os.path.relpath(ori_path, root)
-                analyzed[ori_path] = engine.analyze(data, rel, with_minhash=not dry_run)
-            info = analyzed[ori_path]
-            nm = info["name_meta"]
-            vehicle = metadata.compose_label(nm.get("brand"), nm.get("vehicle"))
-            sol_path = solution[0] if solution else ""
-            sol_meta = metadata.parse(os.path.relpath(sol_path, root)) if sol_path else {}
-            stype = (type_override or sol_meta.get("solution_type")
-                     or nm.get("solution_type") or "")
-
-            entry = {
-                "folder": folder_rel,
-                "original": os.path.basename(ori_path),
-                "solution": os.path.basename(sol_path) if sol_path else "",
-                "solution_path": sol_path,
-                "vehicle": vehicle,
-                "platform": info["platform"] or "",
-                "ecu": info["best_ecu_version"] or "",
-                "type": stype,
-                "state": "nouveau",
-            }
-
-            if (db.sha256_type_exists(dbp, info["sha256"], stype)
-                    or (info.get("sha256_body")
-                        and info["sha256_body"] != info["sha256"]
-                        and db.sha256_type_exists(dbp, info["sha256_body"], stype))):
-                entry["state"] = "doublon"
-                counts["dup"] += 1
-            else:
-                counts["new"] += 1
-                if not dry_run:
-                    db.add_solution(
-                        dbp,
-                        ecu_version=info["best_ecu_version"] or "",
-                        ecu_platform=info["platform"] or "",
-                        manufacturer=info["manufacturer"] or "",
-                        vehicle_label=vehicle, solution_type=stype,
-                        tested_status=status,
-                        stock_sha256=info.get("sha256_body") or info["sha256"],
-                        stock_size=info.get("body_size") or info["size"],
-                        minhash=info["minhash"], minhash_ver=2,
-                        solution_file=sol_path,
-                        original_file=ori_path,
-                        notes=f"original: {entry['original']} | solution: {entry['solution'] or '(aucun)'}",
-                    )
-                    counts["added"] += 1
-                    entry["state"] = "ajouté"
-        except Exception as e:
-            counts["errors"] += 1
-            entry = {"folder": folder_rel, "state": "erreur", "error": str(e)}
-
+        entry = traiter_job(root, dirpath, original, solution, counts, analyzed, dbp=dbp,
+                            status=status, type_override=type_override, dry_run=dry_run)
         yield {"event": "item", "index": i, "total": total,
                "entry": entry, "counts": dict(counts)}
 

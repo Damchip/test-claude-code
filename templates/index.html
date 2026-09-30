@@ -678,8 +678,25 @@
       </label>
       <p class="muted small">Un dossier = un original. Original = fichier marqué
         <b>ORI</b> (ou <code>.ori</code>) · une fiche par <b>type</b> de prestation
-        (Stage 1, FAP off, E85…) ; si plusieurs fichiers du même type, la révision
+        (Stage 1, E85…) ; si plusieurs fichiers du même type, la révision
         <b>SAV</b> la plus élevée gagne. Aucun fichier n'est déplacé ni modifié.</p>
+    </div>
+    <div class="dash-card imp-complet" id="impComplet">
+      <h3 style="margin-top:0">Importer toute la bibliothèque <span class="muted small">(des milliers de fichiers)</span></h3>
+      <p class="muted small" style="margin-top:0">Importe tout le dossier indiqué ci-dessus en tâche de fond : tu peux fermer la page,
+        l'import continue tant que Carto Matcher est ouvert. S'il est coupé, il <b>reprend là où il s'était arrêté</b>.
+        Les fichiers déjà en base ne sont pas relus ; les doublons sont écartés ; rien n'est copié.</p>
+      <div class="patch-row" style="align-items:center">
+        <button id="impCompletGo" class="patchbtn sm" type="button">Importer tout le dossier</button>
+        <button id="impCompletStop" class="ghost sm hidden" type="button">Arrêter</button>
+        <label class="muted small nc-check"><input type="checkbox" id="impCompletZero"> repartir de zéro (ignorer la reprise)</label>
+      </div>
+      <div id="impCompletEtat" class="hidden" style="margin-top:10px">
+        <div class="imp-track"><div id="impCompletBar"></div></div>
+        <div id="impCompletTexte" class="muted small" style="margin-top:6px"></div>
+        <details id="impCompletErreursBloc" class="hidden" style="margin-top:6px"><summary class="muted small">Dossiers en erreur</summary>
+          <div id="impCompletErreurs" class="muted small"></div></details>
+      </div>
     </div>
     <div id="imp_progress" class="imp-progress hidden">
       <div class="imp-track"><div id="imp_bar"></div></div>

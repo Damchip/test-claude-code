@@ -3,6 +3,15 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.64.0
+**Import de toute la bibliothèque (des dizaines de milliers de fichiers)**
+- Onglet Importer → **Importer toute la bibliothèque** : l'import tourne en tâche de fond sur le PC (la page peut être
+  fermée) et **reprend là où il s'était arrêté** (bouton Arrêter, outil fermé, PC éteint).
+- Les couples original / solution déjà en base sont reconnus par leur chemin **sans relire le fichier** ; les doublons
+  (même contenu, même type) sont écartés ; rien n'est copié.
+- Progression en direct : dossiers, couples traités, ajoutés, déjà en base, doublons, erreurs, vitesse et **temps
+  restant** ; liste des dossiers en erreur. Compteur « Base » mis à jour pendant l'import.
+
 ## v1.63.0
 **Auto-patch utilisable avec une grande bibliothèque**
 - Le choix de la solution n'est plus une liste déroulante de toutes les fiches : dès que le fichier client est choisi,

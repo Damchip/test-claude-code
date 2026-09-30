@@ -490,3 +490,6 @@ table.tarifs td:last-child{width:12%}
 .patch-sol-item:hover{background:rgba(255,255,255,.05)}
 .patch-sol-item .muted{display:block;margin-top:2px}
 .patch-sol-titre{padding:8px 12px;font-size:12px;color:var(--muted)}
+.imp-complet{max-width:760px;margin:16px auto;box-sizing:border-box}
+.imp-track #impCompletBar{height:100%;width:0;background:var(--accent);transition:width .3s}
+#impCompletEtat .imp-track{display:block}

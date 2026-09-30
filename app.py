@@ -23,7 +23,7 @@ from datetime import timedelta
 from flask import Flask, Response, g, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from matcher import ai, atelier, batch, db, dossiers as dos, engine, extract, importer, maps as mapsmod, pack as packmod, patch as pmod
+from matcher import ai, atelier, batch, import_complet, db, dossiers as dos, engine, extract, importer, maps as mapsmod, pack as packmod, patch as pmod
 import catalogue
 import comptes
 import demandes
@@ -50,7 +50,7 @@ app = Flask(__name__)
 import fileservice as _fs_vues  # noqa: E402
 app.jinja_env.filters.update(euros=_fs_vues._fmt_euros, date_fr=_fs_vues._fmt_date, credits=_fs_vues._fmt_credits,
                              taille=_fs_vues._fmt_taille)
-APP_VERSION = "1.63.0"
+APP_VERSION = "1.64.0"
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo — même plafond que le portail
 DB_PATH = os.environ.get("CARTO_DB", db.DEFAULT_DB)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "config.json")
@@ -675,6 +675,39 @@ def import_stream():
     return Response(gen(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache",
                              "X-Accel-Buffering": "no"})
+
+
+_IMPORT_COMPLET = None
+
+
+def _import_complet():
+    global _IMPORT_COMPLET
+    if _IMPORT_COMPLET is None or _IMPORT_COMPLET.db_path != DB_PATH:
+        _IMPORT_COMPLET = import_complet.ImportComplet(DB_PATH, os.path.join(DATA_DIR, "import_complet.json"))
+    return _IMPORT_COMPLET
+
+
+@app.route("/import/complet")
+def import_complet_etat():
+    return jsonify(_import_complet().public())
+
+
+@app.route("/import/complet", methods=["POST"])
+def import_complet_demarrer():
+    """Import de tout un dossier en tâche de fond, avec reprise (bibliothèque de dizaines de milliers de fichiers)."""
+    b = request.json or {}
+    path = (b.get("path") or "").strip().strip('"').strip("'")
+    try:
+        _import_complet().demarrer(path, status=b.get("status") or "a_confirmer", reprendre=b.get("reprendre", True) is not False)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/import/complet/arreter", methods=["POST"])
+def import_complet_arreter():
+    _import_complet().arreter()
+    return jsonify({"ok": True})
 
 
 @app.route("/batch/stream")

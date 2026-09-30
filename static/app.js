@@ -265,6 +265,54 @@ async function autoPatchFromMatch(id) {
   await analyzePatch(window.lastClientFile, String(id));
 }
 
+/* ===================== Import complet en tâche de fond (grande bibliothèque) ===================== */
+function duree(sec) {
+  if (sec == null) return "…";
+  if (sec < 60) return `${sec} s`;
+  const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  return h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`;
+}
+let IMP_COMPLET_TIMER = null;
+async function suivreImportComplet() {
+  let e;
+  try { e = await (await fetch("/import/complet")).json(); } catch (err) { return; }
+  const actif = e.actif;
+  $("#impCompletGo").classList.toggle("hidden", actif);
+  $("#impCompletStop").classList.toggle("hidden", !actif);
+  if (e.base != null && $("#dbSize")) $("#dbSize").textContent = e.base;
+  if (!e.etat) { $("#impCompletEtat").classList.add("hidden"); return; }
+  $("#impCompletEtat").classList.remove("hidden");
+  const pct = e.total ? Math.round(100 * e.index / e.total) : 0;
+  $("#impCompletBar").style.width = pct + "%";
+  const c = e.counts || {};
+  const libelles = { exploration: "Exploration du dossier…", import: "Import en cours", termine: "Terminé", arrete: "Arrêté",
+    interrompu: "Interrompu (outil fermé) — clique « Importer tout le dossier » pour reprendre", erreur: "Erreur" };
+  $("#impCompletTexte").innerHTML = `<b>${esc(libelles[e.etat] || e.etat)}</b>`
+    + (e.total ? ` · ${e.index} / ${e.total} (${pct} %) · <b>${c.added || 0}</b> ajoutée(s) · ${e.deja || 0} déjà en base · ${c.dup || 0} doublon(s) · ${c.errors || 0} erreur(s)` : "")
+    + (actif && e.etat === "import" ? ` · temps restant ≈ <b>${duree(e.reste_s)}</b>${e.vitesse ? ` (${e.vitesse} fichier(s)/s)` : ""}` : "")
+    + `<br><span class="muted">${esc(e.root || "")}${e.message ? " — " + esc(e.message) : ""}</span>`;
+  const errs = e.erreurs || [];
+  $("#impCompletErreursBloc").classList.toggle("hidden", !errs.length);
+  $("#impCompletErreurs").innerHTML = errs.slice(-50).reverse().map(x => `<div><code>${esc(x.dossier || "")}</code> — ${esc(x.erreur || "")}</div>`).join("");
+  if (actif && !IMP_COMPLET_TIMER) IMP_COMPLET_TIMER = setInterval(suivreImportComplet, 1500);
+  if (!actif && IMP_COMPLET_TIMER) {
+    clearInterval(IMP_COMPLET_TIMER); IMP_COMPLET_TIMER = null;
+    if (e.etat === "termine") { vizSolLoaded = false; patchSolLoaded = false; }
+  }
+}
+if ($("#impCompletGo")) {
+  $("#impCompletGo").onclick = async () => {
+    const path = $("#imp_path").value.trim();
+    if (!path) { alert("Indique le dossier de la bibliothèque (ex : D:\\OneDrive E85\\OneDrive\\CARTOS)."); return; }
+    try {
+      await postJSON("/import/complet", { path, status: $("#imp_status").value, reprendre: !$("#impCompletZero").checked });
+      suivreImportComplet();
+    } catch (err) { alert(err.message); }
+  };
+  $("#impCompletStop").onclick = async () => { await postJSON("/import/complet/arreter", {}); suivreImportComplet(); };
+  suivreImportComplet();
+}
+
 /* ===================== Import depuis l'interface (flux temps réel) ===================== */
 const IMP_STATE = { "nouveau": "ok", "ajouté": "ok", "doublon": "", "erreur": "danger" };
 let impES = null;
