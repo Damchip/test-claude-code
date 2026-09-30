@@ -12,6 +12,10 @@ et dans la fenêtre noire au démarrage.
   de 200 (« Afficher 200 de plus ») ; recherche **à plusieurs mots**, dans n'importe quel ordre.
 - Cartes 2D → « Solution de la base » : recherche au lieu d'une liste déroulante de toutes les fiches.
 
+**Correction**
+- « database is locked » possible au lancement d'un import complet sur une base neuve (la progression lisait la base
+  pendant sa création) : passage en mode WAL tolérant, base créée avant le démarrage de l'import.
+
 ## v1.64.0
 **Import de toute la bibliothèque (des dizaines de milliers de fichiers)**
 - Onglet Importer → **Importer toute la bibliothèque** : l'import tourne en tâche de fond sur le PC (la page peut être

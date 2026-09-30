@@ -86,6 +86,7 @@ class ImportComplet:
                      "total": 0, "index": 0, "traites": 0, "deja": 0, "reste_s": None, "vitesse": None,
                      "dossiers": 0, "message": "Exploration du dossier…", "erreurs": [], "faits": faits,
                      "counts": {"added": 0, "new": 0, "dup": 0, "empty": 0, "errors": 0}}
+        db.init_db(self.db_path)          # base créée avant que la progression ne soit lue en parallèle
         self._stop.clear()
         self._thread = threading.Thread(target=self._executer, name="import-complet", daemon=True)
         self._thread.start()

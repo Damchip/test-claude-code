@@ -88,8 +88,14 @@ def _connect(db_path):
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
     conn = sqlite3.connect(db_path, timeout=8.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=8000")
+    # passage en WAL (persistant) : demande un accès exclusif et échoue tout de suite si une autre connexion
+    # ouvre la base au même instant (import en tâche de fond + affichage de la progression) — réessayé plus tard
+    if str(conn.execute("PRAGMA journal_mode").fetchone()[0]).lower() != "wal":
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            pass
     conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
