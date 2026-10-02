@@ -19,7 +19,8 @@ from . import db, extract, fingerprint, headers, metadata
 FUZZY_THRESHOLD = 0.45   # en-dessous, on n'affiche pas la similarité binaire
 SIZE_RATIO_MIN = 0.98    # ±2 % — dumps d'une même ECU ont (quasi) la même taille
 MIN_ID_LEN = 8           # en-dessous, un identifiant n'est pas assez discriminant
-FAMILY_CAP = 24          # fiches « même stock / même calib » jamais coupées par top_n
+FAMILY_CAP = 24
+PLATFORME_BIBLIO_JAC = 0.85   # binaire assez proche pour reprendre la plateforme d'une fiche          # fiches « même stock / même calib » jamais coupées par top_n
 
 # Seuils portail (le score interne n'est PLUS utilisé tel quel pour le client)
 PORTAL_JAC_COMPATIBLE = 0.85
@@ -225,6 +226,18 @@ def match(data: bytes, db_path=db.DEFAULT_DB, top_n: int = 12, path: str = "") -
         m["reason"] = " · ".join(m.pop("reasons"))
         m["wanted_types"] = want
 
+    # Plateforme non lue dans le fichier : celle de la fiche identique / quasi identique de la bibliothèque
+    # (indicatif, affiché comme tel — le verdict client reste fondé sur ce qui est lu dans le fichier).
+    plat_biblio = manuf_biblio = None
+    if not info["platform"]:
+        for m in matches:
+            fort = m.get("exact") or m.get("calibration_exact") or (
+                (m.get("jaccard") or 0) >= PLATFORME_BIBLIO_JAC and (m.get("size_ratio") or 0) >= SIZE_RATIO_MIN)
+            if fort and (m.get("ecu_platform") or "").strip():
+                plat_biblio = m["ecu_platform"].strip()
+                manuf_biblio = extract.family_for_platform(plat_biblio)
+                break
+
     return {
         "incoming": {
             "sha256": info["sha256"],
@@ -235,6 +248,8 @@ def match(data: bytes, db_path=db.DEFAULT_DB, top_n: int = 12, path: str = "") -
             "header_tool": info.get("header_tool"),
             "platform": info["platform"],
             "platform_confirmed": info["platform_confirmed"],
+            "platform_bibliotheque": plat_biblio,
+            "manufacturer_bibliotheque": manuf_biblio,
             "manufacturer": info["manufacturer"],
             "candidate_ids": info["candidate_ids"],
             "typed_candidates": info["typed_candidates"],

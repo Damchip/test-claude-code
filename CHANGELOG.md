@@ -3,6 +3,19 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.66.0
+**Meilleure détection du modèle de calculateur**
+- Nouvelles familles reconnues (dans le fichier et dans les noms de dossiers) : **Valeo VD46.x / VD56.x** (PSA essence),
+  **Delphi MT20…MT92** (auparavant attribués à tort à Marelli) et DDCR, **Bosch ME17.9.x** (n'est plus tronqué),
+  **Marelli 8GMF/8GMK/8GMW**, **Caterpillar/Perkins A4E2 / A5E2**, **Cummins CM2150 à CM2450 et CM850/870/871**,
+  **Siemens SIRIUS 32/34** et **PPD1.x**, **Continental SID807EVO**.
+- Nouvelles références : PSA (96…80 / 98…80), Renault (237…R, 8200…), Ford (…-12A650-…), Delphi (28……),
+  Bosch essence 0261S….; signatures VALEO et CATERPILLAR / PERKINS.
+- Un mot seul (ex. « Perkins ») n'est plus pris pour un identifiant de calculateur.
+- **Plateforme reprise de la bibliothèque** quand le fichier ne la contient pas : celle de la fiche identique ou très
+  proche (binaire ≥ 85 %), affichée « d'après la bibliothèque » (Recherche, demandes du fileservice) et proposée à
+  l'enregistrement. Le verdict donné au client reste fondé sur ce qui est lu dans le fichier.
+
 ## v1.65.0
 **Rapide avec des dizaines de milliers de fiches** (mesuré sur une base de 30 000 fiches)
 - Reconnaissance d'un calculateur (espace client, Recherche, Auto-patch) : **≈ 0,2 s au lieu de 1 s** — la base est

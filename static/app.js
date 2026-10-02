@@ -41,6 +41,7 @@ function renderMeta(d) {
   const inc = d.incoming;
   const head = [];
   if (inc.platform) head.push(`<span class="chip hl">${esc(inc.platform)}${inc.platform_confirmed ? " ✓" : ""}</span>`);
+  else if (inc.platform_bibliotheque) head.push(`<span class="chip" title="Non lu dans le fichier : repris de la fiche identique / très proche de la bibliothèque">${esc(inc.platform_bibliotheque)} · d'après la bibliothèque</span>`);
   if (inc.manufacturer) head.push(`<span class="chip hl">${esc(inc.manufacturer)}</span>`);
   const ids = (inc.typed_candidates || []).slice(0, 6)
     .map(c => `<span class="chip" title="${esc(c.type)} · ${esc(c.family)} · confiance ${Math.round(c.confidence*100)}%">${esc(c.value)}</span>`)
@@ -210,7 +211,7 @@ function openModal() {
   const nm = inc.name_meta || {};
   $("#m_label").value = [nm.brand, nm.vehicle].filter(Boolean).join(" ");
   $("#m_ecu").value = inc.best_ecu_version || "";
-  $("#m_platform").value = inc.platform || "";
+  $("#m_platform").value = inc.platform || inc.platform_bibliotheque || "";
   $("#m_type").value = nm.solution_type || "";
   $("#modal").classList.remove("hidden");
 }
@@ -3637,7 +3638,7 @@ async function openFs(id) {
     </div>
     <div class="fs-sec" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <dl class="fs-kv">${kv("Moteur", v.moteur)}${kv("Année", v.annee)}${kv("Boîte", v.boite)}${kv("Km", v.km)}${kv("VIN", v.vin)}${kv("Immat.", v.immat)}</dl>
-      <dl class="fs-kv">${kv("Outil", l.outil)}${kv("Méthode", l.methode)}${kv("ECU saisi", l.ecu)}${kv("ECU détecté", [det.plateforme, det.fabricant].filter(Boolean).join(" / "))}
+      <dl class="fs-kv">${kv("Outil", l.outil)}${kv("Méthode", l.methode)}${kv("ECU saisi", l.ecu)}${kv("ECU détecté", [det.plateforme, det.fabricant].filter(Boolean).join(" / ") + (det.plateforme_source === "bibliothèque" ? " (d'après la bibliothèque)" : ""))}
         <dt>Bibliothèque</dt><dd><span class="badge ${vcls}">${esc(vlbl)}</span></dd></dl>
     </div>
     <div class="fs-sec">
@@ -4535,7 +4536,7 @@ function ouvrirEl(id) {
     <div class="muted small">${esc(x.societe)} · reçu le ${esc(fsDate(x.cree_le))}</div>
     <div class="fs-sec" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <dl class="fs-kv">${kv("Moteur", v.moteur)}${kv("Année", v.annee)}${kv("Boîte", v.boite)}${kv("VIN", v.vin)}</dl>
-      <dl class="fs-kv">${kv("Outil", l.outil)}${kv("Méthode", l.methode)}${kv("ECU saisi", l.ecu)}${kv("ECU détecté", [det.plateforme, det.fabricant].filter(Boolean).join(" / "))}</dl>
+      <dl class="fs-kv">${kv("Outil", l.outil)}${kv("Méthode", l.methode)}${kv("ECU saisi", l.ecu)}${kv("ECU détecté", [det.plateforme, det.fabricant].filter(Boolean).join(" / ") + (det.plateforme_source === "bibliothèque" ? " (d'après la bibliothèque)" : ""))}</dl>
     </div>
     <div class="fs-sec"><b>${esc(x.lignes.filter(z => z.credits > 0).map(z => z.nom).join(" + "))}</b>${x.siege ? " · <b>ouverture au siège</b>" : ""}
       ${x.commentaire ? `<div class="muted" style="white-space:pre-wrap;margin-top:4px">« ${esc(x.commentaire)} »</div>` : ""}</div>

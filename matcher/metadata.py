@@ -135,7 +135,11 @@ PATH_PLATFORMS = [
     re.compile(r"\b(MD1[A-Z]{2}\d{3}[A-Z0-9]*)\b", re.I),
     re.compile(r"\b(MG1[A-Z]{2}\d{3}[A-Z0-9]*)\b", re.I),
     re.compile(r"\b(ADEM\s?[45])\b", re.I),
-    re.compile(r"\b(CM2[13]50[A-Z]?)\b", re.I),
+    re.compile(r"\b(CM2\d{3}[A-Z]?|CM8\d{2}[A-Z]?)\b", re.I),
+    re.compile(r"\b(VD[4-9]\d\.\d{1,2})", re.I),
+    re.compile(r"\b(SID\d{3}EVO)\b", re.I),
+    re.compile(r"\b(MEG?17\.\d(?:\.\d{1,2}){0,2})", re.I),
+    re.compile(r"\b(A[45]:?E2)\b", re.I),
     re.compile(r"\b(A6E11)\b", re.I),
     re.compile(r"\b(CPEGD\d(?:\.\d+)+)\b", re.I),
     re.compile(r"\b(BEM\d{3,4})\b", re.I),
@@ -306,7 +310,7 @@ def parse(path: str) -> dict:
             manufacturer = "Caterpillar"
         elif platform in {"ACM", "MCM"}:
             manufacturer = "Mercedes/Detroit"
-        elif (platform or "").upper().startswith(("CM21", "CM23")):
+        elif (platform or "").upper().startswith(("CM2", "CM8")):
             manufacturer = "Cummins"
         elif (platform or "").lower() == "denso":
             manufacturer = "Denso"
@@ -353,7 +357,7 @@ def parse_record(original="", solution="", label=""):
             manufacturer = "Caterpillar"
         elif platform in {"ACM", "MCM"}:
             manufacturer = "Mercedes/Detroit"
-        elif (platform or "").upper().startswith(("CM21", "CM23")):
+        elif (platform or "").upper().startswith(("CM2", "CM8")):
             manufacturer = "Cummins"
         elif (platform or "").lower() == "denso":
             manufacturer = "Denso"

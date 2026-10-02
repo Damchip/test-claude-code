@@ -26,16 +26,20 @@ NULL_BONUS = 0.15           # bonus de confiance si la chaîne est isolée par d
 # --- Motifs de référence/numéro, par famille ------------------------------
 # (libellé, famille, regex, poids de base)
 PART_PATTERNS = [
-    ("Numéro Bosch (essence/diesel)", "Bosch",      re.compile(r"(?<!\d)02(?:61|81|80)\d{6}"),          0.8),
+    ("Numéro Bosch (essence/diesel)", "Bosch",      re.compile(r"(?<!\d)02(?:61|81|80)(?:S\d{5}|\d{6})"),  0.8),
     ("Numéro Bosch (HW)",   "Bosch",               re.compile(r"\b0\s?\d{3}\s?\d{3}\s?\d{3}\b"),       0.78),
     ("Logiciel Bosch",      "Bosch",               re.compile(r"(?<!\d)103[0-9]\d{6}(?!\d)"),           0.72),
+    ("Référence Ford",      "Ford",                re.compile(r"\b[0-9A-Z]{4}-12A650-[A-Z]{2,4}\b"),   0.72),
+    ("Référence PSA",       "PSA",                 re.compile(r"(?<!\d)9[68]\d{6}80(?!\d)"),            0.66),
+    ("Référence Renault",   "Renault",             re.compile(r"\b(?:2371\d{2}[0-9A-Z]{3,4}R|8200\d{6})\b"), 0.64),
     ("Référence VAG",       "VAG (VW/Audi/Seat)",  re.compile(r"\b(?=\w*[A-Z])[0-9][0-9A-Z][0-9A-Z]\s?\d{3}\s?\d{3}\s?[A-Z]{0,3}\b"), 0.62),
     ("Continental/Siemens", "Continental/Siemens", re.compile(r"(?<![A-Za-z0-9])(?:5WS4\w{4,8}|A[23]C\d{6,12}|S180\d{6})"), 0.72),
     ("Référence Marelli",   "Marelli",             re.compile(r"\b(?:55\d{6}|MM\dHW\w+)\b"),            0.55),
+    ("Référence Delphi",    "Delphi",              re.compile(r"(?<!\d)28\d{6}(?!\d)"),                0.55),
     ("Denso/Toyota",        "Denso",               re.compile(r"\b\d{5}-\d{5}\b"),                      0.6),
     ("Mercedes",            "Mercedes",            re.compile(r"\bA\s?\d{3}\s?\d{3}\s?\d{2}\s?\d{2}\b"),  0.5),
     ("Logiciel Deutz (10SW)","Bosch",              re.compile(r"10SW\d{10,16}"),                       0.7),
-    ("Référence générique", "indéterminée",        re.compile(r"\b(?=[A-Za-z0-9\-]{6,30}\b)(?=.*\d)(?=.*[A-Za-z])[A-Za-z0-9\-]{6,30}\b"), 0.32),
+    ("Référence générique", "indéterminée",        re.compile(r"\b(?=[A-Za-z0-9\-]{6,30}\b)(?=[A-Za-z0-9\-]*\d)(?=[A-Za-z0-9\-]*[A-Za-z])[A-Za-z0-9\-]{6,30}\b"), 0.32),
     ("Numéro générique",    "indéterminée",        re.compile(r"\b\d{6,12}\b"),                         0.28),
 ]
 
@@ -46,19 +50,26 @@ PLATFORM_REGEX = re.compile(
     r"|EDC7[A-Z0-9.\-]{0,6}"
     r"|MEDC?(?:9|17|40)[A-Z0-9.\-]{0,8}"  # Bosch essence MED9/17/40
     r"|MEVD17[A-Z0-9.\-]{0,6}|MEV17[A-Z0-9.\-]{0,6}"
+    r"|MEG?17\.[0-9](?:\.[0-9]{1,2}){0,2}"   # Bosch ME17.9.21 (Hyundai/Kia, moto), MEG17
     r"|ME[0-9](?:\.[0-9])?[A-Z0-9.]{0,4}"  # ME2.x / ME7 / ME9 (Bosch/Siemens)
     r"|MG1[A-Z0-9]{0,6}|MD1[A-Z0-9]{0,6}|MDG1[A-Z0-9]{0,5}"  # Bosch gen MG1/MD1
     r"|SIM266|SIM2[67][0-9]"               # Bosch Mercedes SIM266 / SIM27x
     r"|SIMOS[0-9.]{1,5}"                   # Continental SIMOS
-    r"|SID[23][0-9]{2}"                    # Continental/Siemens SID20x/30x
+    r"|SID[0-9]{3}EVO"                     # Continental SID807EVO
+    r"|SID[23][0-9]{2}[A-Z]?"              # Continental/Siemens SID20x/30x
     r"|PCR2\.[0-9]"                        # Continental PCR2.1
     r"|SID[0-9]{2,3}[A-Z]?"               # Continental SID
+    r"|SIRIUS\s?3[0-9]"                    # Siemens Sirius 32/34 (Renault)
+    r"|PPD1\.[0-9]"                        # Siemens PPD1.x (VAG TDI pompe-injecteur)
+    r"|VD[4-9][0-9]\.[0-9]{1,2}"           # Valeo VD46.1 / VD56.1 (PSA essence)
     r"|EMS[0-9]{3,4}"                      # Continental EMS
     r"|SIM2K-?[0-9]+"                      # Continental/Kefico SIM2K
     r"|DCM[0-9]\.[0-9][A-Z0-9]{0,3}"      # Delphi DCM
     r"|MJD[0-9][A-Z0-9.]{0,5}"            # Marelli Multijet Diesel
     r"|IAW[0-9][A-Z0-9.]{0,5}"            # Marelli essence
-    r"|MT[0-9]{2}[A-Z]?"                   # Marelli MT
+    r"|MT[0-9]{2}[A-Z]?"                   # Delphi MT20/MT38/MT80/MT86/MT92 (essence)
+    r"|DDCR"                               # Delphi DDCR (diesel)
+    r"|8GM[A-Z]"                           # Marelli 8GMF / 8GMK / 8GMW
     r"|MS[VD][0-9]{2}|MS4[0-9]"           # BMW MSV/MSD/MS43/45
     r"|DDE[0-9]?|DME[0-9]?"               # BMW diesel/essence
     r"|CRD[0-9][A-Z]?|CR6"                # Mercedes/Bosch CRD/CR6
@@ -68,7 +79,8 @@ PLATFORM_REGEX = re.compile(
     r"|BEM[0-9]{3,4}"                      # Hitachi Renault
     r"|E6T[0-9]{2,4}"                      # Marelli IAW E6T
     r"|ADEM[45]"                           # Caterpillar ADEM
-    r"|CM2[13]50[A-Z]?"                    # Cummins CM2150 / CM2350
+    r"|CM2[0-9]{3}[A-Z]?|CM8[0-9]{2}[A-Z]?"  # Cummins CM2150/2250/2350/2450, CM850/870/871
+    r"|A[45]:?E2(?:V2)?"                   # Caterpillar/Perkins A4E2 / A5E2
     r"|A6E11"
     r")\b",
 )
@@ -78,15 +90,17 @@ PLATFORM_REGEX = re.compile(
 # Préfixe de plateforme -> fabricant (premier match gagne)
 PLATFORM_FAMILY = [
     ("EDC", "Bosch"), ("MED", "Bosch"), ("MEVD", "Bosch"), ("MEV", "Bosch"),
-    ("ME7", "Bosch"), ("ME9", "Bosch"), ("ME", "Bosch/Siemens"),
+    ("ME7", "Bosch"), ("ME9", "Bosch"), ("ME17", "Bosch"), ("MEG17", "Bosch"), ("ME", "Bosch/Siemens"),
     ("MG1", "Bosch"), ("MD1", "Bosch"),
     ("MDG1", "Bosch"),
     ("SIM266", "Bosch"), ("SIM26", "Bosch"), ("SIM27", "Bosch"),
     ("SIMOS", "Continental/Siemens"), ("PCR2", "Continental/Siemens"),
     ("SID", "Continental/Siemens"), ("EMS", "Continental/Siemens"),
+    ("SIRIUS", "Continental/Siemens"), ("PPD", "Continental/Siemens"),
+    ("VD", "Valeo"),
     ("SIM2K", "Continental/Kefico"),
     ("DCM", "Delphi"),
-    ("MJD", "Marelli"), ("IAW", "Marelli"), ("MT", "Marelli"),
+    ("MJD", "Marelli"), ("IAW", "Marelli"), ("MT", "Delphi"), ("DDCR", "Delphi"),
     ("MSV", "Bosch/BMW"), ("MSD", "Bosch/BMW"), ("MS4", "Bosch/BMW"),
     ("DDE", "BMW"), ("DME", "BMW"),
     ("CRD", "Mercedes/Bosch"), ("CR6", "Mercedes/Bosch"),
@@ -96,7 +110,9 @@ PLATFORM_FAMILY = [
     ("BEM", "Hitachi"),
     ("E6T", "Marelli"),
     ("ADEM", "Caterpillar"),
-    ("CM21", "Cummins"), ("CM23", "Cummins"),
+    ("CM2", "Cummins"), ("CM8", "Cummins"),
+    ("A4E", "Caterpillar/Perkins"), ("A5E", "Caterpillar/Perkins"), ("A4:E", "Caterpillar/Perkins"),
+    ("A5:E", "Caterpillar/Perkins"),
     ("A6E", "VM Motori"),
     ("8GM", "Marelli"),
 ]
@@ -112,6 +128,8 @@ VENDOR_SIGS = [
     (re.compile(r"AC[\s\-]?DELCO", re.I), "ACDelco"),
     (re.compile(r"DELPHI", re.I), "Delphi"),
     (re.compile(r"SIEMENS|\bVDO\b|CONTINENTAL|\bCONTI|TEMIC|\bSID[23]\d{2}\b", re.I), "Continental/Siemens"),
+    (re.compile(r"\bVALEO\b", re.I), "Valeo"),
+    (re.compile(r"\bCATERPILLAR\b|\bPERKINS\b", re.I), "Caterpillar/Perkins"),
     (re.compile(r"BOSCH", re.I), "Bosch"),
     (re.compile(r"CUMMINS", re.I), "Cummins"),
     (re.compile(r"KEIHIN", re.I), "Keihin"),
@@ -206,7 +224,7 @@ def detect_platform(data: bytes):
         return None, None
     hits = {}
     for m in PLATFORM_REGEX.finditer(text):
-        v = m.group(0).strip()
+        v = m.group(0).strip().rstrip(".-").replace(" ", "")
         hits[v] = hits.get(v, 0) + 1
     if not hits:
         return None, None

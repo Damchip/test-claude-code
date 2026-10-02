@@ -37,7 +37,7 @@ import relances
 import sante
 import taches
 
-APP_VERSION = "1.65.0"
+APP_VERSION = "1.66.0"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 Mo max par dépôt
@@ -154,7 +154,10 @@ def _detecter(data, filename):
     result = engine.match(data, DB_PATH, path=filename)
     incoming = result.get("incoming", {})
     verdict, _ = engine.portal_verdict(result)
-    return {"plateforme": incoming.get("platform"), "fabricant": incoming.get("manufacturer"),
+    return {"plateforme": incoming.get("platform") or incoming.get("platform_bibliotheque"),
+            "fabricant": incoming.get("manufacturer") or incoming.get("manufacturer_bibliotheque"),
+            "plateforme_source": "fichier" if incoming.get("platform") else (
+                "bibliothèque" if incoming.get("platform_bibliotheque") else ""),
             "verdict": verdict}
 
 
