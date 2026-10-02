@@ -41,6 +41,10 @@ def analyze(data: bytes, path: str = "", with_minhash: bool = True) -> dict:
     manufacturer = ex["manufacturer"] or meta["manufacturer"]
     platform_confirmed = bool(ex["platform"] and meta["platform"]
                               and ex["platform"].upper() == meta["platform"].upper())
+    # le fichier donne la famille (VD56), le nom la version exacte (VD56.1) : même calculateur, plus précis
+    if (ex["platform"] and meta["platform"] and not platform_confirmed
+            and meta["platform"].upper().startswith(ex["platform"].upper() + ".")):
+        platform, platform_confirmed = meta["platform"], True
 
     ids = list(ex["candidate_ids"])
     for i in meta["ids"]:

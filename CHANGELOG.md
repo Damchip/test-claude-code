@@ -3,6 +3,18 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.67.0
+**Détection du calculateur vérifiée sur de vrais fichiers** (Smart ME17.9.20, Peugeot 308 VD56.1, Peugeot 2008 VD46.1)
+- **Bosch** : lecture du bloc d'identification (« 39/1/ME17_9_20/15/… », « 34/1/EDC17C46/3/… ») — modèle exact ;
+  la ligne socle « ME(D)/EDC17 SB… » présente dans tous les Bosch TriCore ne fait plus croire à un EDC17.
+  Numéro 10SW… : « Logiciel Bosch » (et non « Deutz »).
+- **Valeo** : identifiant logiciel « VX56_L_29_07-6M » lu → calculateur VD56 et version logicielle comme identifiant ;
+  le nom du dossier précise la version (VD56.1) et confirme la détection.
+- Fini les faux modèles tirés de 3 octets de code (« ME9 » sur un Valeo) : un nom de calculateur doit faire partie d'un
+  vrai texte.
+- Fini les identifiants absurdes (« 2dXRMHD », « tH4FyG », fragments de tables) : seules les références sûres sont
+  retenues ; à défaut, le champ reste vide plutôt que faux.
+
 ## v1.66.0
 **Meilleure détection du modèle de calculateur**
 - Nouvelles familles reconnues (dans le fichier et dans les noms de dossiers) : **Valeo VD46.x / VD56.x** (PSA essence),

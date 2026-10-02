@@ -87,3 +87,41 @@ class PlateformeBibliothequeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FichiersReelsTests(unittest.TestCase):
+    """Cas relevés sur de vrais fichiers (chaînes reproduites, fichiers clients non versionnés)."""
+
+    def _avec(self, *morceaux):
+        rng = random.Random(11)
+        b = bytearray(rng.getrandbits(8) for _ in range(131072))
+        pos = 0x1000
+        for m in morceaux:
+            b[pos:pos + len(m)] = m
+            pos += 0x4000
+        return bytes(b)
+
+    def test_bosch_bloc_identification(self):
+        # Smart ForTwo ME17.9.20 : la ligne socle « ME(D)/EDC17 » ne doit pas faire croire à un EDC17
+        data = self._avec(b"\x00ME(D)/EDC17 SB_V18.00.02/1782\x00", b"\x0039/1/ME17_9_20/15/P_1220//r1780_8E0_///\x00",
+                          b"\x0010SW0566031220_8E0\x00")
+        r = extract.extract(data)
+        self.assertEqual((r["platform"], r["manufacturer"]), ("ME17.9.20", "Bosch"))
+        self.assertEqual(r["best_ecu_version"], "10SW0566031220")
+        self.assertEqual(r["typed_candidates"][0]["type"], "Logiciel Bosch (10SW)")
+        r = extract.extract(self._avec(b"\x0034/1/EDC17C46/3/P1135//\x00"))
+        self.assertEqual(r["platform"], "EDC17C46")
+
+    def test_valeo_vd56(self):
+        data = self._avec(b"J`VX56_L_29_07-6M     \x00", b"66666FBL P2017 (c) 2014 Valeo\x00")
+        r = extract.extract(data)
+        self.assertEqual((r["platform"], r["manufacturer"], r["best_ecu_version"]), ("VD56", "Valeo", "VX56_L_29_07-6M"))
+        inc = engine.analyze(data, r"PEUGEOT_308_1.2_PURETECH_VD56.1_VALEO_ORI.mpc")
+        self.assertEqual((inc["platform"], inc["platform_confirmed"]), ("VD56.1", True))   # version exacte du nom
+
+    def test_octets_de_code_et_fragments(self):
+        # « ME9 » entouré d'octets binaires, « 2dXRMHD » / « tH4FyG » : du code, pas un calculateur ni une référence
+        r = extract.extract(self._avec(b"\x83\nME9\x1fw\xfa", b"\x002dXRMHD\x00", b"\x00tH4FyG\x00"))
+        self.assertIsNone(r["platform"])
+        self.assertEqual(r["best_ecu_version"], "")
+        self.assertNotIn("2dXRMHD", r["candidate_ids"])

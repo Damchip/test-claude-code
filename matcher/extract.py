@@ -26,6 +26,7 @@ NULL_BONUS = 0.15           # bonus de confiance si la chaîne est isolée par d
 # --- Motifs de référence/numéro, par famille ------------------------------
 # (libellé, famille, regex, poids de base)
 PART_PATTERNS = [
+    ("Logiciel Valeo",      "Valeo",               re.compile(r"VX[4-9][0-9]_[A-Z0-9]_[0-9]{2}_[0-9]{2}(?:-[0-9A-Z]{1,3})?"), 0.8),
     ("Numéro Bosch (essence/diesel)", "Bosch",      re.compile(r"(?<!\d)02(?:61|81|80)(?:S\d{5}|\d{6})"),  0.8),
     ("Numéro Bosch (HW)",   "Bosch",               re.compile(r"\b0\s?\d{3}\s?\d{3}\s?\d{3}\b"),       0.78),
     ("Logiciel Bosch",      "Bosch",               re.compile(r"(?<!\d)103[0-9]\d{6}(?!\d)"),           0.72),
@@ -38,7 +39,7 @@ PART_PATTERNS = [
     ("Référence Delphi",    "Delphi",              re.compile(r"(?<!\d)28\d{6}(?!\d)"),                0.55),
     ("Denso/Toyota",        "Denso",               re.compile(r"\b\d{5}-\d{5}\b"),                      0.6),
     ("Mercedes",            "Mercedes",            re.compile(r"\bA\s?\d{3}\s?\d{3}\s?\d{2}\s?\d{2}\b"),  0.5),
-    ("Logiciel Deutz (10SW)","Bosch",              re.compile(r"10SW\d{10,16}"),                       0.7),
+    ("Logiciel Bosch (10SW)","Bosch",              re.compile(r"10SW\d{10,16}"),                       0.7),
     ("Référence générique", "indéterminée",        re.compile(r"\b(?=[A-Za-z0-9\-]{6,30}\b)(?=[A-Za-z0-9\-]*\d)(?=[A-Za-z0-9\-]*[A-Za-z])[A-Za-z0-9\-]{6,30}\b"), 0.32),
     ("Numéro générique",    "indéterminée",        re.compile(r"\b\d{6,12}\b"),                         0.28),
 ]
@@ -215,15 +216,50 @@ def ascii_runs(data: bytes, min_len: int = MIN_STRING_LEN):
     return runs
 
 
+# Bloc d'identification Bosch (ME17, MED17, EDC17, MD1, MG1…) : « 39/1/ME17_9_20/15/P_1220//r1780… »,
+# « 34/1/EDC17C46/3/P1135// » — le nom exact du calculateur, avec « _ » à la place des points.
+BOSCH_IDENT = re.compile(r"(?<![0-9])[0-9]{1,3}/1/([A-Z]{2,5}[0-9][A-Z0-9_.]{0,15})/[0-9]{1,3}/")
+# Identifiant logiciel Valeo (PSA PureTech) : « VX56_L_29_07-6M » → calculateur VD56
+VALEO_IDENT = re.compile(r"(?<![A-Za-z0-9])VX([4-9][0-9])_[A-Z0-9]_[0-9]{2}_[0-9]{2}")
+# Ligne générique présente dans tous les Bosch TriCore (« ME(D)/EDC17 SB_V18.00.02/1782 ») : ne désigne pas le modèle
+_BOSCH_SOCLE = "ME(D)/"
+
+
+def _dans_une_chaine(text, debut, fin, mini=4):
+    """La plateforme fait-elle partie d'un vrai texte (≥ `mini` caractères imprimables) et non de 3 octets de code ?"""
+    g, d = debut, fin
+    while g > 0 and 32 <= ord(text[g - 1]) <= 126:
+        g -= 1
+    while d < len(text) and 32 <= ord(text[d]) <= 126:
+        d += 1
+    return d - g >= mini
+
+
 def detect_platform(data: bytes):
     """Renvoie (plateforme, fabricant) le plus probable, ou (None, None)."""
     try:
-        # le « _ » est un caractère de mot et casse \b (ex. CONTI_SID209) → espace
-        text = data.decode("latin-1").replace("_", " ")
+        brut = data.decode("latin-1")
     except Exception:
         return None, None
+    ident = {}
+    for m in BOSCH_IDENT.finditer(brut):
+        v = m.group(1).replace("_", ".").strip(".")
+        if family_for_platform(v):
+            ident[v] = ident.get(v, 0) + 1
+    if ident:
+        best = max(ident.items(), key=lambda kv: (kv[1], len(kv[0])))[0]
+        return best, family_for_platform(best)
+    m = VALEO_IDENT.search(brut)
+    if m:
+        return "VD" + m.group(1), "Valeo"
+    # le « _ » est un caractère de mot et casse \b (ex. CONTI_SID209) → espace
+    text = brut.replace("_", " ")
     hits = {}
     for m in PLATFORM_REGEX.finditer(text):
+        if text[max(0, m.start() - len(_BOSCH_SOCLE)):m.start()] == _BOSCH_SOCLE:
+            continue
+        if not _dans_une_chaine(text, m.start(), m.end()):
+            continue
         v = m.group(0).strip().rstrip(".-").replace(" ", "")
         hits[v] = hits.get(v, 0) + 1
     if not hits:
@@ -276,6 +312,9 @@ def detect_candidates(data: bytes):
                 continue
             # le filet générique non isolé exige en plus une référence longue
             if family == "indéterminée" and not nb and len(value) < 12:
+                continue
+            # les vraies références sont en MAJUSCULES et chiffres ; « 2dXRMHD », « tH4FyG », « d-5Gac » = code
+            if family == "indéterminée" and any(ch.islower() for ch in value):
                 continue
             conf = weight + (NULL_BONUS if nb else 0.0)
             prev = by_value.get(value)
@@ -333,7 +372,8 @@ def extract(data: bytes) -> dict:
         "manufacturer": manufacturer,
         "typed_candidates": candidates[:12],
         "candidate_ids": [c["value"] for c in candidates[:12]],
-        "best_ecu_version": candidates[0]["value"] if candidates else "",
+        # identifiant le plus sûr ; jamais un numéro générique flou (fragment de table) faute de mieux
+        "best_ecu_version": pick_ecu_version(candidates),
         "strings_count": len(runs),
     }
 
