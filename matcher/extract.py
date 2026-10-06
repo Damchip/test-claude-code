@@ -38,6 +38,7 @@ PART_PATTERNS = [
     ("Logiciel John Deere", "John Deere",          re.compile(r"(?<![A-Z0-9])SW[0-9]{5}[A-Z]{1,2}(?![A-Z0-9])"), 0.78),
     ("Référence John Deere","John Deere",          re.compile(r"(?<![A-Z0-9])RE[0-9]{6}(?![A-Z0-9])"),  0.72),
     ("Moteur John Deere",   "John Deere",          re.compile(r"(?<![A-Z0-9])[0-9]{4}H[A-Z]{1,3}[0-9]{2,3}(?![A-Z0-9])"), 0.4),
+    ("Référence Yanmar",    "Yanmar",              re.compile(r"(?<![A-Z0-9\-])1[0-9]{2}[A-Z][0-9]{2}-[0-9]{7}(?![0-9])"), 0.5),
     ("Référence CNH / FPT", "CNH/FPT",             re.compile(r"(?<!\d)580[0-9]{7}(?!\d)"),             0.6),
     ("Référence Marelli",   "Marelli",             re.compile(r"\b(?:55\d{6}|MM\dHW\w+)\b"),            0.55),
     ("Référence Delphi",    "Delphi",              re.compile(r"(?<!\d)28\d{6}(?!\d)"),                0.55),

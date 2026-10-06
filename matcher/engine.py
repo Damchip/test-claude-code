@@ -14,6 +14,8 @@ Chaque solution candidate reçoit un score (0..1) et une raison lisible.
 Aucune donnée ne sort de la machine à cette étape.
 """
 
+import re
+
 from . import db, extract, fingerprint, headers, metadata
 
 FUZZY_THRESHOLD = 0.45   # en-dessous, on n'affiche pas la similarité binaire
@@ -41,6 +43,12 @@ def analyze(data: bytes, path: str = "", with_minhash: bool = True) -> dict:
     manufacturer = ex["manufacturer"] or meta["manufacturer"]
     platform_confirmed = bool(ex["platform"] and meta["platform"]
                               and ex["platform"].upper() == meta["platform"].upper())
+    # le nom peut citer plusieurs modèles (« …EDC17CV54…BOSCH_EDC17CV52… ») : celui lu dans le fichier confirme
+    # s'il figure n'importe où dans le nom, pas seulement s'il est le premier trouvé
+    if ex["platform"] and not platform_confirmed and path:
+        compact = lambda x: re.sub(r"[^A-Z0-9]", "", x.upper())
+        if len(compact(ex["platform"])) >= 5 and compact(ex["platform"]) in compact(path):
+            platform_confirmed = True
     # le fichier donne la famille (VD56), le nom la version exacte (VD56.1) : même calculateur, plus précis
     if (ex["platform"] and meta["platform"] and not platform_confirmed
             and meta["platform"].upper().startswith(ex["platform"].upper() + ".")):

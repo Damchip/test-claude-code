@@ -155,3 +155,19 @@ class FichiersAgricolesTests(FichiersReelsTests):
         r = extract.extract(data)
         self.assertEqual((r["manufacturer"], r["best_ecu_version"]), ("Denso", "NS0HKB42A68MA-00008"))
         self.assertEqual(r["typed_candidates"][0]["type"], "Logiciel Denso")
+
+
+class FichiersTPTests(FichiersReelsTests):
+    """Liebherr R914 (Deutz, EDC17CV52) et Yanmar SV100 (EDC17CV54)."""
+
+    def test_nom_avec_deux_modeles(self):
+        data = self._avec(b"\x00RB EDC17CV52\x00", b"\x0055/1/EDC17CV52_DSample/10/P_1204//P_1204_290_290_001///\x00")
+        inc = engine.analyze(data, r"LIEBHERR_R914-EDC17CV54_DIESEL_BOSCH_EDC17CV52_ORI.mpc")
+        self.assertEqual((inc["platform"], inc["platform_confirmed"]), ("EDC17CV52", True))   # le fichier fait foi
+
+    def test_yanmar(self):
+        data = self._avec(b"\x0046/1/EDC17CV54_CSample/973/P_950//P_950_344///\x00", b"\x00EDC17C04 BASE_ECU_EDC17 xx xx\x00",
+                          b"\x00129E30-7401400\x00", b"1037516806")
+        r = extract.extract(data)
+        self.assertEqual((r["platform"], r["best_ecu_version"]), ("EDC17CV54", "1037516806"))
+        self.assertIn("Référence Yanmar", {c["type"] for c in r["typed_candidates"]})

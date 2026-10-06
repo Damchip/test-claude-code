@@ -3,6 +3,12 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.69.0
+**Détection : engins de TP** (vérifiée sur de vrais fichiers Liebherr R914 et Yanmar SV100)
+- Un nom de fichier qui cite deux modèles (« …EDC17CV54…BOSCH_EDC17CV52… ») : le modèle lu dans le fichier fait foi
+  et est confirmé dès qu'il figure dans le nom (Liebherr : EDC17CV52, moteur Deutz).
+- Références **Yanmar** (129E30-7401400…) reconnues ; le numéro de logiciel Bosch reste l'identifiant prioritaire.
+
 ## v1.68.0
 **Détection des calculateurs agricoles** (vérifiée sur de vrais fichiers Claas, John Deere, Kubota)
 - **Bosch MD1** : « MD1CE101_C1 » dans le bloc d'identification → MD1CE101 (C1 = variante) ; confirmé avec le nom.
