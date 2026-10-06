@@ -3,6 +3,15 @@
 La version est affichée dans l'en-tête de l'interface (à côté de « local · hors-ligne »)
 et dans la fenêtre noire au démarrage.
 
+## v1.68.0
+**Détection des calculateurs agricoles** (vérifiée sur de vrais fichiers Claas, John Deere, Kubota)
+- **Bosch MD1** : « MD1CE101_C1 » dans le bloc d'identification → MD1CE101 (C1 = variante) ; confirmé avec le nom.
+  Référence **CNH / FPT** (580…) reconnue.
+- **John Deere** (tracteurs Deere, Claas Arion à moteur Deere) : logiciel **SW…** (identifiant retenu), références
+  **RE……**, moteur (4045HL555, 4045HRT90…) ; plateforme **PHOENIX L14 / L23…** lue dans le nom du dossier.
+- **Denso** (Kubota…) : numéro de logiciel placé avant « Copr.DENSO » retenu comme identifiant ; la liste des
+  processeurs gérés par le chargeur n'est plus prise pour une référence.
+
 ## v1.67.0
 **Détection du calculateur vérifiée sur de vrais fichiers** (Smart ME17.9.20, Peugeot 308 VD56.1, Peugeot 2008 VD46.1)
 - **Bosch** : lecture du bloc d'identification (« 39/1/ME17_9_20/15/… », « 34/1/EDC17C46/3/… ») — modèle exact ;

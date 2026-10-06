@@ -137,6 +137,7 @@ PATH_PLATFORMS = [
     re.compile(r"\b(ADEM\s?[45])\b", re.I),
     re.compile(r"\b(CM2\d{3}[A-Z]?|CM8\d{2}[A-Z]?)\b", re.I),
     re.compile(r"\b(VD[4-9]\d\.\d{1,2})", re.I),
+    re.compile(r"\b(PHOENIX[\s\-]?L\d{2})\b", re.I),        # John Deere Phoenix L14 / L23…
     re.compile(r"\b(SID\d{3}EVO)\b", re.I),
     re.compile(r"\b(MEG?17\.\d(?:\.\d{1,2}){0,2})", re.I),
     re.compile(r"\b(A[45]:?E2)\b", re.I),
@@ -200,6 +201,8 @@ def normalize_platform(p: str):
         return s
     if s == "DENSO":
         return "Denso"
+    if s.startswith("PHOENIX"):
+        return "PHOENIX " + s[7:].lstrip("-")
     return s or None
 
 

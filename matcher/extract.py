@@ -35,6 +35,10 @@ PART_PATTERNS = [
     ("Référence Renault",   "Renault",             re.compile(r"\b(?:2371\d{2}[0-9A-Z]{3,4}R|8200\d{6})\b"), 0.64),
     ("Référence VAG",       "VAG (VW/Audi/Seat)",  re.compile(r"\b(?=\w*[A-Z])[0-9][0-9A-Z][0-9A-Z]\s?\d{3}\s?\d{3}\s?[A-Z]{0,3}\b"), 0.62),
     ("Continental/Siemens", "Continental/Siemens", re.compile(r"(?<![A-Za-z0-9])(?:5WS4\w{4,8}|A[23]C\d{6,12}|S180\d{6})"), 0.72),
+    ("Logiciel John Deere", "John Deere",          re.compile(r"(?<![A-Z0-9])SW[0-9]{5}[A-Z]{1,2}(?![A-Z0-9])"), 0.78),
+    ("Référence John Deere","John Deere",          re.compile(r"(?<![A-Z0-9])RE[0-9]{6}(?![A-Z0-9])"),  0.72),
+    ("Moteur John Deere",   "John Deere",          re.compile(r"(?<![A-Z0-9])[0-9]{4}H[A-Z]{1,3}[0-9]{2,3}(?![A-Z0-9])"), 0.4),
+    ("Référence CNH / FPT", "CNH/FPT",             re.compile(r"(?<!\d)580[0-9]{7}(?!\d)"),             0.6),
     ("Référence Marelli",   "Marelli",             re.compile(r"\b(?:55\d{6}|MM\dHW\w+)\b"),            0.55),
     ("Référence Delphi",    "Delphi",              re.compile(r"(?<!\d)28\d{6}(?!\d)"),                0.55),
     ("Denso/Toyota",        "Denso",               re.compile(r"\b\d{5}-\d{5}\b"),                      0.6),
@@ -116,6 +120,7 @@ PLATFORM_FAMILY = [
     ("A5:E", "Caterpillar/Perkins"),
     ("A6E", "VM Motori"),
     ("8GM", "Marelli"),
+    ("PHOENIX", "John Deere"),
 ]
 
 
@@ -225,6 +230,17 @@ VALEO_IDENT = re.compile(r"(?<![A-Za-z0-9])VX([4-9][0-9])_[A-Z0-9]_[0-9]{2}_[0-9
 _BOSCH_SOCLE = "ME(D)/"
 
 
+def _nom_bosch(brut):
+    """« ME17_9_20 » → ME17.9.20 (numéros de version) ; « MD1CE101_C1 » → MD1CE101 (C1 = variante, pas le modèle)."""
+    parties = brut.strip("_.").split("_")
+    nom = parties[0]
+    for p in parties[1:]:
+        if not p.isdigit():
+            break
+        nom += "." + p
+    return nom.strip(".")
+
+
 def _dans_une_chaine(text, debut, fin, mini=4):
     """La plateforme fait-elle partie d'un vrai texte (≥ `mini` caractères imprimables) et non de 3 octets de code ?"""
     g, d = debut, fin
@@ -243,7 +259,7 @@ def detect_platform(data: bytes):
         return None, None
     ident = {}
     for m in BOSCH_IDENT.finditer(brut):
-        v = m.group(1).replace("_", ".").strip(".")
+        v = _nom_bosch(m.group(1))
         if family_for_platform(v):
             ident[v] = ident.get(v, 0) + 1
     if ident:
@@ -325,7 +341,20 @@ def detect_candidates(data: bytes):
                 }
             break  # un motif suffit par chaîne
 
+    # Denso : le numéro de logiciel précède le copyright (« NS0HKB42A68MA-00008      ..Copr.DENSO2015 »)
+    try:
+        texte = data.decode("latin-1")
+    except Exception:
+        texte = ""
+    for m in DENSO_LOGICIEL.finditer(texte):
+        v = m.group(1)
+        if not _looks_like_noise(v):
+            by_value[v] = {"value": v, "type": "Logiciel Denso", "family": "Denso", "confidence": 0.9}
+
     return sorted(by_value.values(), key=lambda c: c["confidence"], reverse=True)
+
+
+DENSO_LOGICIEL = re.compile(r"(?<![A-Z0-9])([A-Z0-9]{8,16}(?:-[0-9]{3,5})?) {2,}[\x00-\x1f]{0,4}Copr\.DENSO")
 
 
 def pick_ecu_version(candidates, min_conf=0.55):

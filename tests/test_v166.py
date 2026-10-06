@@ -125,3 +125,33 @@ class FichiersReelsTests(unittest.TestCase):
         self.assertIsNone(r["platform"])
         self.assertEqual(r["best_ecu_version"], "")
         self.assertNotIn("2dXRMHD", r["candidate_ids"])
+
+
+class FichiersAgricolesTests(FichiersReelsTests):
+    """Claas (Bosch MD1 / EDC17, John Deere Phoenix), John Deere, Kubota (Denso) — chaînes relevées sur de vrais fichiers."""
+
+    def test_bosch_md1_variante(self):
+        data = self._avec(b"\x0049/1/MD1CE101_C1/242/P1603//P1603_MD1CE101_456///\x00", b"\x005802247472\x00")
+        r = extract.extract(data)
+        self.assertEqual((r["platform"], r["manufacturer"]), ("MD1CE101", "Bosch"))       # C1 = variante, pas le modèle
+        self.assertEqual(r["best_ecu_version"], "5802247472")
+        self.assertEqual(r["typed_candidates"][0]["type"], "Référence CNH / FPT")
+        inc = engine.analyze(data, r"CLAAS_AXION-800_6.7L_BOSCH_MD1CE101_ORI.dec")
+        self.assertTrue(inc["platform_confirmed"])
+
+    def test_john_deere(self):
+        bloc = b"\x004045HL555\x00\x00\x00CD4045U123686\x00\x00\x00SW64870F\x00\x00\x00\x00\x00\x00\x00\x00RE590386\x00"
+        r = extract.extract(self._avec(bloc))
+        self.assertEqual((r["manufacturer"], r["best_ecu_version"]), ("John Deere", "SW64870F"))
+        types = {c["value"]: c["type"] for c in r["typed_candidates"]}
+        self.assertEqual(types["RE590386"], "Référence John Deere")
+        self.assertEqual(types["4045HL555"], "Moteur John Deere")
+        m = metadata.parse(r"D:\CARTOS\CLAAS_ARION-540_4.5L_PHOENIX_L23_ORI.cod.dec")
+        self.assertEqual((m["platform"], m["manufacturer"]), ("PHOENIX L23", "John Deere"))
+
+    def test_denso_logiciel(self):
+        data = self._avec(b"\x00\x00R5E72546R\x00\t\tR5F72546R\x00",
+                          b"NS0HKB42A68MA-00008             \x15\x04\x10Copr.DENSO20150\xff\xff")
+        r = extract.extract(data)
+        self.assertEqual((r["manufacturer"], r["best_ecu_version"]), ("Denso", "NS0HKB42A68MA-00008"))
+        self.assertEqual(r["typed_candidates"][0]["type"], "Logiciel Denso")
